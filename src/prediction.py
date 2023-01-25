@@ -3,7 +3,11 @@
 # first index is always instance, second index is always label
 
 import numpy as np
+from scipy.sparse import csr_matrix
+from typing import Union
+
 from metrics import macro_precision
+from sparse_prediction import *
 
 
 def _make_filler(num_labels: int, k: int):
@@ -136,7 +140,16 @@ def block_coordinate_ascent_fast(predictions: np.ndarray, k: int = 5, *, epsilon
     return result
 
 
-def weighted_per_instance(prediction: np.ndarray, weights: np.ndarray, k: int = 5):
+def weighted_per_instance(prediction: Union[np.ndarray, csr_matrix], weights: np.ndarray, k: int = 5):
+    if isinstance(prediction, np.ndarray):
+        # Invoke original implementation of Erik
+        return np_weighted_per_instance(prediction, weights, k=k)
+    elif isinstance(prediction, csr_matrix):
+        # Invoke implementation for sparse matrices
+        return csr_weighted_per_instance(prediction, weights, k=k)
+
+
+def np_weighted_per_instance(prediction: np.ndarray, weights: np.ndarray, k: int = 5):
     ni, nl = prediction.shape
     assert weights.shape == (nl,)
 
@@ -148,6 +161,15 @@ def weighted_per_instance(prediction: np.ndarray, weights: np.ndarray, k: int = 
         top_k = np.argpartition(-g, k)[:k]
         result[i, top_k] = 1.0
     return result
+
+
+def csr_weighted_per_instance(prediction: csr_matrix, weights: np.ndarray, k: int = 5):
+    # Since many numpy functions are not supported for sparse matrices,
+    # we need to implement it ourselves, and since we are using Python, it will be slooooow...
+    # Here I use Numba to have a fast implementation (C-like performance)
+    ni, nl = prediction.shape
+    data, indices, indptr = sparse_weighted_per_instance(prediction.data, prediction.indices, prediction.indptr, weights, ni, nl, k)
+    return csr_matrix((data, indices, indptr), shape=prediction.shape)
 
 
 def optimal_macro_recall(prediction: np.ndarray, k: int = 5, *, marginal):

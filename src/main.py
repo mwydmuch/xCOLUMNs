@@ -1,6 +1,12 @@
 import numpy as np
+import time
+
+
+
 from metrics import *
-from data import load_dataset
+from data import *
+from prediction import *
+
 
 test_data = np.array([
     [0.0, 1.0, 0.0, 1.0],
@@ -11,47 +17,72 @@ test_data = np.array([
 
 #print(block_coordinate_descent(test_data, 2))
 
+METRICS = {
+    "mC@k": macro_abandonment,
+    "iC@k": instance_abandonment, 
+    "mP@k": macro_precision,
+    "iP@k": instance_precision,
+    "mR@k": macro_recall,
+    "iR@k": instance_recall,
+    "mF@k": macro_f1,
+    "iF@k": instance_f1
+}
+
+METHODS = {
+    #"random": predict_random_at_k,
+    "top-k": optimal_instance_precision,
+    #"block coord": block_coordinate_ascent_fast,
+    # "macro-recall": optimal_macro_recall,
+}
+
+
+class Timer(object):        
+    def __enter__(self):
+        self.start = time.time()
+        return self
+        
+    def __exit__(self, *args):
+        print (f"  Time: {time.time() - self.start:>5.2f}s")
+
 
 def report_metrics(data, predictions):
-    print(f"  mC@k: {100 * macro_abandonment(data, predictions):>5.2f}  iC@k: {100 * macro_abandonment(data, predictions):.2f}")
-    print(f"  mP@k: {100 * macro_precision(data, predictions):>5.2f}  iP@k: {100 * instance_precision(data, predictions):.2f}")
-    print(f"  mR@k: {100 * macro_recall(data, predictions):>5.2f}  iR@k: {100 * instance_recall(data, predictions):.2f}")
+    for metric, func in METRICS.items():
+        print(f"  {metric}: {100 * func(data, predictions):>5.2f}")
 
 
-if False:
-    eurlex_data = load_dataset(Path("/mnt/media/datasets/raw/eurlex/test.txt"))
-    wiki10_data = load_dataset(Path("/mnt/media/datasets/raw/wiki10/test.txt"))
-    amazon_data = load_dataset(Path("/mnt/media/datasets/raw/amazoncat13k/test.txt"))
-    test_data = eurlex_data
+if __name__ == "__main__":
+    y_true_path = "datasets/eurlex/eurlex_test.txt"
+    eta_pred_path = "predictions/eurlex_top_100"
+    # y_true_path = "datasets/amazonCat/amazonCat_test.txt"
+    # eta_pred_path = "predictions/amazonCat_top_1000"
+
+    # Create binary files for faster loading
+    with Timer():
+        y_true = load_cache_npz_file(y_true_path, load_txt_labels)
+
+    with Timer():
+        eta_pred = load_cache_npz_file(eta_pred_path, load_txt_sparse_pred)
+
+    # For some spars format this resize might be necessary
+    if y_true.shape != eta_pred.shape:
+        if y_true.shape[0] != eta_pred.shape[0]:
+            raise RuntimeError("Number of instances in true and prediction do not match")
+        if y_true.shape[1] != eta_pred.shape[1]:
+            eta_pred.resize(y_true.shape)
+
+    # For some testing purposes (with/without should give the same results)
+    # y_true = y_true.toarray()
+    # eta_pred = eta_pred.toarray()
+
+    # Some old preprocessing code
+    # eurlex_pred = np.load("/tmp/predict.npy")
+    # eurlex_pred = np.exp(eurlex_pred) / (1 + np.exp(eurlex_pred))
+    # eurlex_pred = np.maximum(eurlex_pred - 0.5, 0.5)
+    
     for k in (1, 3, 5, 10):
-        print("K: ", k)
-        print("Random selection: ")
-        result = predict_random_at_k(test_data, k)
-        report_metrics(test_data, result)
-        print("Block coordianate-ascent")
-        result = block_coordinate_descent_fast(test_data, k)
-        report_metrics(test_data, result)
-        print("Optimal Macro-Recall")
-        result = optimal_macro_recall(test_data, k)
-        report_metrics(test_data, result)
-        print()
+        for method, func in METHODS.items():
+            print(f"{method} @ {k}: ")
+            with Timer():
+                y_pred = func(eta_pred, k)
+            report_metrics(y_true, y_pred)
 
-
-if True:
-    eurlex_data = load_dataset(Path("/mnt/media/datasets/raw/eurlex/test.txt"))
-    eurlex_pred = np.load("/tmp/predict.npy")
-    eurlex_pred = np.exp(eurlex_pred) / (1 + np.exp(eurlex_pred))
-    print(eurlex_pred[0])
-    #eurlex_pred = np.maximum(eurlex_pred - 0.5, 0.5)
-    for k in (1, 3, 5, 10):
-        print("K: ", k)
-        print("Top-K: ")
-        result = optimal_instance_precision(eurlex_pred, k)
-        report_metrics(eurlex_data, result)
-        print("Block coordinate-ascent")
-        result = block_coordinate_descent_fast(eurlex_pred, k)
-        report_metrics(eurlex_data, result)
-        print("Optimal Macro-Recall")
-        result = optimal_macro_recall(eurlex_pred, k)
-        report_metrics(eurlex_data, result)
-        print()
