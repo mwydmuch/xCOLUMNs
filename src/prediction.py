@@ -163,35 +163,30 @@ def np_weighted_per_instance(prediction: np.ndarray, weights: np.ndarray, k: int
     return result
 
 
-def csr_weighted_per_instance(prediction: csr_matrix, weights: np.ndarray, k: int = 5):
-    # Since many numpy functions are not supported for sparse matrices,
-    # we need to implement it ourselves, and since we are using Python, it will be slooooow...
-    # Here I use Numba to have a fast implementation (C-like performance)
-    ni, nl = prediction.shape
-    data, indices, indptr = sparse_weighted_per_instance(prediction.data, prediction.indices, prediction.indptr, weights, ni, nl, k)
-    return csr_matrix((data, indices, indptr), shape=prediction.shape)
+def optimal_macro_recall(prediction: np.ndarray, k: int = 5, *, marginals, **kwargs):
+    return weighted_per_instance(prediction, 1.0 / (marginals + 0.00001), k=k)
 
 
-def optimal_macro_recall(prediction: np.ndarray, k: int = 5, *, marginal):
-    return weighted_per_instance(prediction, 1.0 / (marginal + 0.0001), k=k)
+def inv_propensity_weighted_instance(prediction: np.ndarray, k: int = 5, *, inv_ps, **kwargs):
+    return weighted_per_instance(prediction, inv_ps, k=k)
 
 
-def log_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginal):
-    weight = -np.log(marginal + 0.0001)
-    return weighted_per_instance(prediction, weight, k=k)
+def log_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginals, **kwargs):
+    weights = -np.log(marginals + 0.0001)
+    return weighted_per_instance(prediction, weights, k=k)
 
 
-def sqrt_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginal):
-    weight = 1.0 / np.sqrt(marginal + 0.0001)
-    return weighted_per_instance(prediction, weight, k=k)
+def sqrt_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginals, **kwargs):
+    weights = 1.0 / np.sqrt(marginals + 0.0001)
+    return weighted_per_instance(prediction, weights, k=k)
 
 
-def power_law_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginal, beta):
-    weight = 1.0 / (marginal + 0.0001)**beta
-    return weighted_per_instance(prediction, weight, k=k)
+def power_law_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginals, beta=0.5, **kwargs):
+    weights = 1.0 / (marginals + 0.0001)**beta
+    return weighted_per_instance(prediction, weights, k=k)
 
 
-def optimal_instance_precision(prediction: np.ndarray, k: int = 5):
+def optimal_instance_precision(prediction: np.ndarray, k: int = 5, **kwargs):
     ni, nl = prediction.shape
     weights = np.ones((nl,), dtype=np.float32)
     return weighted_per_instance(prediction, weights, k=k)
@@ -303,15 +298,31 @@ def block_coordinate_coverage(predictions: np.ndarray, k: int = 5, *, tolerance:
     return result
 
 
-def macro_population_cm_risk(probabilities: np.ndarray, *, measure: callable, k: int = 5, tolerance: float = 1e-4):
+def macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func: callable, tolerance: float = 1e-5):
+    if isinstance(probabilities, np.ndarray):
+        # Invoke original implementation of Erik
+        return np_macro_population_cm_risk(probabilities, k, measure_func)
+    elif isinstance(probabilities, csr_matrix):
+        # Invoke implementation for sparse matrices
+        return csr_macro_population_cm_risk(probabilities, k, measure_func)
+    
+
+def np_macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func: callable, tolerance: float = 1e-4, max_iter: int = 10):
     ni, nl = probabilities.shape
 
-    # initialize the prediction variable with some feasible value
-    result = random_at_k(probabilities, k)
-    #result = optimal_instance_precision(probabilities, k)
+    # Initialize the prediction variable with some feasible value
+    #result = random_at_k(probabilities, k)
+
+    # For debug set it to first k labels
+    result = np.zeros(probabilities.shape, np.float32)
+    result[:,:k] = 1.0 
+
+    # Other initializations
+    # result = optimal_instance_precision(probabilities, k)
     # result = optimal_macro_recall(probabilities, k, marginal=np.mean(probabilities, axis=0))
 
-    while True:
+    for j in range(max_iter):
+
         order = np.arange(ni)
         np.random.shuffle(order)
         # calculate a and b for each iteration, to prevent numerical errors
@@ -319,7 +330,13 @@ def macro_population_cm_risk(probabilities: np.ndarray, *, measure: callable, k:
         Etp = np.sum(result * probabilities, axis=0)
         Efp = np.sum(result * (1-probabilities), axis=0)
         Efn = np.sum((1-result) * probabilities, axis=0)
-        old_score = np.mean(measure(Etp / ni, Efp / ni, Efn / ni))
+
+        # Check expected conf matrices
+        # print("Etp:", Etp.shape, type(Etp), Etp)
+        # print("Efp:", Efp.shape, type(Efp), Efp)
+        # print("Efn:", Efn.shape, type(Efn), Efn)
+
+        old_score = np.mean(measure_func(Etp / ni, Efp / ni, Efn / ni))
 
         for i in order:
             # adjust a and b locally
@@ -332,8 +349,8 @@ def macro_population_cm_risk(probabilities: np.ndarray, *, measure: callable, k:
             Etpp = Etp + eta
             Efpp = Efp + (1-eta)
             Efnn = Efn + eta
-            p_score = measure(Etpp / ni, Efpp / ni, Efn / ni)
-            n_score = measure(Etp / ni, Efp / ni, Efnn / ni)
+            p_score = measure_func(Etpp / ni, Efpp / ni, Efn / ni)
+            n_score = measure_func(Etp / ni, Efp / ni, Efnn / ni)
             gains = p_score - n_score
             top_k = np.argpartition(-gains, k)[:k]
 
@@ -346,9 +363,32 @@ def macro_population_cm_risk(probabilities: np.ndarray, *, measure: callable, k:
             Efp += result[i] * (1 - eta)
             Efn += (1 - result[i]) * eta
 
-        new_score = np.mean(measure(Etp / ni, Efp / ni, Efn / ni))
-        print(old_score, "->", new_score)
+        new_score = np.mean(measure_func(Etp / ni, Efp / ni, Efn / ni))
+        print(f"  Iteration {j + 1} finished, expected score: {old_score} -> {new_score}")
         if new_score <= old_score + tolerance:
             break
 
     return result
+
+
+def precision_on_conf_matrix(tp, fp, fn, epsilon=1e-5):
+    return np.asarray(tp / (tp + fp + epsilon)).ravel()
+
+
+def recall_on_conf_matrix(tp, fp, fn, epsilon=1e-5):
+    return np.asarray(tp / (tp + fn + epsilon)).ravel()
+
+
+def fmeasure_on_conf_matrix(tp, fp, fn, beta=1.0, epsilon=1e-5):
+    precision = precision_on_conf_matrix(tp, fp, fn, epsilon=epsilon)
+    recall = recall_on_conf_matrix(tp, fp, fn, epsilon=epsilon)
+    return (1 + beta**2) * precision * recall / (beta**2 * precision + recall + epsilon)
+
+
+def block_coordinate_macro_precision(predictions: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
+    return macro_population_cm_risk(predictions, k=k, measure_func=precision_on_conf_matrix)
+
+
+def block_coordinate_macro_f1(predictions: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
+    return macro_population_cm_risk(predictions, k=k, measure_func=fmeasure_on_conf_matrix)
+
