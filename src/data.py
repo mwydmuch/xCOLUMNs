@@ -117,17 +117,16 @@ def load_npy_sparse_pred(path: str):
     return construct_csr_matrix(data.flatten(), indices.flatten(), indptr, dtype=np.float32, sort_indices=True)
 
 
-def load_npy_full_pred(path: str, keep_top_k: int=0):
+def load_npy_full_pred(path: str, keep_top_k: int=0, **kwargs):
     dense_data = np.load(path, allow_pickle=True)
-    print(dense_data.shape, dense_data)
 
-    if keep_top_k > 0:
-        data = -np.partition(-dense_data, keep_top_k, axis=1)[:, :keep_top_k]
-        indices = np.argpartition(-dense_data, keep_top_k, axis=1)[:, :keep_top_k]
-        indptr = np.arange(0, indices.shape[0] + 1, 1, dtype=np.int32) * indices.shape[1]
-        return construct_csr_matrix(data.flatten(), indices.flatten(), indptr, dtype=np.float32, sort_indices=True)
-    else:
-        return dense_data
+    if keep_top_k < 0:
+        k = dense_data.shape[1] - k - 1
+
+    data = -np.partition(-dense_data, keep_top_k, axis=1)[:, :keep_top_k]
+    indices = np.argpartition(-dense_data, keep_top_k, axis=1)[:, :keep_top_k]
+    indptr = np.arange(0, indices.shape[0] + 1, 1, dtype=np.int32) * indices.shape[1]
+    return construct_csr_matrix(data.flatten(), indices.flatten(), indptr, dtype=np.float32, sort_indices=True)
 
 
 def load_cache_npz_file(path: Union[str, Path], load_func: callable, **load_func_args):
