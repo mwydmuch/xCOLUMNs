@@ -209,3 +209,8 @@ def calculate_lightxml_labels(train_data_path, test_data_path):
     return label_map
 
 
+def load_npz_wrapper(path: Union[str, Path], **kwargs):
+    return load_npz(path)
+
+def save_npz_wrapper(path: Union[str, Path], data: csr_matrix, **kwargs):
+    save_npz(path, data)

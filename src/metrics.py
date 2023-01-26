@@ -50,7 +50,7 @@ def fmeasure(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray,
     """
     Given true and predicted labels, calculates the F1 score along the given axis.
     """
-    predicted_positives = _predicted_positives(y_pred, axis=axis, epsilon=epsilon).ravel()
+    predicted_positives = _predicted_positives(y_pred, axis=axis, epsilon=epsilon)
     true_positives = _true_positives(y_pred, y_true, axis=axis)
     precision = true_positives / predicted_positives
 

@@ -251,10 +251,18 @@ def greedy_precision(predictions: np.ndarray, k: int = 5, *, epsilon: float = 0.
     return result
 
 
-def block_coordinate_coverage(predictions: np.ndarray, k: int = 5, *, tolerance: float = 1e-4):
+def block_coordinate_coverage(probabilities: np.ndarray, k: int, tolerance: float = 1e-5):
+    if isinstance(probabilities, np.ndarray):
+        # Invoke original implementation of Erik
+        return np_block_coordinate_coverage(probabilities, k, tolerance=tolerance)
+    elif isinstance(probabilities, csr_matrix):
+        # Invoke implementation for sparse matrices
+        return csr_macro_population_cm_risk(probabilities, k, tolerance=tolerance)
+
+
+def np_block_coordinate_coverage(predictions: np.ndarray, k: int = 5, *, tolerance: float = 1e-4):
     """
-    An efficient implementation of the block coordinate-descent idea for optimizing
-    macroP@k.
+    An efficient implementation of the block coordinate-descent for coverage
     """
     ni, nl = predictions.shape
 
@@ -298,24 +306,25 @@ def block_coordinate_coverage(predictions: np.ndarray, k: int = 5, *, tolerance:
     return result
 
 
-def macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func: callable, tolerance: float = 1e-5):
+def macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func: callable, tolerance: float = 1e-5, **kwargs):
     if isinstance(probabilities, np.ndarray):
         # Invoke original implementation of Erik
         return np_macro_population_cm_risk(probabilities, k, measure_func)
     elif isinstance(probabilities, csr_matrix):
         # Invoke implementation for sparse matrices
-        return csr_macro_population_cm_risk(probabilities, k, measure_func)
+        return csr_macro_population_cm_risk(probabilities, k, measure_func, **kwargs)
     
 
-def np_macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func: callable, tolerance: float = 1e-4, max_iter: int = 10):
+def np_macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func: callable, 
+                                tolerance: float = 1e-4, max_iter: int = 10, shuffle_order=True):
     ni, nl = probabilities.shape
 
     # Initialize the prediction variable with some feasible value
-    #result = random_at_k(probabilities, k)
+    result = random_at_k(probabilities, k)
 
     # For debug set it to first k labels
-    result = np.zeros(probabilities.shape, np.float32)
-    result[:,:k] = 1.0 
+    #result = np.zeros(probabilities.shape, np.float32)
+    #result[:,:k] = 1.0 
 
     # Other initializations
     # result = optimal_instance_precision(probabilities, k)
@@ -324,9 +333,10 @@ def np_macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func:
     for j in range(max_iter):
 
         order = np.arange(ni)
-        np.random.shuffle(order)
-        # calculate a and b for each iteration, to prevent numerical errors
-        # from accumulating too much
+        if shuffle_order:
+            np.random.shuffle(order)
+            
+        # Recalculate expected conf matrices to prevent numerical errors from accumulating too much
         Etp = np.sum(result * probabilities, axis=0)
         Efp = np.sum(result * (1-probabilities), axis=0)
         Efn = np.sum((1-result) * probabilities, axis=0)
@@ -386,9 +396,9 @@ def fmeasure_on_conf_matrix(tp, fp, fn, beta=1.0, epsilon=1e-5):
 
 
 def block_coordinate_macro_precision(predictions: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
-    return macro_population_cm_risk(predictions, k=k, measure_func=precision_on_conf_matrix)
+    return macro_population_cm_risk(predictions, k=k, measure_func=precision_on_conf_matrix, **kwargs)
 
 
 def block_coordinate_macro_f1(predictions: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
-    return macro_population_cm_risk(predictions, k=k, measure_func=fmeasure_on_conf_matrix)
+    return macro_population_cm_risk(predictions, k=k, measure_func=fmeasure_on_conf_matrix, **kwargs)
 
