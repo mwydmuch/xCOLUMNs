@@ -181,7 +181,7 @@ def sqrt_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginals, **k
     return weighted_per_instance(prediction, weights, k=k)
 
 
-def power_law_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginals, beta=0.5, **kwargs):
+def power_law_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginals, beta=0.25, **kwargs):
     weights = 1.0 / (marginals + 0.0001)**beta
     return weighted_per_instance(prediction, weights, k=k)
 

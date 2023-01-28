@@ -20,6 +20,7 @@ test_data = np.array([
 
 K = (1, 3, 5, 10)
 #K = (3,)
+K = (1, 3, 5)
 
 METRICS = {
     "mC": macro_abandonment,
@@ -34,15 +35,15 @@ METRICS = {
 
 METHODS = {
     #"random": predict_random_at_k,
-    "optimal-instance-prec": optimal_instance_precision,
-    "optimal-instance-ps-prec": inv_propensity_weighted_instance,
-    "power-law-with-beta=0.5": power_law_weighted_instance,
-    #"block coord": block_coordinate_ascent_fast,
-    #"block coord 2": block_coordinate_ascent,
-    "block-coord-macro-prec": block_coordinate_macro_precision,
+    # "optimal-instance-prec": optimal_instance_precision,
+    # "optimal-instance-ps-prec": inv_propensity_weighted_instance,
+    # "power-law-with-beta=0.5": power_law_weighted_instance,
+    # "power-law-with-beta=0.25": power_law_weighted_instance,
+    # "optimal-macro-recall": optimal_macro_recall,
+    # "log": log_weighted_instance,
+    # "block-coord-macro-prec": block_coordinate_macro_precision,
     "block-coord-macro-f1": block_coordinate_macro_f1,
     #"block coord coverage": block_coordinate_coverage,
-    "optimal-macro-recall": optimal_macro_recall,
 }
 
 def report_metrics(data, predictions, k):
@@ -67,6 +68,8 @@ if __name__ == "__main__":
     LIGHTXML_DATA = False
     if "lightxml" in experiment:
         LIGHTXML_DATA = True
+
+    ONLY_RESULTS = False
 
     plt_loss = "log"
     
@@ -94,6 +97,12 @@ if __name__ == "__main__":
     elif experiment == "amazon_plt":
         # Amazon - PLT + XMLC repo data
         eta_pred_path = {"path": f"predictions/amazon_top_100_{plt_loss}", "load_func": load_txt_sparse_pred}
+        y_true_path = {"path": "datasets/amazon/amazon_test.txt", "load_func": load_txt_labels}
+        train_y_true_path = {"path": "datasets/amazon/amazon_train.txt", "load_func": load_txt_labels}
+    
+    elif experiment == "amazon_plt_1000":
+        # Amazon - PLT + XMLC repo data
+        eta_pred_path = {"path": f"predictions/amazon_top_1000_{plt_loss}", "load_func": load_txt_sparse_pred}
         y_true_path = {"path": "datasets/amazon/amazon_test.txt", "load_func": load_txt_labels}
         train_y_true_path = {"path": "datasets/amazon/amazon_train.txt", "load_func": load_txt_labels}
 
@@ -190,9 +199,15 @@ if __name__ == "__main__":
             print(f"{method} @ {k}: ")
 
             output_path = f"{output_path_prefix}{method}@{k}"
-            with Timer():
-                y_pred = func(eta_pred, k, marginals=marginals, inv_ps=inv_ps, filename=output_path)
-            save_npz_wrapper(output_path + "_pred.npz", y_pred)
+            if ONLY_RESULTS:
+                y_pred = load_npz_wrapper(output_path + "_pred_iter_1.npz")
+                #y_pred = load_npz_wrapper(output_path + "_pred_iter_1.npz")
+            else:
+                with Timer():
+                    y_pred = func(eta_pred, k, marginals=marginals, inv_ps=inv_ps, filename=output_path)
+                save_npz_wrapper(output_path + "_pred.npz", y_pred)
             
             results = report_metrics(y_true, y_pred, k)
             save_json(output_path + "_results.json", results)
+            #save_json(f"{output_path_prefix}{method}-iter-1@{k}_results.json", results)       
+
