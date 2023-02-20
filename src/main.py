@@ -9,15 +9,6 @@ import sys
 import json
 
 
-test_data = np.array([
-    [0.0, 1.0, 0.0, 1.0],
-    [0.0, 0.0, 1.0, 0.0],
-    [0.0, 1.0, 1.0, 1.0],
-    [0.0, 0.0, 0.0, 0.0]
-])
-
-#print(block_coordinate_descent(test_data, 2))
-
 K = (1, 3, 5, 10)
 #K = (3,)
 K = (1, 3, 5)
@@ -36,12 +27,12 @@ METRICS = {
 METHODS = {
     # "random": predict_random_at_k,
     "optimal-instance-prec": optimal_instance_precision,
-    # "optimal-instance-ps-prec": inv_propensity_weighted_instance,
-    # "power-law-with-beta=0.5": power_law_weighted_instance,
-    # "power-law-with-beta=0.25": power_law_weighted_instance,
-    # "optimal-macro-recall": optimal_macro_recall,
-    # "log": log_weighted_instance,
-    # "block-coord-macro-prec": block_coordinate_macro_precision,
+    "optimal-instance-ps-prec": inv_propensity_weighted_instance,
+    #"power-law-with-beta=0.5": power_law_weighted_instance,
+    "power-law-with-beta=0.25": power_law_weighted_instance,
+    "optimal-macro-recall": optimal_macro_recall,
+    "log": log_weighted_instance,
+    "block-coord-macro-prec": block_coordinate_macro_precision,
     "block-coord-macro-f1": block_coordinate_macro_f1,
     # "block coord coverage": block_coordinate_coverage,
 }
