@@ -6,6 +6,8 @@ from typing import Union
 from math import log2, log
 from tqdm import tqdm
 
+from utils import construct_csr_matrix
+
 
 def load_dataset(path: Path) -> np.ndarray:
     """
@@ -34,13 +36,6 @@ def load_npy_dataset(path: str, num_ins, num_lbl):
     for i, lbl_list in enumerate(data):
         label_matrix[i, lbl_list] = 1
     return label_matrix
-
-
-def construct_csr_matrix(data: np.ndarray, indices: np.ndarray, indptr: np.ndarray, dtype=np.float32, sort_indices=False):
-    mat = csr_matrix((data, indices, indptr), dtype=dtype)
-    if sort_indices:
-        mat.sort_indices()
-    return mat
 
 
 def load_txt_labels(path: str, header=True, labels_delimiter=",", labels_features_delimiter=" ", labels_map: dict=None):

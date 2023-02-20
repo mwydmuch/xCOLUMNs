@@ -5,32 +5,96 @@ from tqdm import tqdm
 from utils import *
 
 
-FLOAT_TYPE=np.float64
+FLOAT_TYPE=np.float32
+IND_TYPE=np.int32
+SLOW = True
+
+
+from numba import njit
+import numpy as np
 
 
 @njit
-def numba_first_first_k(ni, k):
+def numba_first_k(ni, k):
     result_data = np.ones(ni * k, dtype=FLOAT_TYPE)
-    result_indicies = np.zeros(ni * k, dtype=np.int32)
-    result_indptr = np.zeros(ni + 1, dtype=np.int32)
+    result_indices = np.zeros(ni * k, dtype=IND_TYPE)
+    result_indptr = np.zeros(ni + 1, dtype=IND_TYPE)
     for i in range(ni):
-        result_indicies[(i * k):((i + 1) * k)] = np.arange(0, k, 1, FLOAT_TYPE)
+        result_indices[(i * k):((i + 1) * k)] = np.arange(0, k, 1, FLOAT_TYPE)
         result_indptr[i + 1] = result_indptr[i] + k
-    return result_data, result_indicies, result_indptr
+    return result_data, result_indices, result_indptr
 
 
 @njit
-def numba_random_at_k(data: np.ndarray, indicies: np.ndarray, indptr: np.ndarray, 
-                     ni: int, nl: int, k: int,):
+def numba_random_at_k(data: np.ndarray, indices: np.ndarray, indptr: np.ndarray, 
+                      ni: int, nl: int, k: int,):
     result_data = np.ones(ni * k, dtype=FLOAT_TYPE)
-    result_indicies = np.zeros(ni * k, dtype=np.int32)
-    result_indptr = np.zeros(ni + 1, dtype=np.int32)
+    result_indices = np.zeros(ni * k, dtype=IND_TYPE)
+    result_indptr = np.zeros(ni + 1, dtype=IND_TYPE)
     for i in range(ni):
-        row_indicies = indicies[indptr[i]:indptr[i+1]]
-        result_indicies[i * k:(i + 1) * k] = np.random.choice(row_indicies, k, replace=False)
+        row_indices = indices[indptr[i]:indptr[i+1]]
+        result_indices[i * k:(i + 1) * k] = np.random.choice(row_indices, k, replace=False)
         result_indptr[i + 1] = result_indptr[i] + k
 
-    return result_data, result_indicies, result_indptr
+    return result_data, result_indices, result_indptr
+
+
+@njit
+def numba_sparse_vec_mul_vec(a_data: np.ndarray, a_indices: np.ndarray, 
+                             b_data: np.ndarray, b_indices: np.ndarray):
+    """
+    Performs a fast multiplication of sparse vectors a and b.
+    Gives the same result as a.multiply(b) where a and b are sparse vectors.
+    Requires a and b to have sorted indices (in ascending order).
+    """
+    i = j = k = 0
+    new_data_size = min(a_data.size, b_data.size)
+    new_data = np.zeros(new_data_size, dtype=FLOAT_TYPE)
+    new_indices = np.zeros(new_data_size, dtype=IND_TYPE)
+    while i < a_indices.size and j < b_indices.size:
+        #print(i, j, k, a_indices[i], b_indices[j], a_indices.size, b_indices.size)
+        if a_indices[i] < b_indices[j]:
+            i+=1
+        elif a_indices[i] == b_indices[j]: 
+            new_data[k] = a_data[i] * b_data[j]
+            new_indices[k] = a_indices[i]
+            k+=1
+            i+=1
+            j+=1
+        else: 
+            j+=1
+    return new_data[:k], new_indices[:k]
+
+
+@njit
+def numba_sparse_vec_mul_ones_minus_vec(a_data: np.ndarray, a_indices: np.ndarray, 
+                                        b_data: np.ndarray, b_indices: np.ndarray):
+    """
+    Performs a fast multiplication of a sparse vector a
+    with a dense vector of ones minus other sparse vector b.
+    Gives the same result as a.multiply(ones - b) where a and b are sparse vectors.
+    Requires a and b to have sorted indices (in ascending order).
+    """
+    i = j = k = 0
+    new_data_size = a_data.size + b_data.size
+    new_data = np.zeros(new_data_size, dtype=FLOAT_TYPE)
+    new_indices = np.zeros(new_data_size, dtype=IND_TYPE)
+    while i < a_indices.size:
+        #print(i, j, k, a_indices[i], b_indices[j], a_indices.size, b_indices.size)
+        if j >= b_indices.size or a_indices[i] < b_indices[j]:
+            new_data[k] = a_data[i]
+            new_indices[k] = a_indices[i]
+            k+=1
+            i+=1
+        elif a_indices[i] == b_indices[j]: 
+            new_data[k] = a_data[i] * (1 - b_data[j])
+            new_indices[k] = a_indices[i]
+            k+=1
+            i+=1
+            j+=1
+        else: 
+            j+=1
+    return new_data[:k], new_indices[:k]
 
 
 #@njit
@@ -45,55 +109,130 @@ def argtopk(data, indices, k):
 
 
 def csr_weighted_per_instance(prediction: csr_matrix, weights: np.ndarray, k: int = 5):
-    # Since many numpy functions are not supported for sparse matrices,
+    # Since many numpy functions are not supported for sparse matrices
     ni, nl = prediction.shape
     data, indices, indptr = numba_weighted_per_instance(prediction.data, prediction.indices, prediction.indptr, weights, ni, nl, k)
     return csr_matrix((data, indices, indptr), shape=prediction.shape)
 
 
 #@njit
-def numba_weighted_per_instance(data: np.ndarray, indicies: np.ndarray, indptr: np.ndarray, 
+def numba_weighted_per_instance(data: np.ndarray, indices: np.ndarray, indptr: np.ndarray, 
                                 weights: np.ndarray, ni: int, nl: int, k: int):
     result_data = np.ones(ni * k, dtype=FLOAT_TYPE)
-    result_indicies = np.zeros(ni * k, dtype=np.int32)
+    result_indices = np.zeros(ni * k, dtype=np.int32)
     result_indptr = np.zeros(ni + 1, dtype=np.int32)
 
     # This can be done in parallel, but Numba parallelism seems to not work well here
     for i in range(ni):
         row_data = data[indptr[i]:indptr[i+1]]
-        row_indicies = indicies[indptr[i]:indptr[i+1]]
-        row_weights = weights[row_indicies].reshape(-1) * row_data
-        top_k = argtopk(row_weights, row_indicies, k)
-        result_indicies[i * k:(i + 1) * k] = top_k
+        row_indices = indices[indptr[i]:indptr[i+1]]
+        row_weights = weights[row_indices].reshape(-1) * row_data
+        top_k = argtopk(row_weights, row_indices, k)
+        result_indices[i * k:(i + 1) * k] = top_k
         result_indptr[i + 1] = result_indptr[i] + k
 
-    return result_data, result_indicies, result_indptr
+    return result_data, result_indices, result_indptr
 
 
-def calculate_etp(result: csr_matrix, probabilities: csr_matrix):
+def calculate_etp_slow(result: csr_matrix, probabilities: csr_matrix):
     return (result.multiply(probabilities)).sum(axis=0)
 
 
+def calculate_etp(result: csr_matrix, probabilities: csr_matrix):
+    ni, nl = probabilities.shape
+    Etp = np.zeros(nl, dtype=FLOAT_TYPE)
+    for i in range(ni):
+        r_start, r_end = result.indptr[i], result.indptr[i+1]
+        p_start, p_end = probabilities.indptr[i], probabilities.indptr[i+1]
+
+        data, indices = numba_sparse_vec_mul_vec(
+            result.data[r_start:r_end],
+            result.indices[r_start:r_end],
+            probabilities.data[p_start:p_end],
+            probabilities.indices[p_start:p_end]
+        )
+        Etp[indices] += data
+
+    return Etp    
+
+
 # This is a bit slow, TODO: make it faster (drop multiply and use custom method)
-def calculate_efp(result: csr_matrix, probabilities: csr_matrix):
+def calculate_efp_slow(result: csr_matrix, probabilities: csr_matrix):
     ni, nl = probabilities.shape
     Efp = np.zeros(nl, dtype=FLOAT_TYPE)
     dense_ones = np.ones(nl, dtype=FLOAT_TYPE)
     for i in range(ni):
         Efp += result[i].multiply(dense_ones - probabilities[i])
-
     return Efp
 
 
+def calculate_efp(result: csr_matrix, probabilities: csr_matrix):
+    # ni, nl = probabilities.shape
+    # Efp = np.zeros(nl, dtype=FLOAT_TYPE)
+    # for i in range(ni):
+    #     r_start, r_end = result.indptr[i], result.indptr[i+1]
+    #     p_start, p_end = probabilities.indptr[i], probabilities.indptr[i+1]
+
+    #     data, indices = numba_sparse_vec_mul_ones_minus_vec(
+    #         result.data[r_start:r_end],
+    #         result.indices[r_start:r_end],
+    #         probabilities.data[p_start:p_end],
+    #         probabilities.indices[p_start:p_end]
+    #     )
+    #     Efp[indices] += data
+
+    # return Efp
+    ni, nl = probabilities.shape
+    return numba_calculate_sum_sparse_vec_mul_ones_minus_vec(*unpack_csr_matrices(result, probabilities), ni, nl)
+
+
 # This is a bit slow, TODO: make it faster (drop multiply and use custom method)
-def calculate_efn(result: csr_matrix, probabilities: csr_matrix):
+def calculate_efn_slow(result: csr_matrix, probabilities: csr_matrix):
     ni, nl = probabilities.shape
     Efn = np.zeros(nl, dtype=FLOAT_TYPE)
     dense_ones = np.ones(nl, dtype=FLOAT_TYPE)
     for i in range(ni):
         Efn += probabilities[i].multiply(dense_ones - result[i]) 
-
+    
     return Efn
+
+
+def calculate_efn(result: csr_matrix, probabilities: csr_matrix):
+    # ni, nl = probabilities.shape
+    # Efn = np.zeros(nl, dtype=FLOAT_TYPE)
+    # for i in range(ni):
+    #     r_start, r_end = result.indptr[i], result.indptr[i+1]
+    #     p_start, p_end = probabilities.indptr[i], probabilities.indptr[i+1]
+
+    #     data, indices = numba_sparse_vec_mul_ones_minus_vec(
+    #         probabilities.data[p_start:p_end],
+    #         probabilities.indices[p_start:p_end],
+    #         result.data[r_start:r_end],
+    #         result.indices[r_start:r_end]
+    #     )
+    #     Efn[indices] += data
+
+    # return Efn
+    ni, nl = probabilities.shape
+    return numba_calculate_sum_sparse_vec_mul_ones_minus_vec(*unpack_csr_matrices(probabilities, result), ni, nl)
+
+
+@njit
+def numba_calculate_sum_sparse_vec_mul_ones_minus_vec(a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, ni, nl):
+    result = np.zeros(nl, dtype=FLOAT_TYPE)
+    for i in range(ni):
+        a_start, a_end = a_indptr[i], a_indptr[i+1]
+        b_start, b_end = b_indptr[i], b_indptr[i+1]
+
+        data, indices = numba_sparse_vec_mul_ones_minus_vec(
+            a_data[a_start:a_end],
+            a_indices[a_start:a_end],
+            b_data[b_start:b_end],
+            b_indices[b_start:b_end]
+        )
+        result[indices] += data
+
+    return result
 
 
 def csr_macro_population_cm_risk(probabilities: csr_matrix, k: int, measure_func: callable, 
@@ -101,12 +240,12 @@ def csr_macro_population_cm_risk(probabilities: csr_matrix, k: int, measure_func
 
     # Initialize the prediction variable with some feasible value
     ni, nl = probabilities.shape
-    result_data, result_indicies, result_indptr = numba_random_at_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
+    result_data, result_indices, result_indptr = numba_random_at_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
     
     # For debug set it to first k labels
-    #result_data, result_indicies, result_indptr = numba_first_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
+    #result_data, result_indices, result_indptr = numba_first_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
     
-    result = csr_matrix((result_data, result_indicies, result_indptr), shape=(ni, nl))
+    result = construct_csr_matrix(result_data, result_indices, result_indptr, shape=(ni, nl), sort_indices=True)
 
 
     for j in range(max_iter):
@@ -115,16 +254,41 @@ def csr_macro_population_cm_risk(probabilities: csr_matrix, k: int, measure_func
         if shuffle_order:
             np.random.shuffle(order)
 
-        # Recalculate expected conf matrices to prevent numerical errors from accumulating too much
-        # In this variant they will be all np.matrix with shape (1, nl)
+        with Timer():
+            Etp = calculate_etp_slow(result, probabilities)
+        print(Etp.sum())
+
         with Timer():
             Etp = calculate_etp(result, probabilities)
+        print(Etp.sum())
+
+        with Timer():
+            Efp = calculate_efp_slow(result, probabilities)
+        print(Efp.sum())
 
         with Timer():
             Efp = calculate_efp(result, probabilities)
-        
+        print(Efp.sum())
+
+        with Timer():
+            Efn = calculate_efn_slow(result, probabilities)
+        print(Efn.sum())
+
         with Timer():
             Efn = calculate_efn(result, probabilities)
+        print(Efn.sum())
+
+        # Recalculate expected conf matrices to prevent numerical errors from accumulating too much
+        # In this variant they will be all np.matrix with shape (1, nl)
+        if SLOW:
+            Etp = calculate_etp_slow(result, probabilities)
+            Efp = calculate_efp_slow(result, probabilities)
+            Efn = calculate_efn_slow(result, probabilities)
+        else:
+            Etp = calculate_etp(result, probabilities)
+            Efp = calculate_efp(result, probabilities)
+            Efn = calculate_efn(result, probabilities)
+        
         old_score = np.mean(measure_func(Etp / ni, Efp / ni, Efn / ni))
 
         # Check expected conf matrices
@@ -138,27 +302,78 @@ def csr_macro_population_cm_risk(probabilities: csr_matrix, k: int, measure_func
             dense_ones = np.ones(nl, dtype=FLOAT_TYPE)
             
             # Adjust local Etp, Efp, Efn
-            Etp -= result[i].multiply(eta)
-            Efp -= result[i].multiply(dense_ones - eta)
-            Efn -= eta.multiply(dense_ones - result[i])
 
-            # Calculate gain and selection
-            Etpp = Etp + eta
-            Efpp = Efp + (dense_ones - eta)
-            Efnn = Efn + eta
-            p_score = measure_func(Etpp / ni, Efpp / ni, Efn / ni)
-            n_score = measure_func(Etp / ni, Efp / ni, Efnn / ni)
-            gains = p_score - n_score
-            gains = np.asarray(gains).ravel()
-            top_k = np.argpartition(-gains, k)[:k]
+            if SLOW:
+                Etp -= result[i].multiply(eta)
+                Efp -= result[i].multiply(dense_ones - eta)
+                Efn -= eta.multiply(dense_ones - result[i])
 
-            # Update predictions
-            result.indices[result.indptr[i]:result.indptr[i+1]] = top_k
+                Etpp = Etp + eta
+                Efpp = Efp + (dense_ones - eta)
+                Efnn = Efn + eta
 
-            # Update Etp, Efp, Efn
-            Etp += result[i].multiply(eta)
-            Efp += result[i].multiply(dense_ones - eta)
-            Efn += eta.multiply(dense_ones - result[i])
+                # Calculate gain and selection
+                p_score = measure_func(Etpp / ni, Efpp / ni, Efn / ni)
+                n_score = measure_func(Etp / ni, Efp / ni, Efnn / ni)
+                gains = p_score - n_score
+                gains = np.asarray(gains).ravel()
+                top_k = np.argpartition(-gains, k)[:k]
+
+                # Update predictions
+                result.indices[result.indptr[i]:result.indptr[i+1]] = sorted(top_k)
+                #print(result.indices[result.indptr[i]:result.indptr[i+1]])
+
+                # Update Etp, Efp, Efn
+                Etp += result[i].multiply(eta)
+                Efp += result[i].multiply(dense_ones - eta)
+                Efn += eta.multiply(dense_ones - result[i])
+            else:
+                r_start, r_end = result.indptr[i], result.indptr[i+1]
+                p_start, p_end = probabilities.indptr[i], probabilities.indptr[i+1]
+
+                r_data = result.data[r_start:r_end]
+                r_indices = result.indices[r_start:r_end]
+
+                p_data = probabilities.data[p_start:p_end]
+                p_indices = probabilities.indices[p_start:p_end]
+                
+
+                Etp -= result[i].multiply(eta)
+                data, indices = numba_vec_A_mul_B(r_data, r_indices, p_data, p_indices) 
+                Etp[indices] -= data
+                data, indices = numba_A_mul_ones_minus_B(r_data, r_indices, p_data, p_indices)
+                Efp[indices] -= data
+                data, indices = numba_A_mul_ones_minus_B(p_data, p_indices, r_data, r_indices)
+                Efn[indices] -= data
+
+                loprint(Etp)
+                loprint(Efp)
+                loprint(Efn)
+
+                p_Etp = Etp[p_indices]
+                p_Efp = Efp[p_indices]
+                p_Efn = Efn[p_indices]
+
+                p_Etpp = Etp[p_indices] + p_data
+                p_Efpp = Efp[p_indices] + (1 - p_data)
+                p_Efnn = Efn[p_indices] + p_data
+
+                p_score = measure_func(p_Etpp / ni, p_Efpp / ni, p_Efn / ni)
+                n_score = measure_func(p_Etp / ni, p_Efp / ni, p_Efnn / ni)
+                
+                gains = p_score - n_score
+                gains = np.asarray(gains).ravel()
+                top_k = np.argpartition(-gains, k)[:k]
+                result.indices[r_start:r_end] = sorted(top_k)
+                print(result.indices[r_start:r_end])
+                print(r_data)
+
+                data, indices = numba_vec_A_mul_B(r_data, r_indices, p_data, p_indices) 
+                Etp[indices] += data
+                data, indices = numba_A_mul_ones_minus_B(r_data, r_indices, p_data, p_indices)
+                Efp[indices] += data
+                data, indices = numba_A_mul_ones_minus_B(p_data, p_indices, r_data, r_indices)
+                Efn[indices] += data
 
         new_score = np.mean(measure_func(Etp / ni, Efp / ni, Efn / ni))
         print(f"  Iteration {j + 1} finished, expected score: {old_score} -> {new_score}")
@@ -171,13 +386,6 @@ def csr_macro_population_cm_risk(probabilities: csr_matrix, k: int, measure_func
     return result
 
 
-
-@njit
-def numba_product_minus_1():
-    pass
-
-
-
 def csr_block_coordinate_coverage(predictions: np.ndarray, k: int = 5, *, tolerance: float = 1e-4, max_iter: int = 10, shuffle_order=True):
     """
     An efficient implementation of the block coordinate-descent for coverage
@@ -186,12 +394,12 @@ def csr_block_coordinate_coverage(predictions: np.ndarray, k: int = 5, *, tolera
 
     # Initialize the prediction variable with some feasible value
     ni, nl = probabilities.shape
-    result_data, result_indicies, result_indptr = numba_random_at_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
+    result_data, result_indices, result_indptr = numba_random_at_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
     
     # For debug set it to first k labels
-    #result_data, result_indicies, result_indptr = numba_first_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
+    #result_data, result_indices, result_indptr = numba_first_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
     
-    result = csr_matrix((result_data, result_indicies, result_indptr), shape=(ni, nl))
+    result = construct_csr_matrix(result_data, result_indices, result_indptr, shape=(ni, nl))
 
     result_x_prediction = result.multiply(predictions)
     #f = np.product(1 - , axis=0)

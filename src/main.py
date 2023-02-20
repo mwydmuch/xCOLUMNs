@@ -34,8 +34,8 @@ METRICS = {
 }
 
 METHODS = {
-    #"random": predict_random_at_k,
-    # "optimal-instance-prec": optimal_instance_precision,
+    # "random": predict_random_at_k,
+    "optimal-instance-prec": optimal_instance_precision,
     # "optimal-instance-ps-prec": inv_propensity_weighted_instance,
     # "power-law-with-beta=0.5": power_law_weighted_instance,
     # "power-law-with-beta=0.25": power_law_weighted_instance,
@@ -43,7 +43,7 @@ METHODS = {
     # "log": log_weighted_instance,
     # "block-coord-macro-prec": block_coordinate_macro_precision,
     "block-coord-macro-f1": block_coordinate_macro_f1,
-    #"block coord coverage": block_coordinate_coverage,
+    # "block coord coverage": block_coordinate_coverage,
 }
 
 def report_metrics(data, predictions, k):
