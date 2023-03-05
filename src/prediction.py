@@ -251,13 +251,13 @@ def greedy_precision(predictions: np.ndarray, k: int = 5, *, epsilon: float = 0.
     return result
 
 
-def block_coordinate_coverage(probabilities: np.ndarray, k: int, tolerance: float = 1e-5):
+def block_coordinate_coverage(probabilities: np.ndarray, k: int, tolerance: float = 1e-5, seed: int = None):
     if isinstance(probabilities, np.ndarray):
         # Invoke original implementation of Erik
-        return np_block_coordinate_coverage(probabilities, k, tolerance=tolerance)
+        return np_block_coordinate_coverage(probabilities, k, tolerance=tolerance, seed=seed)
     elif isinstance(probabilities, csr_matrix):
         # Invoke implementation for sparse matrices
-        return csr_macro_population_cm_risk(probabilities, k, tolerance=tolerance)
+        return csr_macro_population_cm_risk(probabilities, k, tolerance=tolerance, seed=seed)
 
 
 def np_block_coordinate_coverage(predictions: np.ndarray, k: int = 5, *, tolerance: float = 1e-4):
@@ -306,17 +306,19 @@ def np_block_coordinate_coverage(predictions: np.ndarray, k: int = 5, *, toleran
     return result
 
 
-def macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func: callable, tolerance: float = 1e-5, **kwargs):
+def macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func: callable, 
+                             tolerance: float = 1e-5, max_iter=100, seed: int = None, **kwargs):
     if isinstance(probabilities, np.ndarray):
         # Invoke original implementation of Erik
-        return np_macro_population_cm_risk(probabilities, k, measure_func)
+        return np_macro_population_cm_risk(probabilities, k, measure_func, tolerance=tolerance, max_iter=max_iter, seed=seed, **kwargs)
     elif isinstance(probabilities, csr_matrix):
         # Invoke implementation for sparse matrices
-        return csr_macro_population_cm_risk(probabilities, k, measure_func, **kwargs)
+        return csr_macro_population_cm_risk(probabilities, k, measure_func, tolerance=tolerance, max_iter=max_iter, seed=seed, **kwargs)
     
 
 def np_macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func: callable, 
-                                tolerance: float = 1e-4, max_iter: int = 10, shuffle_order=True):
+                                greedy_start=False, tolerance: float = 1e-5, max_iter: int = 10, 
+                                shuffle_order: bool =True, seed: int = None, **kwargs):
     ni, nl = probabilities.shape
 
     # Initialize the prediction variable with some feasible value
@@ -335,11 +337,16 @@ def np_macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func:
         order = np.arange(ni)
         if shuffle_order:
             np.random.shuffle(order)
-            
-        # Recalculate expected conf matrices to prevent numerical errors from accumulating too much
-        Etp = np.sum(result * probabilities, axis=0)
-        Efp = np.sum(result * (1-probabilities), axis=0)
-        Efn = np.sum((1-result) * probabilities, axis=0)
+        
+        if greedy_start and j == 0:
+            Etp = np.zeros(nl, np.float32)
+            Efp = np.zeros(nl, np.float32)
+            Efn = np.zeros(nl, np.float32)
+        else:
+            # Recalculate expected conf matrices to prevent numerical errors from accumulating too much
+            Etp = np.sum(result * probabilities, axis=0)
+            Efp = np.sum(result * (1-probabilities), axis=0)
+            Efn = np.sum((1-result) * probabilities, axis=0)
 
         # Check expected conf matrices
         # print("Etp:", Etp.shape, type(Etp), Etp)
@@ -349,11 +356,13 @@ def np_macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func:
         old_score = np.mean(measure_func(Etp / ni, Efp / ni, Efn / ni))
 
         for i in order:
-            # adjust a and b locally
             eta = probabilities[i, :]
-            Etp -= result[i] * eta
-            Efp -= result[i] * (1-eta)
-            Efn -= (1-result[i]) * eta
+
+            # adjust a and b locally
+            if not (greedy_start and j == 0):
+                Etp -= result[i] * eta
+                Efp -= result[i] * (1-eta)
+                Efn -= (1-result[i]) * eta
 
             # calculate gain and selection
             Etpp = Etp + eta
