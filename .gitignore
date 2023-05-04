@@ -1,3 +1,7 @@
+datasets
+predictions
+results
+
 __pycache__
 .vscode
 .idea

@@ -128,6 +128,30 @@ def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(a_data, a_indices, a_ind
     return result
 
 
+@njit
+def numba_calculate_prod_1_sparse_mat_mul_ones_minus_mat(a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, ni, nl):
+    """
+    Performs a fast multiplication of a sparse matrix a 
+    with a dense matrix of ones minus other sparse matrix b and then sums the rows (axis=0).
+    Gives the same result as a.multiply(ones - b) where a and b are sparse matrices.
+    Requires a and b to have sorted indices (in ascending order).
+    """
+    result = np.ones(nl, dtype=FLOAT_TYPE)
+    for i in range(ni):
+        a_start, a_end = a_indptr[i], a_indptr[i+1]
+        b_start, b_end = b_indptr[i], b_indptr[i+1]
+
+        data, indices = numba_sparse_vec_mul_ones_minus_vec(
+            a_data[a_start:a_end],
+            a_indices[a_start:a_end],
+            b_data[b_start:b_end],
+            b_indices[b_start:b_end]
+        )
+        result[indices] *= data
+
+    return result
+
+
 #@njit
 def argtopk(data, indices, k):
     """
@@ -188,7 +212,7 @@ def calculate_etp(result: csr_matrix, probabilities: csr_matrix):
         )
         Etp[indices] += data
 
-    return Etp    
+    return Etp
 
 
 # This is a bit slow, TODO: make it faster (drop multiply and use custom method)
@@ -362,57 +386,74 @@ def csr_macro_population_cm_risk(probabilities: csr_matrix, k: int, measure_func
     return result
 
 
-def csr_block_coordinate_coverage(predictions: np.ndarray, k: int = 5, *, tolerance: float = 1e-4, max_iter: int = 10, shuffle_order=True):
+def csr_block_coordinate_coverage(probabilities: csr_matrix, k: int, greedy_start=False, tolerance: float = 1e-5, max_iter: int = 10, 
+                                  shuffle_order: bool = True, seed: int = None, filename: str = None, **kwargs):
     """
     An efficient implementation of the block coordinate-descent for coverage
     """
-    ni, nl = predictions.shape
+    if seed is not None:
+        print(f"  Using seed: {seed}")
+        np.random.seed(seed)
 
     # Initialize the prediction variable with some feasible value
     ni, nl = probabilities.shape
-    result_data, result_indices, result_indptr = numba_random_at_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
+    result_data, result_indices, result_indptr = numba_random_at_k(probabilities.indices, probabilities.indptr, ni, nl, k, seed=seed)
     
     # For debug set it to first k labels
     #result_data, result_indices, result_indptr = numba_first_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
     
-    result = construct_csr_matrix(result_data, result_indices, result_indptr, shape=(ni, nl))
-
-    result_x_prediction = result.multiply(predictions)
-    #f = np.product(1 - , axis=0)
-    old_cov = 1 - np.mean(f)
-
-    predictions = np.minimum(predictions, 1 - 1e-5)
+    result = construct_csr_matrix(result_data, result_indices, result_indptr, shape=(ni, nl), sort_indices=True)
+    probabilities.data = np.minimum(probabilities.data, 1 - 1e-5)
 
     for j in range(max_iter):
+        
         order = np.arange(ni)
         if shuffle_order:
             np.random.shuffle(order)
 
+        if greedy_start and j == 0:
+            failure_prob = np.ones(nl, dtype=FLOAT_TYPE)
+        else:
+            failure_prob = numba_calculate_prod_1_sparse_mat_mul_ones_minus_mat(*unpack_csr_matrices(result, probabilities), ni, nl)
+
+        old_cov = 1 - np.mean(failure_prob)
+
         #for i in tqdm(order):
         for i in order:
-            # adjust f locally
-            f /= 1 - result[i] * predictions[i]
+            r_start, r_end = result.indptr[i], result.indptr[i+1]
+            p_start, p_end = probabilities.indptr[i], probabilities.indptr[i+1]
 
-            # calculate gain and selection
-            eta = predictions[i, :]
-            g = f * eta
-            top_k = np.argpartition(-g, k)[:k]
+            r_data = result.data[r_start:r_end]
+            r_indices = result.indices[r_start:r_end]
 
-            # Update predictions
-            result.indices[result.indptr[i]:result.indptr[i+1]] = top_k
+            p_data = probabilities.data[p_start:p_end]
+            p_indices = probabilities.indices[p_start:p_end]
 
-            # update f
-            f *= (1 - result[i] * predictions[i])
+            if not (greedy_start and j == 0):
+                # Adjust local probablity of the failure (not covering the label)
+                data, indices = numba_sparse_vec_mul_ones_minus_vec(r_data, r_indices, p_data, p_indices) 
+                failure_prob[indices] /= data
 
-        new_cov = 1 - np.mean(f)
-        # print(f"{old_cov} -> {new_cov}")
-        # print(macro_abandonment(predictions, result))
+            # Calculate gain and selectio
+            gains = failure_prob[p_indices] * p_data
+            if gains.size > k:
+                top_k = np.argpartition(-gains, k)[:k]
+                result.indices[r_start:r_end] = sorted(p_indices[top_k])
+            else:
+                p_indices = np.resize(p_indices, k)
+                p_indices[gains.size:] = 0
+                result.indices[r_start:r_end] = sorted(p_indices)
+
+            # Update probablity of the failure (not covering the label)
+            data, indices = numba_sparse_vec_mul_ones_minus_vec(r_data, r_indices, p_data, p_indices) 
+            failure_prob[indices] *= data
+
+        new_cov = 1 - np.mean(failure_prob)
+        print(f"  Iteration {j + 1} finished, expected coverage: {old_cov} -> {new_cov}")
         if new_cov <= old_cov + tolerance:
             break
-        old_cov = new_cov
 
-    # print(macro_abandonment(predictions, result))
-
-
+        if filename is not None:
+            save_npz(f"{filename}_pred_iter_{j + 1}.npz", result)
 
     return result

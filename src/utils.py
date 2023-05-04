@@ -30,9 +30,12 @@ class Timer(object):
     def __enter__(self):
         self.start = time.time()
         return self
+    
+    def get_time(self):
+        return time.time() - self.start
         
     def __exit__(self, *args):
-        print (f"  Time: {time.time() - self.start:>5.2f}s")
+        print (f"  Time: {self.get_time():>5.2f}s")
 
 
 class NpEncoder(json.JSONEncoder):

@@ -3,14 +3,14 @@ from scipy.sparse import csr_matrix
 from typing import Union
 
 
-def _predicted_positives(y_pred: Union[np.ndarray, csr_matrix], axis: int=None, epsilon: float=1e-4):
+def _predicted_positives(y_pred: Union[np.ndarray, csr_matrix], axis: int=None, epsilon: float=1e-5):
     """
     Given predicted labels, calculates their number along the given axis.
     """
     return np.asarray(np.maximum(y_pred.sum(axis=axis), epsilon)).ravel()
 
 
-def _positives(y_true: Union[np.ndarray, csr_matrix], axis: int=None, epsilon: float=1e-4):
+def _positives(y_true: Union[np.ndarray, csr_matrix], axis: int=None, epsilon: float=1e-5):
     """
     Given true labels, calculates their number along the given axis.
     """
@@ -28,7 +28,7 @@ def _true_positives(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndar
     return np.asarray(y_true_x_pred.sum(axis=axis)).ravel()
 
 
-def precision(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int, epsilon: float=0.0001):
+def precision(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int, epsilon: float=1e-5):
     """
     Given true and predicted labels, calculates the precision along the given axis.
     """
@@ -37,7 +37,7 @@ def precision(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray
     return true_positives / predicted_positives
 
 
-def recall(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int, epsilon: float=0.0001):
+def recall(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int, epsilon: float=1e-5):
     """
     Given true and predicted labels, calculates the recall along the given axis.
     """
@@ -46,7 +46,7 @@ def recall(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, c
     return true_positives / positives
 
 
-def fmeasure(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int, beta: float=1, epsilon: float=0.0001):
+def fmeasure(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int, beta: float=1, epsilon: float=1e-5):
     """
     Given true and predicted labels, calculates the F1 score along the given axis.
     """
