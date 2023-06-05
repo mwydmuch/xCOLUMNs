@@ -3,6 +3,7 @@ import torch
 from scipy.sparse import csr_matrix
 from prediction_sparse import *
 from random import randint
+from tqdm import trange
 
 
 
@@ -11,9 +12,9 @@ IND_TYPE=np.int32
 
 
 def predict_g(eta_pred, G):
-    #return eta_pred * (G[:,0] + G[:,1]) + (1 - eta_pred) * G[:,2]
-    #return eta_pred * (G[:,0] + G[:,1] + G[:,2])
-    return eta_pred * (G[:,0] + G[:,1])
+    #return eta_pred.data * G[:,0][eta_pred.indices] + (eta_pred.data) * G[:,1][eta_pred.indices]
+    #return eta_pred.data * G[:,0][eta_pred.indices] + (1.0 - eta_pred.data) * G[:,1][eta_pred.indices]
+    return (eta_pred.data * (G[:,0][eta_pred.indices] - G[:,1][eta_pred.indices] - G[:,2][eta_pred.indices])) + G[:,1][eta_pred.indices]
 
 
 def predict_top_k(eta_pred, G, k):
@@ -25,9 +26,11 @@ def predict_top_k(eta_pred, G, k):
     result_data = np.ones(ni * k, dtype=FLOAT_TYPE)
     result_indices = np.zeros(ni * k, dtype=IND_TYPE)
     result_indptr = np.zeros(ni + 1, dtype=IND_TYPE)
-    for i in range(ni):
-        g = predict_g(eta_pred[i], G)
-        result_indices[i * k:(i + 1) * k] = np.argpartition(-g, k)[:k]
+    for i in trange(ni):
+        eta_i = eta_pred[i]
+        g = predict_g(eta_i, G)
+        top_k = np.argpartition(-g, k)[:k]
+        result_indices[i * k:(i + 1) * k] = sorted(eta_i.indices[top_k])
         result_indptr[i + 1] = result_indptr[i] + k
 
     return csr_matrix((result_data, result_indices, result_indptr), shape=(ni, G.shape[0]))
@@ -35,14 +38,12 @@ def predict_top_k(eta_pred, G, k):
 
 def calculate_confusion_matrix(pred_labels, true_labels, C_shape):
     """
-    Very slow implementation of confusion matrix calculation
+    Calculate normalized confusion matrix
     """
-    #print("  Calculating confusion matrix")
     C = np.zeros(C_shape)
-    C[:, 0] = calculate_etp_slow(pred_labels, true_labels)
-    C[:, 1] = calculate_efp_slow(pred_labels, true_labels)
-    C[:, 2] = calculate_efn_slow(pred_labels, true_labels)
-
+    C[:, 0] = calculate_etp(pred_labels, true_labels)
+    C[:, 1] = calculate_efp(pred_labels, true_labels)
+    C[:, 2] = calculate_efn(pred_labels, true_labels)
     C = C / true_labels.shape[0]
     
     return C
@@ -55,11 +56,11 @@ def calculate_loss(fn, C):
     return float(loss)
 
 
-def calculate_loss_with_gradient(fn, C):
+def calculate_loss_with_gradient(fn, C, reg):
     #print("  Calculating loss with gradients")
     C = torch.tensor(C, requires_grad=True, dtype=torch.float32)
     loss = fn(C)
-    loss = torch.mean(loss)
+    loss = torch.mean(loss) #+ reg * torch.linalg.matrix_norm(C, ord='fro')
     loss.backward()
     return float(loss), np.array(C.grad)
 
@@ -97,13 +98,18 @@ def find_alpha(C, C_i, loss_func, g=1000):
     return max_alpha
 
 
-def frank_wolfe(y_true, eta_pred, max_iters=10, loss_func=None, k=5, stop_on_zero=True):
+def frank_wolfe(y_true, eta_pred, max_iters=10, init="top", loss_func=None, k=5, stop_on_zero=True, reg=0, **kwargs):
     print("Starting Frank-Wolfe algorithm")
 
     m = eta_pred.shape[1]  # number of labels
     C_shape = (eta_pred.shape[1], 3)  # 0: TP, 1: FP, 2: FN
     init_G = np.zeros(C_shape)
-    init_G[:, 0] = 1
+
+    print(f"  Calculating initial loss based on {init}")
+    if init == "top":
+        init_G[:, 0] = 1
+    elif init == "random":
+        init_G[:, 0] = np.random.rand(m)
     init_pred = predict_top_k(eta_pred, init_G, k)
     #print("True:", y_true[0], "Pred:", init_pred[0])
     print("True:", y_true.shape, "Pred:", init_pred.shape, "Eta:", eta_pred.shape)
@@ -114,12 +120,12 @@ def frank_wolfe(y_true, eta_pred, max_iters=10, loss_func=None, k=5, stop_on_zer
     classifiers = np.zeros((max_iters,) + C_shape)
     classifier_weights = np.zeros(max_iters)
 
-    classifiers[0] = init_G 
+    classifiers[0] = init_G  
     classifier_weights[0] = 1
 
     for i in range(1, max_iters):
         print(f"Starting iteration {i} ...")
-        loss, G = calculate_loss_with_gradient(loss_func, C)
+        loss, G = calculate_loss_with_gradient(loss_func, C, reg)
         print(f"  Loss: {loss * 100}")
         # print(f"  Gradients: {G}")
         # print(f"  Grad sum {np.sum(G, axis=1)}")
@@ -132,6 +138,8 @@ def frank_wolfe(y_true, eta_pred, max_iters=10, loss_func=None, k=5, stop_on_zer
         print(f"  Loss_i: {loss_i * 100}")
         
         alpha = find_alpha(C, C_i, loss_func)
+        #alpha = 1
+        #alpha = 2 / (i + 2)
         
         classifier_weights[:i] *= (1 - alpha)
         classifier_weights[i] = alpha
@@ -156,8 +164,8 @@ def frank_wolfe(y_true, eta_pred, max_iters=10, loss_func=None, k=5, stop_on_zer
     final_loss = calculate_loss(loss_func, C)
     print(f"  Final loss: {final_loss * 100}")
 
-    sampled_loss = sample_loss_from_classfiers(eta_pred, classifiers, classifier_weights, loss_func, y_true, C_shape, k=k)
-    print(f"  Final sampled loss: {sampled_loss* 100}")
+    # sampled_loss = sample_loss_from_classfiers(eta_pred, classifiers, classifier_weights, loss_func, y_true, C_shape, k=k)
+    # print(f"  Final sampled loss: {sampled_loss* 100}")
     
     return classifiers, classifier_weights
 
@@ -171,11 +179,13 @@ def predict_top_k_for_classfiers(eta_pred, classifiers, classifier_weights, k=5,
     result_data = np.ones(ni * k, dtype=FLOAT_TYPE)
     result_indices = np.zeros(ni * k, dtype=IND_TYPE)
     result_indptr = np.zeros(ni + 1, dtype=IND_TYPE)
-    for i in range(ni):
+    for i in trange(ni):
         c = np.random.choice(classifiers.shape[0], p=classifier_weights)
         G = classifiers[c]
-        g = predict_g(eta_pred[i], G)
-        result_indices[i * k:(i + 1) * k] = np.argpartition(-g, k)[:k]
+        eta_i = eta_pred[i]
+        g = predict_g(eta_i, G)
+        top_k = np.argpartition(-g, k)[:k]
+        result_indices[i * k:(i + 1) * k] = sorted(eta_i.indices[top_k])
         result_indptr[i + 1] = result_indptr[i] + k
 
     return csr_matrix((result_data, result_indices, result_indptr), shape=(ni, G.shape[0]))

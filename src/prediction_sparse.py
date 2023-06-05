@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.sparse import csr_matrix, load_npz, save_npz
 from numba import njit
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from utils import *
 
 
@@ -293,8 +293,8 @@ def csr_macro_population_cm_risk(probabilities: csr_matrix, k: int, measure_func
         # print("Efp:", Efp.shape, type(Efp), Efp)
         # print("Efn:", Efn.shape, type(Efn), Efn)
 
-        #for i in tqdm(order):
-        for i in order:
+        for i in tqdm(order):
+        #for i in order:
             
             if SLOW:
                 eta = probabilities[i]
@@ -418,8 +418,8 @@ def csr_block_coordinate_coverage(probabilities: csr_matrix, k: int, greedy_star
 
         old_cov = 1 - np.mean(failure_prob)
 
-        #for i in tqdm(order):
-        for i in order:
+        for i in tqdm(order):
+        #for i in order:
             r_start, r_end = result.indptr[i], result.indptr[i+1]
             p_start, p_end = probabilities.indptr[i], probabilities.indptr[i+1]
 

@@ -26,11 +26,6 @@ METRICS = {
 
 
 METHODS = {
-    # Frank-Wolfe
-    # "expected-frank-wolfe-macro-recall": (expected_frank_wolfe_macro_recall, {}),
-    # "expected-frank-wolfe-macro-precision": (expected_frank_wolfe_macro_precision, {}),
-    # "expected-frank-wolfe-macro-f1": (expected_frank_wolfe_macro_f1, {}),
-
     # Instance-wise measures
     #"random": (predict_random_at_k,{}),
     "optimal-instance-prec": (optimal_instance_precision,{}),
@@ -47,28 +42,28 @@ METHODS = {
     "block-coord-macro-f1": (block_coordinate_macro_f1,{}),
     
     # Greedy
-    "greedy-macro-prec": (block_coordinate_macro_precision, {"greedy_start": True, "max_iter": 1}),
-    "greedy-macro-recall": (block_coordinate_macro_precision, {"greedy_start": True, "max_iter": 1}),
-    "greedy-macro-f1": (block_coordinate_macro_f1, {"greedy_start": True, "max_iter": 1}),
+    # "greedy-macro-prec": (block_coordinate_macro_precision, {"greedy_start": True, "max_iter": 1}),
+    # "greedy-macro-recall": (block_coordinate_macro_precision, {"greedy_start": True, "max_iter": 1}),
+    # "greedy-macro-f1": (block_coordinate_macro_f1, {"greedy_start": True, "max_iter": 1}),
     # "greedy-start-block-coord-macro-prec": (block_coordinate_macro_precision, {"greedy_start": True}),
     # "greedy-start-block-coord-macro-recall": (block_coordinate_macro_f1, {"greedy_start": True}),
     # "greedy-start-block-coord-macro-f1": (block_coordinate_macro_f1, {"greedy_start": True}),
 
     # Tolerance on stopping condiction experiments
-    # "block-coord-macro-prec-tol=1e-3": (block_coordinate_macro_precision, {"tolerance": 1e-3}),
-    # "block-coord-macro-prec-tol=1e-4": (block_coordinate_macro_precision, {"tolerance": 1e-4}),
-    # "block-coord-macro-prec-tol=1e-5": (block_coordinate_macro_precision,{"tolerance": 1e-5}),
-    # "block-coord-macro-prec-tol=1e-6": (block_coordinate_macro_precision,{"tolerance": 1e-6}),
+    "block-coord-macro-prec-tol=1e-3": (block_coordinate_macro_precision, {"tolerance": 1e-3}),
+    "block-coord-macro-prec-tol=1e-4": (block_coordinate_macro_precision, {"tolerance": 1e-4}),
+    "block-coord-macro-prec-tol=1e-5": (block_coordinate_macro_precision,{"tolerance": 1e-5}),
+    "block-coord-macro-prec-tol=1e-6": (block_coordinate_macro_precision,{"tolerance": 1e-6}),
 
     # "block-coord-macro-recall-tol=1e-3": (block_coordinate_macro_recall,{"tolerance": 1e-3}),
     # "block-coord-macro-recall-tol=1e-4": (block_coordinate_macro_recall,{"tolerance": 1e-4}),
     # "block-coord-macro-recall-tol=1e-5": (block_coordinate_macro_recall,{"tolerance": 1e-5}),
     # "block-coord-macro-recall-tol=1e-6": (block_coordinate_macro_recall,{"tolerance": 1e-6}),
 
-    # "block-coord-macro-f1-tol=1e-3": (block_coordinate_macro_f1,{"tolerance": 1e-3}),
-    # "block-coord-macro-f1-tol=1e-4": (block_coordinate_macro_f1,{"tolerance": 1e-4}),
-    # "block-coord-macro-f1-tol=1e-5": (block_coordinate_macro_f1,{"tolerance": 1e-5}),
-    # "block-coord-macro-f1-tol=1e-6": (block_coordinate_macro_f1,{"tolerance": 1e-6}),
+    "block-coord-macro-f1-tol=1e-3": (block_coordinate_macro_f1,{"tolerance": 1e-3}),
+    "block-coord-macro-f1-tol=1e-4": (block_coordinate_macro_f1,{"tolerance": 1e-4}),
+    "block-coord-macro-f1-tol=1e-5": (block_coordinate_macro_f1,{"tolerance": 1e-5}),
+    "block-coord-macro-f1-tol=1e-6": (block_coordinate_macro_f1,{"tolerance": 1e-6}),
 
     # "block-coord-cov-tol=1e-3": (block_coordinate_coverage,{"tolerance": 1e-3}),
     # "block-coord-cov-tol=1e-4": (block_coordinate_coverage,{"tolerance": 1e-4}),
@@ -79,21 +74,19 @@ METHODS = {
     "block-coord-cov": (block_coordinate_coverage,{}),
     "greedy-cov": (block_coordinate_coverage, {"greedy_start": True, "max_iter": 1}),
     # "greedy-start-block-coord-cov": (block_coordinate_coverage, {"greedy_start": True}),
-}
 
-# RECALCULATE_RESUTLS = True
-# RECALCULATE_PREDICTION = True
-# METHODS = {
-#     "block-coord-cov": (block_coordinate_coverage,{}),
-#     "greedy-cov": (block_coordinate_coverage, {"greedy_start": True, "max_iter": 1}),
-# }
+    # Frank-Wolfe
+    #"expected-frank-wolfe-macro-recall": (expected_frank_wolfe_macro_recall, {}),
+    #"expected-frank-wolfe-macro-prec": (expected_frank_wolfe_macro_precision, {}),
+    #"expected-frank-wolfe-macro-f1": (expected_frank_wolfe_macro_f1, {}),
+}
 
 def report_metrics(data, predictions, k):
     results = {}
     for metric, func in METRICS.items():
         value = func(data, predictions)
         results[f"{metric}@{k}"] = value
-        print(f"  {metric}: {100 * func(data, predictions):>5.2f}")
+        print(f"  {metric}: {100 * value:>5.2f}")
 
     return results
 
@@ -119,44 +112,62 @@ def main(experiment, k, seed):
     if "yeast_plt" in experiment:
         # yeast - PLT
         xmlc_data_load_config["header"] = False
-        eta_pred_path = {"path": f"predictions/yeast_top_100_{plt_loss}", "load_func": load_txt_sparse_pred}
+        eta_pred_path = {"path": f"predictions/yeast_top_200_{plt_loss}", "load_func": load_txt_sparse_pred}
         y_true_path = {"path": "datasets/yeast/yeast_test.txt", "load_func": load_txt_labels}
         train_y_true_path = {"path": "datasets/yeast/yeast_train.txt", "load_func": load_txt_labels}
+
+    elif "youtube_deepwalk_plt" in experiment:
+        xmlc_data_load_config["header"] = False
+        eta_pred_path = {"path": f"predictions/youtube_deepwalk_top_200_{plt_loss}", "load_func": load_txt_sparse_pred}
+        y_true_path = {"path": "datasets/youtube_deepwalk/youtube_deepwalk_test.svm", "load_func": load_txt_labels}
+        train_y_true_path = {"path": "datasets/youtube_deepwalk/youtube_deepwalk_train.svm", "load_func": load_txt_labels}
+
+    elif "eurlex_lexglue_plt" in experiment:
+        xmlc_data_load_config["header"] = False
+        eta_pred_path = {"path": f"predictions/eurlex_lexglue_top_200_{plt_loss}", "load_func": load_txt_sparse_pred}
+        y_true_path = {"path": "datasets/eurlex_lexglue/eurlex_lexglue_test.svm", "load_func": load_txt_labels}
+        train_y_true_path = {"path": "datasets/eurlex_lexglue/eurlex_lexglue_train.svm", "load_func": load_txt_labels}
 
     elif "mediamill_plt" in experiment:
         # mediamill - PLT
         xmlc_data_load_config["header"] = False
-        eta_pred_path = {"path": f"predictions/mediamill_top_100_{plt_loss}", "load_func": load_txt_sparse_pred}
+        eta_pred_path = {"path": f"predictions/mediamill_top_200_{plt_loss}", "load_func": load_txt_sparse_pred}
         y_true_path = {"path": "datasets/mediamill/mediamill_test.txt", "load_func": load_txt_labels}
         train_y_true_path = {"path": "datasets/mediamill/mediamill_train.txt", "load_func": load_txt_labels}
+    
+    elif "flicker_deepwalk_plt" in experiment:
+        xmlc_data_load_config["header"] = False
+        eta_pred_path = {"path": f"predictions/flicker_deepwalk_top_200_{plt_loss}", "load_func": load_txt_sparse_pred}
+        y_true_path = {"path": "datasets/flicker_deepwalk/flicker_deepwalk_test.svm", "load_func": load_txt_labels}
+        train_y_true_path= {"path": "datasets/flicker_deepwalk/flicker_deepwalk_train.svm", "load_func": load_txt_labels}
 
     elif "rcv1x_plt" in experiment:
         # RCV1X - PLT + XMLC repo data
-        eta_pred_path = {"path": f"predictions/rcv1x_top_1000_{plt_loss}", "load_func": load_txt_sparse_pred}
+        eta_pred_path = {"path": f"predictions/rcv1x_top_200_{plt_loss}", "load_func": load_txt_sparse_pred}
         y_true_path = {"path": "datasets/rcv1x/rcv1x_test.txt", "load_func": load_txt_labels}
         train_y_true_path = {"path": "datasets/rcv1x/rcv1x_train.txt", "load_func": load_txt_labels}
 
     elif "eurlex_plt" in experiment:
         # Eurlex - PLT + XMLC repo data
-        eta_pred_path = {"path": f"predictions/eurlex_top_1000_{plt_loss}", "load_func": load_txt_sparse_pred}
+        eta_pred_path = {"path": f"predictions/eurlex_top_200_{plt_loss}", "load_func": load_txt_sparse_pred}
         y_true_path = {"path": "datasets/eurlex/eurlex_test.txt", "load_func": load_txt_labels}
         train_y_true_path = {"path": "datasets/eurlex/eurlex_train.txt", "load_func": load_txt_labels}
 
     elif "amazoncat_plt" in experiment:
         # AmazonCat - PLT + XMLC repo data
-        eta_pred_path = {"path": f"predictions/amazonCat_top_1000_{plt_loss}", "load_func": load_txt_sparse_pred}
+        eta_pred_path = {"path": f"predictions/amazonCat_top_200_{plt_loss}", "load_func": load_txt_sparse_pred}
         y_true_path = {"path": "datasets/amazonCat/amazonCat_test.txt", "load_func": load_txt_labels}
         train_y_true_path = {"path": "datasets/amazonCat/amazonCat_train.txt", "load_func": load_txt_labels}
 
     elif "wiki10_plt" in experiment:
         # Wiki10 - PLT + XMLC repo data
-        eta_pred_path = {"path": f"predictions/wiki_top_1000_{plt_loss}", "load_func": load_txt_sparse_pred}
+        eta_pred_path = {"path": f"predictions/wiki10_top_200_{plt_loss}", "load_func": load_txt_sparse_pred}
         y_true_path = {"path": "datasets/wiki10/wiki10_test.txt", "load_func": load_txt_labels}
         train_y_true_path = {"path": "datasets/wiki10/wiki10_train.txt", "load_func": load_txt_labels}
 
     elif "amazon_plt" in experiment:
         # Amazon - PLT + XMLC repo data
-        eta_pred_path = {"path": f"predictions/amazon_top_1000_{plt_loss}", "load_func": load_txt_sparse_pred}
+        eta_pred_path = {"path": f"predictions/amazon_top_200_{plt_loss}", "load_func": load_txt_sparse_pred}
         y_true_path = {"path": "datasets/amazon/amazon_test.txt", "load_func": load_txt_labels}
         train_y_true_path = {"path": "datasets/amazon/amazon_train.txt", "load_func": load_txt_labels}
 

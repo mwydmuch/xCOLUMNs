@@ -2,10 +2,8 @@ import numpy as np
 from frank_wolfe import *
 
 def expected_frank_wolfe_wrapper(predictions: csr_matrix, loss_func, k: int = 5, seed: int = 0, **kwargs):
-    predictions_dense = predictions.toarray()
-    classifiers, classifier_weights = frank_wolfe(predictions, predictions_dense, max_iters=50, loss_func=loss_func, k=5)
-    print(classifier_weights)
-    y_pred = predict_top_k_for_classfiers(predictions_dense, classifiers, classifier_weights, k=k, seed=seed)
+    classifiers, classifier_weights = frank_wolfe(predictions, predictions, max_iters=20, loss_func=loss_func, k=5)
+    y_pred = predict_top_k_for_classfiers(predictions, classifiers, classifier_weights, k=k, seed=seed)
     return y_pred
 
 

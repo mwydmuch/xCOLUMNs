@@ -5,6 +5,7 @@ import os
 from typing import Union
 from math import log2, log
 from tqdm import tqdm
+import pickle
 
 from utils import construct_csr_matrix
 
@@ -207,5 +208,18 @@ def calculate_lightxml_labels(train_data_path, test_data_path):
 def load_npz_wrapper(path: Union[str, Path], **kwargs):
     return load_npz(path)
 
+
 def save_npz_wrapper(path: Union[str, Path], data: csr_matrix, **kwargs):
     save_npz(path, data)
+
+
+# Store data (serialize)
+def save_pickle(path, data):
+    with open(path, 'wb') as handle:
+        pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+# Load data (deserialize)
+def load_pickle(path):
+    with open(path, 'rb') as handle:
+        unserialized_data = pickle.load(handle)
+    return unserialized_data
