@@ -68,27 +68,43 @@ def macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func: ca
         return csr_macro_population_cm_risk(probabilities, k, measure_func, tolerance=tolerance, max_iter=max_iter, seed=seed, **kwargs)
     
 
-def precision_on_conf_matrix(tp, fp, fn, epsilon=1e-5):
+def instance_precision_at_k_on_conf_matrix(tp, fp, fn, k):
+    return np.asarray(tp / k).ravel()
+
+
+def macro_precision_on_conf_matrix(tp, fp, fn, epsilon=1e-5):
     return np.asarray(tp / (tp + fp + epsilon)).ravel()
 
 
-def recall_on_conf_matrix(tp, fp, fn, epsilon=1e-5):
+def macro_recall_on_conf_matrix(tp, fp, fn, epsilon=1e-5):
     return np.asarray(tp / (tp + fn + epsilon)).ravel()
 
 
-def fmeasure_on_conf_matrix(tp, fp, fn, beta=1.0, epsilon=1e-5):
-    precision = precision_on_conf_matrix(tp, fp, fn, epsilon=epsilon)
-    recall = recall_on_conf_matrix(tp, fp, fn, epsilon=epsilon)
+def macro_fmeasure_on_conf_matrix(tp, fp, fn, beta=1.0, epsilon=1e-5):
+    precision = macro_precision_on_conf_matrix(tp, fp, fn, epsilon=epsilon)
+    recall = macro_recall_on_conf_matrix(tp, fp, fn, epsilon=epsilon)
     return (1 + beta**2) * precision * recall / (beta**2 * precision + recall + epsilon)
 
 
 def block_coordinate_macro_precision(predictions: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
-    return macro_population_cm_risk(predictions, k=k, measure_func=precision_on_conf_matrix, **kwargs)
+    return macro_population_cm_risk(predictions, k=k, measure_func=macro_precision_on_conf_matrix, **kwargs)
 
 
 def block_coordinate_macro_recall(predictions: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
-    return macro_population_cm_risk(predictions, k=k, measure_func=recall_on_conf_matrix, **kwargs)
+    return macro_population_cm_risk(predictions, k=k, measure_func=macro_recall_on_conf_matrix, **kwargs)
 
 
 def block_coordinate_macro_f1(predictions: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
-    return macro_population_cm_risk(predictions, k=k, measure_func=fmeasure_on_conf_matrix, **kwargs)
+    return macro_population_cm_risk(predictions, k=k, measure_func=macro_fmeasure_on_conf_matrix, **kwargs)
+
+
+def block_coordinate_mixed_precision(predictions: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 0.5, **kwargs):
+    def mixed_precision_alpha_fn(tp, fp, fn):
+        return alpha * instance_precision_at_k_on_conf_matrix(tp, fp, fn, k) + (1 - alpha) * macro_precision_on_conf_matrix(tp, fp, fn)
+    return macro_population_cm_risk(predictions, k=k, measure_func=mixed_precision_alpha_fn, **kwargs)
+
+
+def block_coordinate_instance_prec_macro_f1(predictions: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 0.5, **kwargs):
+    def mixed_precision_alpha_fn(tp, fp, fn):
+        return alpha * instance_precision_at_k_on_conf_matrix(tp, fp, fn, k) + (1 - alpha) * macro_fmeasure_on_conf_matrix(tp, fp, fn)
+    return macro_population_cm_risk(predictions, k=k, measure_func=mixed_precision_alpha_fn, **kwargs)

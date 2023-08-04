@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.sparse as sp
 
 from metrics import *
 from data import *
@@ -119,6 +120,34 @@ def load_txt_data():
     pass
 
 
+class ModelWrapper:
+    def __init__(self, model_path, seed):
+        self.model_path = model_path
+        self.seed = seed
+        self.model = None
+
+    def fit(self, X, Y):
+        pass
+
+    def predict_proba(self, X, top_k):
+        pass
+
+
+
+class PLTModel(ModelWrapper):
+    def __init__(self, model_path, seed):
+        super().__init__(model_path, seed)
+        self.model = PLT(model_path, verbose=True, threads=15, seed=seed, max_leaves=200, liblinear_eps=0.001, liblinear_c=16)
+    
+    def fit(self, X, Y):
+        self.model.fit(X, Y)
+    
+    def predict_proba(self, X, top_k):
+        pred_val = self.model.predict_proba(X, top_k=top_k)
+        pred_val = to_csr_matrix(pred_val, sort_indices=True)
+        return pred_val
+
+
 @click.command()
 @click.argument("experiment", type=str, required=True)
 @click.option("-k", type=int, required=False, default=None)
@@ -134,61 +163,59 @@ def main(experiment, k, seed, testsplit, reg):
     lightxml_data_load_config = {"labels_delimiter": " ", "labels_features_delimiter": None, "header": False}
     xmlc_data_load_config = {"labels_delimiter": ",", "labels_features_delimiter": " ", "header": True}
 
-    if "yeast_plt" in experiment:
-        # yeast - PLT
+    if "yeast" in experiment:
         xmlc_data_load_config["header"] = False
         test_path = {"path": "datasets/yeast/yeast_test.txt", "load_func": load_txt_data}
         train_path = {"path": "datasets/yeast/yeast_train.txt", "load_func": load_txt_data}
 
-    elif "youtube_deepwalk_plt" in experiment:
-        # mediamill - PLT
+    elif "youtube_deepwalk" in experiment:
         xmlc_data_load_config["header"] = False
         test_path = {"path": "datasets/youtube_deepwalk/youtube_deepwalk_test.svm", "load_func": load_txt_data}
         train_path = {"path": "datasets/youtube_deepwalk/youtube_deepwalk_train.svm", "load_func": load_txt_data}
 
-    elif "eurlex_lexglue_plt" in experiment:
-        # mediamill - PLT
+    elif "eurlex_lexglue" in experiment:
         xmlc_data_load_config["header"] = False
         test_path = {"path": "datasets/eurlex_lexglue/eurlex_lexglue_test.svm", "load_func": load_txt_data}
         train_path = {"path": "datasets/eurlex_lexglue/eurlex_lexglue_train.svm", "load_func": load_txt_data}
 
-    elif "mediamill_plt" in experiment:
-        # mediamill - PLT
+    elif "mediamill" in experiment:
         xmlc_data_load_config["header"] = False
         test_path = {"path": "datasets/mediamill/mediamill_test.txt", "load_func": load_txt_data}
         train_path = {"path": "datasets/mediamill/mediamill_train.txt", "load_func": load_txt_data}
 
-    elif "bibtex_plt" in experiment:
+    elif "bibtex" in experiment:
         xmlc_data_load_config["header"] = False
         test_path = {"path": "datasets/bibtex/bibtex_test.svm", "load_func": load_txt_data}
         train_path = {"path": "datasets/bibtex/bibtex_train.svm", "load_func": load_txt_data}
 
-    elif "flicker_deepwalk_plt" in experiment:
-        # mediamill - PLT
+    elif "flicker_deepwalk" in experiment:
         xmlc_data_load_config["header"] = False
         test_path = {"path": "datasets/flicker_deepwalk/flicker_deepwalk_test.svm", "load_func": load_txt_data}
         train_path = {"path": "datasets/flicker_deepwalk/flicker_deepwalk_train.svm", "load_func": load_txt_data}
 
-    elif "rcv1x_plt" in experiment:
-        # RCV1X - PLT + XMLC repo data
+    elif "rcv1x" in experiment:
         test_path = {"path": "datasets/rcv1x/rcv1x_test.txt", "load_func": load_txt_data}
         train_path = {"path": "datasets/rcv1x/rcv1x_train.txt", "load_func": load_txt_data}
 
-    elif "eurlex_plt" in experiment:
+    elif "eurlex" in experiment:
         test_path = {"path": "datasets/eurlex/eurlex_test.txt", "load_func": load_txt_data}
         train_path = {"path": "datasets/eurlex/eurlex_train.txt", "load_func": load_txt_data}
 
-    elif "amazoncat_plt" in experiment:
+    elif "amazoncat" in experiment:
         test_path = {"path": "datasets/amazonCat/amazonCat_test.txt", "load_func": load_txt_data}
         train_path = {"path": "datasets/amazonCat/amazonCat_train.txt", "load_func": load_txt_data}
 
-    elif "wiki10_plt" in experiment:
+    elif "wiki10" in experiment:
         test_path = {"path": "datasets/wiki10/wiki10_test.txt", "load_func": load_txt_data}
         train_path = {"path": "datasets/wiki10/wiki10_train.txt", "load_func": load_txt_data}
 
-    elif "amazon_plt" in experiment:
+    elif "amazon" in experiment:
         test_path = {"path": "datasets/amazon/amazon_test.txt", "load_func": load_txt_data}
         train_path = {"path": "datasets/amazon/amazon_train.txt", "load_func": load_txt_data}
+
+
+    if "plt" in experiment:
+        model = PLTModel()
 
     # Create binary files for faster loading
     # with Timer():
@@ -205,6 +232,10 @@ def main(experiment, k, seed, testsplit, reg):
 
     print(f"Y_train before processing: type={type(Y_train)}, shape={Y_train.shape}")
     print(f"Y_test before processing: type={type(Y_test)}, shape={Y_test.shape}")
+
+    Y_all = sp.vstack((Y_train, Y_test))
+    print(f"Avg labels per point: {np.mean(Y_train.sum(axis=1))}, avg. samples per label: {np.mean(Y_train.sum(axis=0))}")
+    print(f"Avg labels per point: {Y_train.sum() / Y_train.shape[0]}, avg. samples per label: {Y_train.sum() / Y_train.shape[1]}")
     
     # For some sparse format this resize might be necessary
     fix_shape(Y_train, Y_test)
@@ -229,7 +260,6 @@ def main(experiment, k, seed, testsplit, reg):
     print("Training model on splited train data ...")
     model_path = f"models_and_predictions/{experiment}_seed={seed}_split={1 - testsplit}_model"
     
-    model = PLT(model_path, verbose=True, threads=15, seed=seed, max_leaves=200, liblinear_eps=0.001, liblinear_c=16)
     if not os.path.exists(os.path.join(model_path, "weights.bin")) or RETRAIN_MODEL:
         with Timer():
             model.fit(X_train, Y_train)
@@ -244,7 +274,6 @@ def main(experiment, k, seed, testsplit, reg):
     if not os.path.exists(val_pred_path) or RETRAIN_MODEL:
         with Timer():
             pred_val = model.predict_proba(X_val, top_k=top_k)
-            pred_val = to_csr_matrix(pred_val, sort_indices=True)
             fix_shape(Y_train, pred_val)
             #save_npz_wrapper(val_pred_path, pred_val)
             save_pickle(val_pred_path, pred_val)
@@ -258,7 +287,6 @@ def main(experiment, k, seed, testsplit, reg):
     if not os.path.exists(test_pred_path) or RETRAIN_MODEL:
         with Timer():
             pred_test = model.predict_proba(X_test, top_k=top_k)
-            pred_test = to_csr_matrix(pred_test, sort_indices=True)
             fix_shape(Y_train, pred_test)
             #save_npz_wrapper(test_pred_path, pred_test)
             save_pickle(test_pred_path, pred_test)

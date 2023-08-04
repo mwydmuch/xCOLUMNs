@@ -68,9 +68,9 @@ def abandonment(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarr
 
 
 def make_average(fn, **kwargs):
-    def macro(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], **inner_kw) -> float:
+    def avg_fun(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], **inner_kw) -> float:
         return fn(y_true=y_true, y_pred=y_pred, **kwargs, **inner_kw).mean()
-    return macro
+    return avg_fun
 
 
 macro_precision = make_average(precision, axis=0)

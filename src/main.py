@@ -30,6 +30,7 @@ METHODS = {
     #"random": (predict_random_at_k,{}),
     "optimal-instance-prec": (optimal_instance_precision,{}),
     "optimal-instance-ps-prec": (inv_propensity_weighted_instance,{}),
+    "power-law-with-beta=0.75": (power_law_weighted_instance,{"beta": 0.25}),
     "power-law-with-beta=0.5": (power_law_weighted_instance,{"beta": 0.5}),
     "power-law-with-beta=0.25": (power_law_weighted_instance,{"beta": 0.25}),
     "log": (log_weighted_instance,{}),
@@ -40,6 +41,30 @@ METHODS = {
     "block-coord-macro-prec": (block_coordinate_macro_precision,{}),
     "block-coord-macro-recall": (block_coordinate_macro_recall,{}),
     "block-coord-macro-f1": (block_coordinate_macro_f1,{}),
+
+    # Mixed precision
+    "block-coord-mixed-prec-alpha=0": (block_coordinate_mixed_precision,{"alpha": 0}),
+    "block-coord-mixed-prec-alpha=0.5": (block_coordinate_mixed_precision,{"alpha": 0.5}),
+    "block-coord-mixed-prec-alpha=0.75": (block_coordinate_mixed_precision,{"alpha": 0.75}),
+    "block-coord-mixed-prec-alpha=0.9": (block_coordinate_mixed_precision,{"alpha": 0.9}),
+    "block-coord-mixed-prec-alpha=0.99": (block_coordinate_mixed_precision,{"alpha": 0.99}),
+    "block-coord-mixed-prec-alpha=0.999": (block_coordinate_mixed_precision,{"alpha": 0.999}),
+    "block-coord-mixed-prec-alpha=0.9999": (block_coordinate_mixed_precision,{"alpha": 0.9999}),
+    "block-coord-mixed-prec-alpha=0.99999": (block_coordinate_mixed_precision,{"alpha": 0.99999}),
+    "block-coord-mixed-prec-alpha=0.999999": (block_coordinate_mixed_precision,{"alpha": 0.999999}),
+    "block-coord-mixed-prec-alpha=1.0": (block_coordinate_mixed_precision,{"alpha": 1.0}),
+
+    # Mixed precision with macro f1
+    "block-coord-mixed-prec-f1-alpha=0": (block_coordinate_instance_prec_macro_f1,{"alpha": 0}),
+    "block-coord-mixed-prec-f1-alpha=0.5": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.5}),
+    "block-coord-mixed-prec-f1-alpha=0.75": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.75}),
+    "block-coord-mixed-prec-f1-alpha=0.9": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.9}),
+    "block-coord-mixed-prec-f1-alpha=0.99": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.99}),
+    "block-coord-mixed-prec-f1-alpha=0.999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.999}),
+    "block-coord-mixed-prec-f1-alpha=0.9999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.9999}),
+    "block-coord-mixed-prec-f1-alpha=0.99999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.99999}),
+    "block-coord-mixed-prec-f1-alpha=0.999999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.999999}),
+    "block-coord-mixed-prec-f1-alpha=1.0": (block_coordinate_instance_prec_macro_f1,{"alpha": 1.0}),
     
     # Greedy
     # "greedy-macro-prec": (block_coordinate_macro_precision, {"greedy_start": True, "max_iter": 1}),
@@ -50,20 +75,20 @@ METHODS = {
     # "greedy-start-block-coord-macro-f1": (block_coordinate_macro_f1, {"greedy_start": True}),
 
     # Tolerance on stopping condiction experiments
-    "block-coord-macro-prec-tol=1e-3": (block_coordinate_macro_precision, {"tolerance": 1e-3}),
-    "block-coord-macro-prec-tol=1e-4": (block_coordinate_macro_precision, {"tolerance": 1e-4}),
-    "block-coord-macro-prec-tol=1e-5": (block_coordinate_macro_precision,{"tolerance": 1e-5}),
-    "block-coord-macro-prec-tol=1e-6": (block_coordinate_macro_precision,{"tolerance": 1e-6}),
+    # "block-coord-macro-prec-tol=1e-3": (block_coordinate_macro_precision, {"tolerance": 1e-3}),
+    # "block-coord-macro-prec-tol=1e-4": (block_coordinate_macro_precision, {"tolerance": 1e-4}),
+    # "block-coord-macro-prec-tol=1e-5": (block_coordinate_macro_precision,{"tolerance": 1e-5}),
+    # "block-coord-macro-prec-tol=1e-6": (block_coordinate_macro_precision,{"tolerance": 1e-6}),
 
     # "block-coord-macro-recall-tol=1e-3": (block_coordinate_macro_recall,{"tolerance": 1e-3}),
     # "block-coord-macro-recall-tol=1e-4": (block_coordinate_macro_recall,{"tolerance": 1e-4}),
     # "block-coord-macro-recall-tol=1e-5": (block_coordinate_macro_recall,{"tolerance": 1e-5}),
     # "block-coord-macro-recall-tol=1e-6": (block_coordinate_macro_recall,{"tolerance": 1e-6}),
 
-    "block-coord-macro-f1-tol=1e-3": (block_coordinate_macro_f1,{"tolerance": 1e-3}),
-    "block-coord-macro-f1-tol=1e-4": (block_coordinate_macro_f1,{"tolerance": 1e-4}),
-    "block-coord-macro-f1-tol=1e-5": (block_coordinate_macro_f1,{"tolerance": 1e-5}),
-    "block-coord-macro-f1-tol=1e-6": (block_coordinate_macro_f1,{"tolerance": 1e-6}),
+    # "block-coord-macro-f1-tol=1e-3": (block_coordinate_macro_f1,{"tolerance": 1e-3}),
+    # "block-coord-macro-f1-tol=1e-4": (block_coordinate_macro_f1,{"tolerance": 1e-4}),
+    # "block-coord-macro-f1-tol=1e-5": (block_coordinate_macro_f1,{"tolerance": 1e-5}),
+    # "block-coord-macro-f1-tol=1e-6": (block_coordinate_macro_f1,{"tolerance": 1e-6}),
 
     # "block-coord-cov-tol=1e-3": (block_coordinate_coverage,{"tolerance": 1e-3}),
     # "block-coord-cov-tol=1e-4": (block_coordinate_coverage,{"tolerance": 1e-4}),
@@ -80,6 +105,15 @@ METHODS = {
     #"expected-frank-wolfe-macro-prec": (expected_frank_wolfe_macro_precision, {}),
     #"expected-frank-wolfe-macro-f1": (expected_frank_wolfe_macro_f1, {}),
 }
+
+
+
+# METHODS = {
+#     "optimal-instance-prec": (optimal_instance_precision,{}),
+#     "block-coord-macro-prec": (block_coordinate_macro_precision,{}),
+#     "block-coord-mixed-prec-alpha=0": (block_coordinate_mixed_precision,{"alpha": 0}),
+#     "block-coord-mixed-prec-alpha=1.0": (block_coordinate_mixed_precision,{"alpha": 1.0}),
+# }
 
 def report_metrics(data, predictions, k):
     results = {}
