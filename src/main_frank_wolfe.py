@@ -7,11 +7,22 @@ from utils import *
 from frank_wolfe import *
 from prediction import *
 from sklearn.model_selection import train_test_split
-from napkinxc.models import PLT
+from napkinxc.models import PLT, BR
 from napkinxc.datasets import to_csr_matrix, load_libsvm_file
+
+import torch
+from pytorch_models.losses import *
+from pytorch_models.baseline_classifiers import *
+from pytorch_models.transformer_classifier import *
+
+from skmultilearn.problem_transform import LabelPowerset
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import normalize
 
 import sys
 import click
+from tqdm import trange
+
 
 RECALCULATE_RESUTLS = False
 RECALCULATE_PREDICTION = False
@@ -66,16 +77,16 @@ def report_metrics(data, predictions, k):
 
 
 def fw_optimal_instance_precision_wrapper(Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs):
-    return [optimal_instance_precision(pred_test, k=k, **kwargs)]
+    return [optimal_instance_precision(pred_test, k=k, **kwargs)[0]]
 
 def fw_optimal_macro_recal_wrapper(Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs):
-    return [optimal_macro_recall(pred_test, k=k, **kwargs)]
+    return [optimal_macro_recall(pred_test, k=k, **kwargs)[0]]
 
 def fw_power_law_weighted_instance_wrapper(Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs):
-    return [power_law_weighted_instance(pred_test, k=k, **kwargs)]
+    return [power_law_weighted_instance(pred_test, k=k, **kwargs)[0]]
 
 def fw_log_weighted_instance_wrapper(Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs):
-    return [log_weighted_instance(pred_test, k=k, **kwargs)]
+    return [log_weighted_instance(pred_test, k=k, **kwargs)[0]]
 
 
 METRICS = {
@@ -108,6 +119,14 @@ METHODS = {
 }
 
 
+
+def log_loss(true, pred):
+    true = true.toarray()
+    pred = pred.toarray()
+    pred = np.clip(pred, 1e-6, 1 - 1e-6)
+    return -np.mean(true * np.log(pred) + (1 - true) * np.log(1 - pred))
+
+
 def fix_shape(csr_a, csr_b):
     if csr_a.shape[1] != csr_b.shape[1]:
         print("  Fixing shapes ...")
@@ -133,19 +152,146 @@ class ModelWrapper:
         pass
 
 
-
-class PLTModel(ModelWrapper):
-    def __init__(self, model_path, seed):
+class NapkinModel(ModelWrapper):
+    def __init__(self, model_path, seed, napkin_model):
         super().__init__(model_path, seed)
-        self.model = PLT(model_path, verbose=True, threads=15, seed=seed, max_leaves=200, liblinear_eps=0.001, liblinear_c=16)
+        self.model = napkin_model
     
-    def fit(self, X, Y):
+    def fit(self, X, Y, *args, **kwargs):
         self.model.fit(X, Y)
     
     def predict_proba(self, X, top_k):
-        pred_val = self.model.predict_proba(X, top_k=top_k)
-        pred_val = to_csr_matrix(pred_val, sort_indices=True)
-        return pred_val
+        pred = self.model.predict_proba(X, top_k=top_k)
+        pred = to_csr_matrix(pred, sort_indices=True)
+        return pred
+    
+
+class StackedNapkinModel(ModelWrapper):
+    def __init__(self, model_path, seed, first_napkin_model, second_napkin_model):
+        super().__init__(model_path, seed)
+        self.first_model = first_napkin_model
+        self.second_model = second_napkin_model
+        self.first_top_k = 10
+    
+    def _create_data_for_second_model(self, X, first_Y):
+        second_X = sp.hstack((X, first_Y))
+        return second_X
+
+    def fit(self, X, Y, *args, **kwargs):
+        print("  Training first model ...")
+        X = normalize(X, norm='l2')
+        self.first_model.fit(X, Y)
+        first_pred_Y = self.first_model.predict_proba(X, top_k=self.first_top_k)
+        first_pred_Y = to_csr_matrix(first_pred_Y, sort_indices=True)
+
+        second_X = self._create_data_for_second_model(X, first_pred_Y)
+
+        print("  Training second model ...")
+        self.second_model.fit(second_X, Y)
+
+    def predict_proba(self, X, top_k):
+        X = normalize(X, norm='l2')
+        first_pred_Y = self.first_model.predict_proba(X, top_k=self.first_top_k)
+        first_pred_Y = to_csr_matrix(first_pred_Y, sort_indices=True)
+
+        second_X = self._create_data_for_second_model(X, first_pred_Y)
+        pred = self.second_model.predict_proba(second_X, top_k=top_k)
+        pred = to_csr_matrix(pred, sort_indices=True)
+        return pred
+    
+
+class SklearnModel(ModelWrapper):
+    def __init__(self, model_path, seed, model):
+        super().__init__(model_path, seed)
+        self.model = model
+
+    def fit(self, X, Y, *args, **kwargs):
+        self.model.fit(X, Y)
+
+    def predict_proba(self, X, top_k):
+        pred = self.model.predict_proba(X)
+        pred = to_csr_matrix(pred, sort_indices=True)
+        return pred
+    
+
+
+lr = 0.001 # 0.01 - eurlecx and wiki10, 0.02 - amazonCat and amazon-670k
+wd = 1e-4
+max_epochs = 1
+adam_eps = 1e-7
+train_batch_size = 64
+eval_batch_size = 8 * train_batch_size
+num_workers = 8
+precision = 16
+
+torch.set_float32_matmul_precision('medium')
+
+class PytorchModel(ModelWrapper):
+    def __init__(self, model_path, seed, loss="bce", hidden_units=()):
+        super().__init__(model_path, seed)
+        
+        self.loss = None
+        if loss == "bce":
+            self.loss = F.binary_cross_entropy_with_logits
+        elif loss == "focal":
+            self.loss = FocalLoss()
+        elif loss == "asym":
+            self.loss = AsymmetricLoss()
+
+        print("Loss:", self.loss.__class__.__name__)
+        # self.model = TransformerClassfier("destil-bert", 
+        #                                   self.loss, 
+        #                                   learning_rate=1e-5,  # początkowy rozmiar kroku uczenia
+        #                                   weight_decay = 0.00001,
+        #                                   max_epochs=1,
+        #                                   precision=16,
+        #                                   ckpt_dir=model_path)
+        self.model = FlatFullyConnectedClassfier(self.loss, 
+                                                 learning_rate=0.01,
+                                                 weight_decay = 0.00001,
+                                                 max_epochs=30,
+                                                 precision=16,
+                                                 hidden_units=hidden_units,
+                                                 ckpt_dir=model_path)
+
+    def fit(self, X, Y, X_val, Y_val):
+        self.model.fit(X, Y, X_val=X_val, Y_val=Y_val)
+        #self.model.fit(X, Y)
+    
+    def predict_proba(self, X, top_k):
+        pred = []
+        batch_size = 64 * 1024
+        rows = 0
+        print("Predicting ...")
+        while rows < X.shape[0]:
+            _pred = self.model.predict(X[rows : min(rows + batch_size, X.shape[0])])
+            _pred = torch.vstack(_pred)
+            pred.append(_pred.cpu().numpy())
+            rows += batch_size
+
+        pred = np.vstack(pred)
+        print("Converting to csr matrix ...")
+        shape = pred.shape
+        if shape[1] > top_k:
+            size = shape[0] * top_k
+            indptr = np.zeros(shape[0] + 1, dtype=np.int32)
+            indices = np.zeros(size, dtype=np.int32)
+            data = np.ones(size, dtype=np.float32)
+            cells = 0
+            indptr[0] = 0
+
+            for i in trange(shape[0]):
+                top_k_indicies = np.argpartition(-pred[i], top_k)[:top_k]
+                indptr[i + 1] = indptr[i] + top_k
+                indices[cells:cells + top_k] = top_k_indicies
+                data[cells:cells + top_k] = pred[i][top_k_indicies]
+                cells += top_k
+
+            pred = sp.csr_matrix((data, indices, indptr), shape=shape)
+        else:
+            pred = sp.csr_matrix(pred)
+        return pred
+
 
 
 @click.command()
@@ -188,6 +334,11 @@ def main(experiment, k, seed, testsplit, reg):
         test_path = {"path": "datasets/bibtex/bibtex_test.svm", "load_func": load_txt_data}
         train_path = {"path": "datasets/bibtex/bibtex_train.svm", "load_func": load_txt_data}
 
+    elif "delicious" in experiment:
+        xmlc_data_load_config["header"] = False
+        test_path = {"path": "datasets/delicious/delicious_test.svm", "load_func": load_txt_data}
+        train_path = {"path": "datasets/delicious/delicious_train.svm", "load_func": load_txt_data}
+
     elif "flicker_deepwalk" in experiment:
         xmlc_data_load_config["header"] = False
         test_path = {"path": "datasets/flicker_deepwalk/flicker_deepwalk_test.svm", "load_func": load_txt_data}
@@ -214,8 +365,10 @@ def main(experiment, k, seed, testsplit, reg):
         train_path = {"path": "datasets/amazon/amazon_train.txt", "load_func": load_txt_data}
 
 
-    if "plt" in experiment:
-        model = PLTModel()
+    if "routers21578" in experiment:
+        pass
+
+
 
     # Create binary files for faster loading
     # with Timer():
@@ -259,41 +412,74 @@ def main(experiment, k, seed, testsplit, reg):
 
     print("Training model on splited train data ...")
     model_path = f"models_and_predictions/{experiment}_seed={seed}_split={1 - testsplit}_model"
+    model = None
+
+    if "splt" in experiment:
+        model = StackedNapkinModel(model_path, seed, 
+                                   PLT(model_path + "_first", verbose=True, threads=15, seed=seed, max_leaves=200, liblinear_eps=0.001, liblinear_c=16),
+                                   PLT(model_path + "_second", verbose=True, threads=15, seed=seed, max_leaves=200, liblinear_eps=0.001, liblinear_c=16))
+    elif "plt" in experiment:
+        model = NapkinModel(model_path, seed, PLT(model_path, verbose=True, threads=15, seed=seed, max_leaves=200, liblinear_eps=0.001, liblinear_c=16))
+    elif "sbr" in experiment:
+        model = StackedNapkinModel(model_path, seed, 
+                                   BR(model_path + "_first", verbose=True, threads=15, seed=seed, liblinear_eps=0.001, liblinear_c=16),
+                                   BR(model_path + "_second", verbose=True, threads=15, seed=seed, liblinear_eps=0.001, liblinear_c=16))
+    elif "br" in experiment:
+        model = NapkinModel(model_path, seed, BR(model_path, verbose=True, threads=15, seed=seed, liblinear_eps=0.001, liblinear_c=16))
     
-    if not os.path.exists(os.path.join(model_path, "weights.bin")) or RETRAIN_MODEL:
-        with Timer():
-            model.fit(X_train, Y_train)
-    else:
-        model.load()  # Model will load automatically if needed
-    print("  Done")
+    elif "pytorch" in experiment:
+        if "bce" in experiment:
+            model = PytorchModel(model_path, seed, loss="bce")
+        elif "focal" in experiment:
+            model = PytorchModel(model_path, seed, loss="focal")
+        elif "asym" in experiment:
+            model = PytorchModel(model_path, seed, loss="asym")
+        
 
-    #top_k = min(1000, Y_train.shape[1])
-    top_k = min(200, Y_train.shape[1])
-    print("Predicting for validation set ...")
-    val_pred_path = f"models_and_predictions/{experiment}_seed={seed}_split={1 - testsplit}_top_k={top_k}_pred_val.pkl"
-    if not os.path.exists(val_pred_path) or RETRAIN_MODEL:
-        with Timer():
-            pred_val = model.predict_proba(X_val, top_k=top_k)
-            fix_shape(Y_train, pred_val)
-            #save_npz_wrapper(val_pred_path, pred_val)
-            save_pickle(val_pred_path, pred_val)
-    else:
-        #pred_val = load_npz_wrapper(val_pred_path)
-        pred_val = load_pickle(val_pred_path)
-    print("  Done")
+    if isinstance(model, ModelWrapper):
+        if not os.path.exists(model_path) or RETRAIN_MODEL:
+            with Timer():
+                model.fit(X_train, Y_train, X_test, Y_test)
+        # else:
+        #     model.load()  # Model will load automatically if needed
+        print("  Done")
 
-    print("Predicting for test set ...")
-    test_pred_path = f"models_and_predictions/{experiment}_seed={seed}_split={1 - testsplit}_top_k={top_k}_pred_test.pkl"
-    if not os.path.exists(test_pred_path) or RETRAIN_MODEL:
-        with Timer():
-            pred_test = model.predict_proba(X_test, top_k=top_k)
-            fix_shape(Y_train, pred_test)
-            #save_npz_wrapper(test_pred_path, pred_test)
-            save_pickle(test_pred_path, pred_test)
+        #top_k = min(1000, Y_train.shape[1])
+        top_k = min(200, Y_train.shape[1])
+        print("Predicting for validation set ...")
+        val_pred_path = f"models_and_predictions/{experiment}_seed={seed}_split={1 - testsplit}_top_k={top_k}_pred_val.pkl"
+        if not os.path.exists(val_pred_path) or RETRAIN_MODEL:
+            with Timer():
+                pred_val = model.predict_proba(X_val, top_k=top_k)
+                fix_shape(Y_train, pred_val)
+                #save_npz_wrapper(val_pred_path, pred_val)
+                save_pickle(val_pred_path, pred_val)
+        else:
+            #pred_val = load_npz_wrapper(val_pred_path)
+            pred_val = load_pickle(val_pred_path)
+        print("  Done")
+
+        print("Predicting for test set ...")
+        test_pred_path = f"models_and_predictions/{experiment}_seed={seed}_split={1 - testsplit}_top_k={top_k}_pred_test.pkl"
+        if not os.path.exists(test_pred_path) or RETRAIN_MODEL:
+            with Timer():
+                pred_test = model.predict_proba(X_test, top_k=top_k)
+                fix_shape(Y_train, pred_test)
+                #save_npz_wrapper(test_pred_path, pred_test)
+                save_pickle(test_pred_path, pred_test)
+        else:
+            #pred_test = load_npz_wrapper(test_pred_path)
+            pred_test = load_pickle(test_pred_path)
+        print("  Done")
+        del model
+
     else:
-        #pred_test = load_npz_wrapper(test_pred_path)
-        pred_test = load_pickle(test_pred_path)
-    print("  Done")
+        pred_val = Y_val.toarray()
+        pred_test = Y_test.toarray()
+        pred_val = np.clip(pred_val, 1e-8, 1 - 1e-8)
+        pred_test = np.clip(pred_test, 1e-8, 1 - 1e-8)
+        pred_val = sp.csr_matrix(pred_val)
+        pred_test = sp.csr_matrix(pred_test)
 
     print("Calculating metrics ...")
     output_path_prefix = f"results/{experiment}/"
@@ -309,6 +495,9 @@ def main(experiment, k, seed, testsplit, reg):
             if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
                 results = {}
                 if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
+                    results["test_log_loss"] = log_loss(Y_test, pred_test)
+                    results["val_log_loss"] = log_loss(Y_val, pred_val)
+
                     with Timer() as t:
                         y_preds = func[0](Y_val, pred_val, pred_test, k=k, marginals=marginals, inv_ps=inv_ps, seed=seed, reg=reg, **func[1])
                         results["time"] = t.get_time()

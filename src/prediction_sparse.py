@@ -257,12 +257,13 @@ def csr_macro_population_cm_risk(probabilities: csr_matrix, k: int, measure_func
     # Initialize the prediction variable with some feasible value
     ni, nl = probabilities.shape
     result_data, result_indices, result_indptr = numba_random_at_k(probabilities.indices, probabilities.indptr, ni, nl, k, seed=seed)
+    #result_data, result_indices, result_indptr = numba_weighted_per_instance(probabilities.data, probabilities.indices, probabilities.indptr, np.ones((nl,), dtype=np.float32), ni, nl, k)
     
     # For debug set it to first k labels
     #result_data, result_indices, result_indptr = numba_first_k(probabilities.data, probabilities.indices, probabilities.indptr, ni, nl, k)
     
     result = construct_csr_matrix(result_data, result_indices, result_indptr, shape=(ni, nl), sort_indices=True)
-
+    iters = 0
 
     for j in range(max_iter):
 
@@ -374,7 +375,8 @@ def csr_macro_population_cm_risk(probabilities: csr_matrix, k: int, measure_func
                 Efp[indices] += data
                 data, indices = numba_sparse_vec_mul_ones_minus_vec(p_data, p_indices, r_data, r_indices)
                 Efn[indices] += data
-
+        
+        iters = j
         new_score = np.mean(measure_func(Etp / ni, Efp / ni, Efn / ni))
         print(f"  Iteration {j + 1} finished, expected score: {old_score} -> {new_score}")
         if new_score <= old_score + tolerance:
@@ -383,7 +385,7 @@ def csr_macro_population_cm_risk(probabilities: csr_matrix, k: int, measure_func
         if filename is not None:
             save_npz(f"{filename}_pred_iter_{j + 1}.npz", result)
             
-    return result
+    return result, iters
 
 
 def csr_block_coordinate_coverage(probabilities: csr_matrix, k: int, greedy_start=False, tolerance: float = 1e-5, max_iter: int = 10, 
@@ -404,6 +406,7 @@ def csr_block_coordinate_coverage(probabilities: csr_matrix, k: int, greedy_star
     
     result = construct_csr_matrix(result_data, result_indices, result_indptr, shape=(ni, nl), sort_indices=True)
     probabilities.data = np.minimum(probabilities.data, 1 - 1e-5)
+    iters = 0
 
     for j in range(max_iter):
         
@@ -448,6 +451,7 @@ def csr_block_coordinate_coverage(probabilities: csr_matrix, k: int, greedy_star
             data, indices = numba_sparse_vec_mul_ones_minus_vec(r_data, r_indices, p_data, p_indices) 
             failure_prob[indices] *= data
 
+        iters = j
         new_cov = 1 - np.mean(failure_prob)
         print(f"  Iteration {j + 1} finished, expected coverage: {old_cov} -> {new_cov}")
         if new_cov <= old_cov + tolerance:
@@ -456,4 +460,4 @@ def csr_block_coordinate_coverage(probabilities: csr_matrix, k: int, greedy_star
         if filename is not None:
             save_npz(f"{filename}_pred_iter_{j + 1}.npz", result)
 
-    return result
+    return result, iters

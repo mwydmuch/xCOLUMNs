@@ -34,6 +34,7 @@ def np_macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func:
     # result = optimal_instance_precision(probabilities, k)
     # result = optimal_macro_recall(probabilities, k, marginal=np.mean(probabilities, axis=0))
 
+    iters = 0
     for j in range(max_iter):
 
         order = np.arange(ni)
@@ -84,12 +85,13 @@ def np_macro_population_cm_risk(probabilities: np.ndarray, k: int, measure_func:
             Efp += result[i] * (1 - eta)
             Efn += (1 - result[i]) * eta
 
+        iters = j
         new_score = np.mean(measure_func(Etp / ni, Efp / ni, Efn / ni))
         print(f"  Iteration {j + 1} finished, expected score: {old_score} -> {new_score}")
         if new_score <= old_score + tolerance:
             break
 
-    return result
+    return result, iters
 
 
 def np_block_coordinate_coverage(probabilities: csr_matrix, k: int, greedy_start=False, tolerance: float = 1e-5, max_iter: int = 10, 
@@ -102,6 +104,7 @@ def np_block_coordinate_coverage(probabilities: csr_matrix, k: int, greedy_start
     # initialize the prediction variable with some feasible value
     result = predict_random_at_k(probabilities, k)
     probabilities = np.minimum(probabilities, 1 - 1e-5)
+    iters = 0
 
     for j in range(max_iter):
         order = np.arange(ni)
@@ -129,9 +132,10 @@ def np_block_coordinate_coverage(probabilities: csr_matrix, k: int, greedy_start
             # update f
             f *= (1 - result[i] * probabilities[i])
 
+        iters = j
         new_cov = 1 - np.mean(f)
         print(f"  Iteration {j + 1} finished, expected coverage: {old_cov} -> {new_cov}")
         if new_cov <= old_cov + tolerance:
             break
         
-    return result
+    return result, iters

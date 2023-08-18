@@ -21,32 +21,32 @@ def weighted_per_instance(prediction: Union[np.ndarray, csr_matrix], weights: np
 
 
 def optimal_macro_recall(prediction: np.ndarray, k: int = 5, *, marginals, **kwargs):
-    return weighted_per_instance(prediction, 1.0 / (marginals + 0.00001), k=k)
+    return weighted_per_instance(prediction, 1.0 / (marginals + 0.00001), k=k), 1
 
 
 def inv_propensity_weighted_instance(prediction: np.ndarray, k: int = 5, *, inv_ps, **kwargs):
-    return weighted_per_instance(prediction, inv_ps, k=k)
+    return weighted_per_instance(prediction, inv_ps, k=k), 1
 
 
 def log_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginals, **kwargs):
     weights = -np.log(marginals + 0.0001)
-    return weighted_per_instance(prediction, weights, k=k)
+    return weighted_per_instance(prediction, weights, k=k), 1
 
 
 def sqrt_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginals, **kwargs):
     weights = 1.0 / np.sqrt(marginals + 0.0001)
-    return weighted_per_instance(prediction, weights, k=k)
+    return weighted_per_instance(prediction, weights, k=k), 1
 
 
 def power_law_weighted_instance(prediction: np.ndarray, k: int = 5, *, marginals, beta=0.25, **kwargs):
     weights = 1.0 / (marginals + 0.0001)**beta
-    return weighted_per_instance(prediction, weights, k=k)
+    return weighted_per_instance(prediction, weights, k=k), 1
 
 
 def optimal_instance_precision(prediction: np.ndarray, k: int = 5, **kwargs):
     ni, nl = prediction.shape
     weights = np.ones((nl,), dtype=np.float32)
-    return weighted_per_instance(prediction, weights, k=k)
+    return weighted_per_instance(prediction, weights, k=k), 1
 
 
 def block_coordinate_coverage(probabilities: np.ndarray, k: int, tolerance: float = 1e-5, max_iter=10, seed: int = None, **kwargs):

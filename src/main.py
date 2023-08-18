@@ -42,29 +42,29 @@ METHODS = {
     "block-coord-macro-recall": (block_coordinate_macro_recall,{}),
     "block-coord-macro-f1": (block_coordinate_macro_f1,{}),
 
-    # Mixed precision
-    "block-coord-mixed-prec-alpha=0": (block_coordinate_mixed_precision,{"alpha": 0}),
-    "block-coord-mixed-prec-alpha=0.5": (block_coordinate_mixed_precision,{"alpha": 0.5}),
-    "block-coord-mixed-prec-alpha=0.75": (block_coordinate_mixed_precision,{"alpha": 0.75}),
-    "block-coord-mixed-prec-alpha=0.9": (block_coordinate_mixed_precision,{"alpha": 0.9}),
-    "block-coord-mixed-prec-alpha=0.99": (block_coordinate_mixed_precision,{"alpha": 0.99}),
-    "block-coord-mixed-prec-alpha=0.999": (block_coordinate_mixed_precision,{"alpha": 0.999}),
-    "block-coord-mixed-prec-alpha=0.9999": (block_coordinate_mixed_precision,{"alpha": 0.9999}),
-    "block-coord-mixed-prec-alpha=0.99999": (block_coordinate_mixed_precision,{"alpha": 0.99999}),
-    "block-coord-mixed-prec-alpha=0.999999": (block_coordinate_mixed_precision,{"alpha": 0.999999}),
-    "block-coord-mixed-prec-alpha=1.0": (block_coordinate_mixed_precision,{"alpha": 1.0}),
+    # # Mixed precision
+    # "block-coord-mixed-prec-alpha=0": (block_coordinate_mixed_precision,{"alpha": 0}),
+    # "block-coord-mixed-prec-alpha=0.5": (block_coordinate_mixed_precision,{"alpha": 0.5}),
+    # "block-coord-mixed-prec-alpha=0.75": (block_coordinate_mixed_precision,{"alpha": 0.75}),
+    # "block-coord-mixed-prec-alpha=0.9": (block_coordinate_mixed_precision,{"alpha": 0.9}),
+    # "block-coord-mixed-prec-alpha=0.99": (block_coordinate_mixed_precision,{"alpha": 0.99}),
+    # "block-coord-mixed-prec-alpha=0.999": (block_coordinate_mixed_precision,{"alpha": 0.999}),
+    # "block-coord-mixed-prec-alpha=0.9999": (block_coordinate_mixed_precision,{"alpha": 0.9999}),
+    # "block-coord-mixed-prec-alpha=0.99999": (block_coordinate_mixed_precision,{"alpha": 0.99999}),
+    # "block-coord-mixed-prec-alpha=0.999999": (block_coordinate_mixed_precision,{"alpha": 0.999999}),
+    # "block-coord-mixed-prec-alpha=1.0": (block_coordinate_mixed_precision,{"alpha": 1.0}),
 
-    # Mixed precision with macro f1
-    "block-coord-mixed-prec-f1-alpha=0": (block_coordinate_instance_prec_macro_f1,{"alpha": 0}),
-    "block-coord-mixed-prec-f1-alpha=0.5": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.5}),
-    "block-coord-mixed-prec-f1-alpha=0.75": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.75}),
-    "block-coord-mixed-prec-f1-alpha=0.9": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.9}),
-    "block-coord-mixed-prec-f1-alpha=0.99": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.99}),
-    "block-coord-mixed-prec-f1-alpha=0.999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.999}),
-    "block-coord-mixed-prec-f1-alpha=0.9999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.9999}),
-    "block-coord-mixed-prec-f1-alpha=0.99999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.99999}),
-    "block-coord-mixed-prec-f1-alpha=0.999999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.999999}),
-    "block-coord-mixed-prec-f1-alpha=1.0": (block_coordinate_instance_prec_macro_f1,{"alpha": 1.0}),
+    # # Mixed precision with macro f1
+    # "block-coord-mixed-prec-f1-alpha=0": (block_coordinate_instance_prec_macro_f1,{"alpha": 0}),
+    # "block-coord-mixed-prec-f1-alpha=0.5": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.5}),
+    # "block-coord-mixed-prec-f1-alpha=0.75": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.75}),
+    # "block-coord-mixed-prec-f1-alpha=0.9": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.9}),
+    # "block-coord-mixed-prec-f1-alpha=0.99": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.99}),
+    # "block-coord-mixed-prec-f1-alpha=0.999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.999}),
+    # "block-coord-mixed-prec-f1-alpha=0.9999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.9999}),
+    # "block-coord-mixed-prec-f1-alpha=0.99999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.99999}),
+    # "block-coord-mixed-prec-f1-alpha=0.999999": (block_coordinate_instance_prec_macro_f1,{"alpha": 0.999999}),
+    # "block-coord-mixed-prec-f1-alpha=1.0": (block_coordinate_instance_prec_macro_f1,{"alpha": 1.0}),
     
     # Greedy
     # "greedy-macro-prec": (block_coordinate_macro_precision, {"greedy_start": True, "max_iter": 1}),
@@ -311,7 +311,7 @@ def main(experiment, k, seed):
     # y_true = y_true.todense() # As np.matrix
     # eta_pred = eta_pred.todense() # As np.matrix
 
-    output_path_prefix = f"results/{experiment}/"
+    output_path_prefix = f"results_bc2/{experiment}/"
     os.makedirs(output_path_prefix, exist_ok=True)
     for k in K:
         for method, func in METHODS.items():
@@ -326,8 +326,10 @@ def main(experiment, k, seed):
                 if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
                     with Timer() as t:
                         #y_pred = func[0](eta_pred, k, marginals=marginals, inv_ps=inv_ps, filename=output_path, **func[1])
-                        y_pred = func[0](eta_pred, k, marginals=marginals, inv_ps=inv_ps, seed=seed, **func[1])
+                        y_pred, iters = func[0](eta_pred, k, marginals=marginals, inv_ps=inv_ps, seed=seed, **func[1])
+                        results["iters"] = iters
                         results["time"] = t.get_time()
+                        print("  Iters: ", iters)
                     #save_npz_wrapper(pred_path, y_pred)
                     save_json(results_path, results)
                 else:
