@@ -37,7 +37,7 @@ def precision(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray
     return true_positives / predicted_positives
 
 
-def recall(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int, epsilon: float=1e-5):
+def recall(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int, epsilon: float=1e-5):
     """
     Given true and predicted labels, calculates the recall along the given axis.
     """
@@ -46,7 +46,7 @@ def recall(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, c
     return true_positives / positives
 
 
-def fmeasure(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int, beta: float=1, epsilon: float=1e-5):
+def fmeasure(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int, beta: float=1, epsilon: float=1e-5):
     """
     Given true and predicted labels, calculates the F1 score along the given axis.
     """
@@ -60,7 +60,7 @@ def fmeasure(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray,
     return (1 + beta**2) * precision * recall / (beta**2 * precision + recall + epsilon)
 
 
-def abandonment(*, y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int):
+def abandonment(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], axis: int):
     """
     Given true and predicted labels, calculates whether there is at least one positive along the given axis.
     """

@@ -2,9 +2,9 @@ import numpy as np
 
 from metrics import *
 from data import *
-from prediction import *
-from utils import *
-from expected_frank_wolfe import *
+from weighted_prediction import *
+from bca_prediction import *
+from utils_misc import *
 
 import sys
 import click

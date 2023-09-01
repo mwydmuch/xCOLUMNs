@@ -3,9 +3,9 @@ import scipy.sparse as sp
 
 from metrics import *
 from data import *
-from utils import *
+from utils_misc import *
 from frank_wolfe import *
-from prediction import *
+from weighted_prediction import *
 from sklearn.model_selection import train_test_split
 from napkinxc.models import PLT
 from napkinxc.datasets import to_csr_matrix, load_libsvm_file
@@ -19,8 +19,8 @@ RETRAIN_MODEL = False
 K = (1, 3, 5, 10)
 
 
-def frank_wolfe_wrapper(Y_val, pred_val, pred_test, loss_func, k: int = 5, seed: int = 0, reg=0, pred_repeat=10, average=False, **kwargs):
-    classifiers, classifier_weights = frank_wolfe(Y_val, pred_val, max_iters=20, loss_func=loss_func, k=k, reg=reg, **kwargs)
+def frank_wolfe_wrapper(Y_val, pred_val, pred_test, utility_func, k: int = 5, seed: int = 0, reg=0, pred_repeat=10, average=False, **kwargs):
+    classifiers, classifier_weights = frank_wolfe(Y_val, pred_val, utility_func, max_iters=20, k=k, reg=reg, **kwargs)
     print(f"  classifiers weights: {classifier_weights}")
     y_preds = []
     if not average:
@@ -41,15 +41,15 @@ def frank_wolfe_wrapper(Y_val, pred_val, pred_test, loss_func, k: int = 5, seed:
 
 
 def frank_wolfe_macro_recall(Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs):
-    return frank_wolfe_wrapper(Y_val, pred_val, pred_test, fw_macro_recall, k=k, seed=seed, **kwargs)
+    return frank_wolfe_wrapper(Y_val, pred_val, pred_test, macro_recall_C, k=k, seed=seed, **kwargs)
 
 
 def frank_wolfe_macro_precision(Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs):
-    return frank_wolfe_wrapper(Y_val, pred_val, pred_test, fw_macro_precision, k=k, seed=seed, **kwargs)
+    return frank_wolfe_wrapper(Y_val, pred_val, pred_test, macro_precision_C, k=k, seed=seed, **kwargs)
 
 
 def frank_wolfe_macro_f1(Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs):
-    return frank_wolfe_wrapper(Y_val, pred_val, pred_test, fw_macro_f1, k=k, seed=seed, **kwargs)
+    return frank_wolfe_wrapper(Y_val, pred_val, pred_test, macro_f1_C, k=k, seed=seed, **kwargs)
 
 
 def report_metrics(data, predictions, k):

@@ -8,24 +8,6 @@ def loprint(array):
     print(array.shape, array.dtype, array.min(), array.max(), array.mean(), array.std())
 
 
-def unpack_csr_matrix(matrix: csr_matrix):
-    return matrix.data, matrix.indices, matrix.indptr
-
-
-def unpack_csr_matrices(*matrices):
-    result = []
-    for m in matrices:
-        result.extend(unpack_csr_matrix(m))
-    return result
-
-
-def construct_csr_matrix(data: np.ndarray, indices: np.ndarray, indptr: np.ndarray, dtype=None, shape=None, sort_indices=False):
-    mat = csr_matrix((data, indices, indptr), dtype=dtype, shape=shape)
-    if sort_indices:
-        mat.sort_indices()
-    return mat
-
-
 class Timer(object):        
     def __enter__(self):
         self.start = time.time()

@@ -1,121 +1,177 @@
 import numpy as np
 import torch
 from scipy.sparse import csr_matrix
-from prediction_sparse import *
+from utils_sparse import *
 from random import randint
 from tqdm import trange
-
+from typing import Union
 
 
 FLOAT_TYPE=np.float32
 IND_TYPE=np.int32
+EPS = 1e-5
 
 
-def predict_g(eta_pred, G):
-    #return eta_pred.data * G[:,0][eta_pred.indices] + (eta_pred.data) * G[:,1][eta_pred.indices]
-    #return eta_pred.data * G[:,0][eta_pred.indices] + (1.0 - eta_pred.data) * G[:,1][eta_pred.indices]
-    return (eta_pred.data * (G[:,0][eta_pred.indices] - G[:,1][eta_pred.indices] - G[:,2][eta_pred.indices])) + G[:,1][eta_pred.indices]
+def precision_C(C, k=5):
+    return C[:,0] / k
 
 
-def predict_top_k(eta_pred, G, k):
+def macro_recall_C(C, epsilon=EPS):
+    return C[:,0] / (C[:,0] + C[:,2] + epsilon)
+
+
+def macro_precision_C(C, epsilon=EPS):
+    return C[:,0] / (C[:,0] + C[:,1] + epsilon)
+
+
+def macro_f1_C(C, epsilon=EPS):
+    return 2 * C[:,0] / (2 * C[:,0] + C[:,1] + C[:,2] + epsilon)
+
+
+def select_top_k_csr(y_proba, G, k):
+    # True negatives are not used in the utility function, so we can ignore them here
+    u = (y_proba.data * (G[:,0][y_proba.indices] - G[:,1][y_proba.indices] - G[:,2][y_proba.indices])) + G[:,1][y_proba.indices]
+    top_k = np.argpartition(-u, k)[:k]
+    return top_k
+
+
+def select_top_k_np(y_proba, G, k):
+    # True negatives are not used in the utility function, so we can ignore them here
+    u = (y_proba (G[:,0] - G[:,1] - G[:,2])) + G[:,1]
+    top_k = np.argpartition(-u, k)[:k]
+    return top_k
+
+
+def predict_top_k_csr(y_proba, G, k):
     """
-    Predicts the labels for a given gradient matrix G and probability estimates eta_pred
+    Predicts the labels for a given gradient matrix G and probability estimates y_proba in dense format
     """
-    #print("  Predicting top k based on marginal probabilities and gradient of confusion matrix")
-    ni = eta_pred.shape[0]
+    ni = y_proba.shape[0]
     result_data = np.ones(ni * k, dtype=FLOAT_TYPE)
     result_indices = np.zeros(ni * k, dtype=IND_TYPE)
     result_indptr = np.zeros(ni + 1, dtype=IND_TYPE)
     for i in trange(ni):
-        eta_i = eta_pred[i]
-        g = predict_g(eta_i, G)
-        top_k = np.argpartition(-g, k)[:k]
+        eta_i = y_proba[i]
+        top_k = select_top_k_csr(eta_i, G, k)
         result_indices[i * k:(i + 1) * k] = sorted(eta_i.indices[top_k])
         result_indptr[i + 1] = result_indptr[i] + k
 
     return csr_matrix((result_data, result_indices, result_indptr), shape=(ni, G.shape[0]))
 
 
-def calculate_confusion_matrix(pred_labels, true_labels, C_shape):
+def predict_top_k_np(y_proba, G, k):
     """
-    Calculate normalized confusion matrix
+    Predicts the labels for a given gradient matrix G and probability estimates y_proba in sparse format
     """
+    ni = y_proba.shape[0]
+    result = np.zeros(y_proba.shape, dtype=FLOAT_TYPE)
+    for i in trange(ni):
+        eta_i = y_proba[i]
+        top_k = select_top_k_np(eta_i, G, k)
+        result[i, top_k] = 1.0
+
+    return result
+
+
+def predict_top_k(y_proba, G, k):
+    """
+    Predicts the labels for a given gradient matrix G and probability estimates y_proba
+    """
+    if isinstance(y_proba, np.ndarray):
+        return predict_top_k_np(y_proba, G, k)
+    elif isinstance(y_proba, csr_matrix):
+        return predict_top_k_csr(y_proba, G, k)
+
+
+def calculate_confusion_matrix_csr(y_true, y_pred, C_shape):
+    """
+    Calculate normalized confusion matrix for true labels and predicted labels in sparse format
+    """
+    # True negatives are not used in the utility function, so we can ignore them here
     C = np.zeros(C_shape)
-    C[:, 0] = calculate_etp(pred_labels, true_labels)
-    C[:, 1] = calculate_efp(pred_labels, true_labels)
-    C[:, 2] = calculate_efn(pred_labels, true_labels)
-    C = C / true_labels.shape[0]
+    C[:, 0] = calculate_tp_csr(y_true, y_pred)
+    C[:, 1] = calculate_fp_csr(y_true, y_pred)
+    C[:, 2] = calculate_fn_csr(y_true, y_pred)
+    C = C / y_true.shape[0]
     
     return C
 
 
-def calculate_loss(fn, C):
+def calculate_confusion_matrix_np(y_true, y_pred):
+    """
+    Calculate normalized confusion matrix for true labels and predicted labels in dense format
+    """
+    # True negatives are not used in the utility function, so we can ignore them here
+    C = np.zeros((y_true.shape[1], 3))
+    C[:, 0] = np.sum(y_pred * y_true, axis=0)
+    C[:, 1] = np.sum(y_pred * (1-y_true), axis=0)
+    C[:, 2] = np.sum((1-y_pred) * y_true, axis=0)
+    C = C / y_true.shape[0]
+    
+    return C
+
+
+def calculate_utility(fn, C):
     C = torch.tensor(C, dtype=torch.float32)
-    loss = fn(C)
-    loss = torch.mean(loss)
-    return float(loss)
+    utility = fn(C)
+    utility = torch.mean(utility)
+    return float(utility)
 
 
-def calculate_loss_with_gradient(fn, C, reg):
-    #print("  Calculating loss with gradients")
+def calculate_utility_with_gradient(fn, C, reg):
+    #print("  Calculating utility with gradients")
     C = torch.tensor(C, requires_grad=True, dtype=torch.float32)
-    loss = fn(C)
-    loss = torch.mean(loss) #+ reg * torch.linalg.matrix_norm(C, ord='fro')
-    loss.backward()
-    return float(loss), np.array(C.grad)
+    utility = fn(C)
+    utility = torch.mean(utility) #+ reg * torch.linalg.matrix_norm(C, ord='fro')
+    utility.backward()
+    return float(utility), np.array(C.grad)
 
 
-def fw_macro_recall(C, epsilon=1e-5):
-    return C[:,0] / (C[:,0] + C[:,2] + epsilon)
-
-
-def fw_macro_precision(C, epsilon=1e-5):
-    return C[:,0] / (C[:,0] + C[:,1] + epsilon)
-
-
-def fw_macro_f1(C, beta=1.0, epsilon=1e-5):
-    # precision = fw_macro_precision(C, epsilon=epsilon)
-    # recall = fw_macro_recall(C, epsilon=epsilon)
-    # return (1 + beta**2) * precision * recall / (beta**2 * precision + recall + epsilon)
-    return 2 * C[:,0] / (2 * C[:,0] + C[:,1] + C[:,2] + epsilon)
-
-
-def find_alpha(C, C_i, loss_func, g=1000):
+def find_alpha(C, C_i, utility_func, g=1000):
     print("  Finding alpha")
-    max_loss = 0
+    max_utility = 0
     max_alpha = 0
 
     for i in range(g):
         alpha = i / g
         new_C = (1 - alpha) * C + alpha * C_i
-        loss = calculate_loss(loss_func, new_C)
-        #print(f"    Alpha: {alpha}, loss: {loss * 100}")
+        utility = calculate_utility(utility_func, new_C)
+        #print(f"    Alpha: {alpha}, utility: {utility * 100}")
         
-        if loss > max_loss:
-            max_loss = loss
+        if utility > max_utility:
+            max_utility = utility
             max_alpha = alpha
 
     return max_alpha
 
 
-def frank_wolfe(y_true, eta_pred, max_iters=10, init="top", loss_func=None, k=5, stop_on_zero=True, reg=0, **kwargs):
-    print("Starting Frank-Wolfe algorithm")
+def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray, csr_matrix], utility_func, max_iters: int = 10, init: str = "topk", k=5, stop_on_zero=True, reg=0, **kwargs):
+    if isinstance(y_true, np.ndarray) and isinstance(y_proba, np.ndarray):
+        func_calculate_confusion_matrix = calculate_confusion_matrix_np
+        func_predict_top_k = predict_top_k_np
+    elif isinstance(y_true, csr_matrix) and isinstance(y_proba, csr_matrix):
+        func_calculate_confusion_matrix = calculate_confusion_matrix_csr
+        func_predict_top_k = predict_top_k_csr
+    else:
+        raise ValueError(f"y_true and y_proba have unsuported combination of types {type(y_true)}, {type(y_proba)}")
+    
 
-    m = eta_pred.shape[1]  # number of labels
-    C_shape = (eta_pred.shape[1], 3)  # 0: TP, 1: FP, 2: FN
+    print("Starting Frank-Wolfe algorithm")
+    m = y_proba.shape[1]  # number of labels
+    C_shape = (y_proba.shape[1], 3)  # 0: TP, 1: FP, 2: FN
     init_G = np.zeros(C_shape)
 
-    print(f"  Calculating initial loss based on {init}")
-    if init == "top":
+    print(f"  Calculating initial utility based on {init} predictions ...")
+    if init == "topk":
         init_G[:, 0] = 1
     elif init == "random":
         init_G[:, 0] = np.random.rand(m)
-    init_pred = predict_top_k(eta_pred, init_G, k)
+    init_pred = func_predict_top_k(y_proba, init_G, k)
     #print("True:", y_true[0], "Pred:", init_pred[0])
-    print("True:", y_true.shape, "Pred:", init_pred.shape, "Eta:", eta_pred.shape)
-    C = calculate_confusion_matrix(init_pred, y_true, C_shape)
-    loss = calculate_loss(loss_func, C)
-    print(f"  Initial loss: {loss * 100}")
+    print(f"  y_true: {y_true.shape}, y_pred: {init_pred.shape}, y_proba: {y_proba.shape}")
+    C = func_calculate_confusion_matrix(y_true, init_pred, C_shape)
+    utility = calculate_utility(utility_func, C)
+    print(f"  Initial utility: {utility * 100}")
     
     classifiers = np.zeros((max_iters,) + C_shape)
     classifier_weights = np.zeros(max_iters)
@@ -125,19 +181,19 @@ def frank_wolfe(y_true, eta_pred, max_iters=10, init="top", loss_func=None, k=5,
 
     for i in range(1, max_iters):
         print(f"Starting iteration {i} ...")
-        loss, G = calculate_loss_with_gradient(loss_func, C, reg)
-        print(f"  Loss: {loss * 100}")
+        utility, G = calculate_utility_with_gradient(utility_func, C, reg)
+        print(f"  utility: {utility * 100}")
         # print(f"  Gradients: {G}")
         # print(f"  Grad sum {np.sum(G, axis=1)}")
         # print(f"  C matrix: {C}")
         
         classifiers[i] = G
-        pred = predict_top_k(eta_pred, G, k)
-        C_i = calculate_confusion_matrix(pred, y_true, C_shape)
-        loss_i = calculate_loss(loss_func, C_i)
-        print(f"  Loss_i: {loss_i * 100}")
+        y_pred = func_predict_top_k(y_proba, G, k)
+        C_i = func_calculate_confusion_matrix(y_true, y_pred, C_shape)
+        utility_i = calculate_utility(utility_func, C_i)
+        print(f"  utility_i: {utility_i * 100}")
         
-        alpha = find_alpha(C, C_i, loss_func)
+        alpha = find_alpha(C, C_i, utility_func)
         #alpha = 1
         #alpha = 2 / (i + 2)
         
@@ -149,10 +205,10 @@ def frank_wolfe(y_true, eta_pred, max_iters=10, init="top", loss_func=None, k=5,
         #print(f"  C_i matrix : {C_i}")
         #print(f"  new C matrix : {C}")
 
-        # loss = calculate_loss(loss_func, C)
-        # print(f"  Loss: {loss * 100}")
-        # sampled_loss = sample_loss_from_classfiers(eta_pred, classifiers, classifier_weights, loss_func, y_true, C_shape, k=k, s=10)
-        # print(f"  Sampled loss: {sampled_loss* 100}")
+        # utility = calculate_utility(utility_func, C)
+        # print(f"  utility: {utility * 100}")
+        # sampled_utility = sample_utility_from_classfiers(y_proba, classifiers, classifier_weights, utility_func, y_true, C_shape, k=k, s=10)
+        # print(f"  Sampled utility: {sampled_utility* 100}")
 
         if alpha == 0 and stop_on_zero:
             print("  Alpha is zero, stopping")
@@ -160,42 +216,66 @@ def frank_wolfe(y_true, eta_pred, max_iters=10, init="top", loss_func=None, k=5,
             classifier_weights = classifier_weights[:i]
             break
 
-    # Final loss calculation
-    final_loss = calculate_loss(loss_func, C)
-    print(f"  Final loss: {final_loss * 100}")
+    # Final utility calculation
+    final_utility = calculate_utility(utility_func, C)
+    print(f"  Final utility: {final_utility * 100}")
 
-    # sampled_loss = sample_loss_from_classfiers(eta_pred, classifiers, classifier_weights, loss_func, y_true, C_shape, k=k)
-    # print(f"  Final sampled loss: {sampled_loss* 100}")
+    # sampled_utility = sample_utility_from_classfiers(y_proba, classifiers, classifier_weights, utility_func, y_true, C_shape, k=k)
+    # print(f"  Final sampled utility: {sampled_utility* 100}")
     
     return classifiers, classifier_weights
 
 
-def predict_top_k_for_classfiers(eta_pred, classifiers, classifier_weights, k=5, seed=0):
+def predict_top_k_for_classfiers_csr(y_proba, classifiers, classifier_weights, k=5, seed=0):
     if seed is not None:
         #print(f"  Using seed: {seed}")
         np.random.seed(seed)
 
-    ni = eta_pred.shape[0]
+    ni = y_proba.shape[0]
     result_data = np.ones(ni * k, dtype=FLOAT_TYPE)
     result_indices = np.zeros(ni * k, dtype=IND_TYPE)
     result_indptr = np.zeros(ni + 1, dtype=IND_TYPE)
     for i in trange(ni):
         c = np.random.choice(classifiers.shape[0], p=classifier_weights)
         G = classifiers[c]
-        eta_i = eta_pred[i]
-        g = predict_g(eta_i, G)
-        top_k = np.argpartition(-g, k)[:k]
+        eta_i = y_proba[i]
+        top_k = select_top_k_csr(eta_i, G, k)
         result_indices[i * k:(i + 1) * k] = sorted(eta_i.indices[top_k])
         result_indptr[i + 1] = result_indptr[i] + k
 
     return csr_matrix((result_data, result_indices, result_indptr), shape=(ni, G.shape[0]))
 
 
+def predict_top_k_for_classfiers_np(y_proba, classifiers, classifier_weights, k=5, seed=0):
+    if seed is not None:
+        #print(f"  Using seed: {seed}")
+        np.random.seed(seed)
 
-def sample_loss_from_classfiers(eta_pred, classifiers, classifier_weights, loss_func, y_true, C_shape, k=5, s=5):
-    losses = []
+    ni = y_proba.shape[0]
+    result = np.zeros(y_proba.shape, dtype=FLOAT_TYPE)
+    for i in trange(ni):
+        c = np.random.choice(classifiers.shape[0], p=classifier_weights)
+        G = classifiers[c]
+        eta_i = y_proba[i]
+        top_k = select_top_k_np(eta_i, G, k)
+        result[i, top_k] = 1.0
+
+    return result
+
+
+def predict_top_k_for_classfiers(y_proba, classifiers, classifier_weights, k=5, seed=0):
+    if isinstance(y_proba, np.ndarray):
+        return predict_top_k_for_classfiers_np(y_proba, classifiers, classifier_weights, k=k, seed=seed)
+    elif isinstance(y_proba, csr_matrix):
+        return predict_top_k_for_classfiers_csr(y_proba, classifiers, classifier_weights, k=k, seed=seed)
+    else:
+        raise ValueError("y_proba must be either np.ndarray or csr_matrix")
+
+
+def sample_utility_from_classfiers_csr(y_proba, classifiers, classifier_weights, utility_func, y_true, C_shape, k=5, s=5):
+    utilities = []
     for _ in range(s):
-        classfiers_pred = predict_top_k_for_classfiers(eta_pred, classifiers, classifier_weights, k=k, seed=randint(0, 1000000))
-        classfiers_C = calculate_confusion_matrix(classfiers_pred, y_true, C_shape)
-        losses.append(calculate_loss(loss_func, classfiers_C))
-    return np.mean(losses)
+        classfiers_pred = predict_top_k_for_classfiers_csr(y_proba, classifiers, classifier_weights, k=k, seed=randint(0, 1000000))
+        classfiers_C = calculate_confusion_matrix_csr(classfiers_pred, y_true, C_shape)
+        utilities.append(calculate_utility(utility_func, classfiers_C))
+    return np.mean(utilities)

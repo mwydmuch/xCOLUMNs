@@ -7,7 +7,7 @@ from math import log2, log
 from tqdm import tqdm
 import pickle
 
-from utils import construct_csr_matrix
+from utils_misc import construct_csr_matrix
 
 
 def load_dataset(path: Path) -> np.ndarray:
