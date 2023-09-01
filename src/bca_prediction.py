@@ -28,6 +28,8 @@ def bca_with_0approx_np(y_proba: np.ndarray, k: int, utility_func: callable,
     # y_pred = optimal_instance_precision(y_proba, k)
     # y_pred = optimal_macro_recall(y_proba, k, marginal=np.mean(y_proba, axis=0))
 
+    meta = {"utilities": []}
+
     for j in range(max_iter):
 
         order = np.arange(ni)
@@ -79,11 +81,13 @@ def bca_with_0approx_np(y_proba: np.ndarray, k: int, utility_func: callable,
             Efn += (1 - y_pred[i]) * eta
 
         new_utility = np.mean(utility_func(Etp / ni, Efp / ni, Efn / ni))
+        meta["utilities"].append(new_utility)
         print(f"  Iteration {j + 1} finished, expected score: {old_utility} -> {new_utility}")
         if new_utility <= old_utility + tolerance:
             break
 
-    return y_pred
+    meta["iters"] = j
+    return y_pred, meta
 
 
 def bca_coverage_np(y_proba: csr_matrix, k: int, greedy_start=False, tolerance: float = 1e-5, max_iter: int = 10, 
@@ -96,6 +100,8 @@ def bca_coverage_np(y_proba: csr_matrix, k: int, greedy_start=False, tolerance: 
     # initialize the prediction variable with some feasible value
     y_pred = predict_random_at_k(y_proba, k)
     y_proba = np.minimum(y_proba, 1 - 1e-5)
+
+    meta = {"utilities": []}
 
     for j in range(max_iter):
         order = np.arange(ni)
@@ -124,11 +130,13 @@ def bca_coverage_np(y_proba: csr_matrix, k: int, greedy_start=False, tolerance: 
             f *= (1 - y_pred[i] * y_proba[i])
 
         new_cov = 1 - np.mean(f)
+        meta["utilities"].append(new_cov)
         print(f"  Iteration {j + 1} finished, expected coverage: {old_cov} -> {new_cov}")
         if new_cov <= old_cov + tolerance:
             break
-        
-    return y_pred
+    
+    meta["iters"] = j
+    return y_pred, meta
 
 
 def bca_with_0approx_csr(y_proba: csr_matrix, k: int, utility_func: callable, 
@@ -148,6 +156,7 @@ def bca_with_0approx_csr(y_proba: csr_matrix, k: int, utility_func: callable,
     
     y_pred = construct_csr_matrix(y_pred_data, y_pred_indices, y_pred_indptr, shape=(ni, nl), sort_indices=True)
 
+    meta = {"utilities": []}
 
     for j in range(max_iter):
 
@@ -261,14 +270,16 @@ def bca_with_0approx_csr(y_proba: csr_matrix, k: int, utility_func: callable,
                 Efn[indices] += data
 
         new_utility = np.mean(utility_func(Etp / ni, Efp / ni, Efn / ni))
+        meta["utilities"].append(new_utility)
         print(f"  Iteration {j + 1} finished, expected score: {old_utility} -> {new_utility}")
         if new_utility <= old_utility + tolerance:
             break
         
         if filename is not None:
             save_npz(f"{filename}_pred_iter_{j + 1}.npz", y_pred)
-            
-    return y_pred
+    
+    meta["iters"] = j
+    return y_pred, meta
 
 
 def bca_coverage_csr(y_proba: csr_matrix, k: int, greedy_start=False, tolerance: float = 1e-5, max_iter: int = 10, 
@@ -289,6 +300,8 @@ def bca_coverage_csr(y_proba: csr_matrix, k: int, greedy_start=False, tolerance:
     
     y_pred = construct_csr_matrix(y_pred_data, y_pred_indices, y_pred_indptr, shape=(ni, nl), sort_indices=True)
     y_proba.data = np.minimum(y_proba.data, 1 - 1e-5)
+
+    meta = {"utilities": []}
 
     for j in range(max_iter):
         
@@ -334,6 +347,7 @@ def bca_coverage_csr(y_proba: csr_matrix, k: int, greedy_start=False, tolerance:
             failure_prob[indices] *= data
 
         new_cov = 1 - np.mean(failure_prob)
+        meta["utilities"].append(new_cov)
         print(f"  Iteration {j + 1} finished, expected coverage: {old_cov} -> {new_cov}")
         if new_cov <= old_cov + tolerance:
             break
@@ -341,7 +355,8 @@ def bca_coverage_csr(y_proba: csr_matrix, k: int, greedy_start=False, tolerance:
         if filename is not None:
             save_npz(f"{filename}_pred_iter_{j + 1}.npz", y_pred)
 
-    return y_pred
+    meta["iters"] = j
+    return y_pred, meta
 
 
 

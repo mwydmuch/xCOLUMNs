@@ -18,14 +18,14 @@ def weighted_per_instance_np(y_proba: np.ndarray, weights: np.ndarray, k: int = 
         g = eta * weights
         top_k = np.argpartition(-g, k)[:k]
         result[i, top_k] = 1.0
-    return result
+    return result, {'iters': 1}
 
 
 def weighted_per_instance_csr(y_proba: csr_matrix, weights: np.ndarray, k: int = 5):
     # Since many numpy functions are not supported for sparse matrices
     ni, nl = y_proba.shape
     data, indices, indptr = numba_weighted_per_instance(y_proba.data, y_proba.indices, y_proba.indptr, weights, ni, nl, k)
-    return csr_matrix((data, indices, indptr), shape=y_proba.shape)
+    return csr_matrix((data, indices, indptr), shape=y_proba.shape), {'iters': 1}
 
 
 def weighted_per_instance(y_proba: Union[np.ndarray, csr_matrix], weights: np.ndarray, k: int = 5):

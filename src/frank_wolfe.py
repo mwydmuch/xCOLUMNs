@@ -179,10 +179,14 @@ def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray
     classifiers[0] = init_G  
     classifier_weights[0] = 1
 
+    meta = {"alphas": [], "utilities": []}
+
     for i in range(1, max_iters):
         print(f"Starting iteration {i} ...")
         utility, G = calculate_utility_with_gradient(utility_func, C, reg)
+        meta["utilities"].append(utility)
         print(f"  utility: {utility * 100}")
+
         # print(f"  Gradients: {G}")
         # print(f"  Grad sum {np.sum(G, axis=1)}")
         # print(f"  C matrix: {C}")
@@ -194,14 +198,13 @@ def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray
         print(f"  utility_i: {utility_i * 100}")
         
         alpha = find_alpha(C, C_i, utility_func)
-        #alpha = 1
-        #alpha = 2 / (i + 2)
+        meta["alphas"].append(alpha)
+        print(f"  alpha: {alpha}")
         
         classifier_weights[:i] *= (1 - alpha)
         classifier_weights[i] = alpha
         C = (1 - alpha) * C + alpha * C_i
 
-        print(f"  Alpha: {alpha}")
         #print(f"  C_i matrix : {C_i}")
         #print(f"  new C matrix : {C}")
 
@@ -216,6 +219,8 @@ def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray
             classifier_weights = classifier_weights[:i]
             break
 
+    meta["iters"] = i
+
     # Final utility calculation
     final_utility = calculate_utility(utility_func, C)
     print(f"  Final utility: {final_utility * 100}")
@@ -223,7 +228,7 @@ def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray
     # sampled_utility = sample_utility_from_classfiers(y_proba, classifiers, classifier_weights, utility_func, y_true, C_shape, k=k)
     # print(f"  Final sampled utility: {sampled_utility* 100}")
     
-    return classifiers, classifier_weights
+    return classifiers, classifier_weights, meta
 
 
 def predict_top_k_for_classfiers_csr(y_proba, classifiers, classifier_weights, k=5, seed=0):
