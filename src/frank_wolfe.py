@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from scipy.sparse import csr_matrix
-from utils_sparse import *
+from .utils_sparse import *
 from random import randint
 from tqdm import trange
 from typing import Union
@@ -37,7 +37,7 @@ def select_top_k_csr(y_proba, G, k):
 
 def select_top_k_np(y_proba, G, k):
     # True negatives are not used in the utility function, so we can ignore them here
-    u = (y_proba (G[:,0] - G[:,1] - G[:,2])) + G[:,1]
+    u = (y_proba * (G[:,0] - G[:,1] - G[:,2])) + G[:,1]
     top_k = np.argpartition(-u, k)[:k]
     return top_k
 
@@ -97,12 +97,13 @@ def calculate_confusion_matrix_csr(y_true, y_pred, C_shape):
     return C
 
 
-def calculate_confusion_matrix_np(y_true, y_pred):
+def calculate_confusion_matrix_np(y_true, y_pred, C_shape):
     """
     Calculate normalized confusion matrix for true labels and predicted labels in dense format
     """
     # True negatives are not used in the utility function, so we can ignore them here
-    C = np.zeros((y_true.shape[1], 3))
+    #C = np.zeros((y_true.shape[1], 3))
+    C = np.zeros(C_shape)
     C[:, 0] = np.sum(y_pred * y_true, axis=0)
     C[:, 1] = np.sum(y_pred * (1-y_true), axis=0)
     C[:, 2] = np.sum((1-y_pred) * y_true, axis=0)
