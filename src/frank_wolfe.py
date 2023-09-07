@@ -119,11 +119,10 @@ def calculate_utility(fn, C):
     return float(utility)
 
 
-def calculate_utility_with_gradient(fn, C, reg):
-    #print("  Calculating utility with gradients")
+def calculate_utility_with_gradient(fn, C):
     C = torch.tensor(C, requires_grad=True, dtype=torch.float32)
     utility = fn(C)
-    utility = torch.mean(utility) #+ reg * torch.linalg.matrix_norm(C, ord='fro')
+    utility = torch.mean(utility)
     utility.backward()
     return float(utility), np.array(C.grad)
 
@@ -146,7 +145,7 @@ def find_alpha(C, C_i, utility_func, g=1000):
     return max_alpha
 
 
-def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray, csr_matrix], utility_func, max_iters: int = 10, init: str = "topk", k=5, stop_on_zero=True, reg=0, **kwargs):
+def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray, csr_matrix], utility_func, max_iters: int = 10, init: str = "topk", k=5, stop_on_zero=True, **kwargs):
     if isinstance(y_true, np.ndarray) and isinstance(y_proba, np.ndarray):
         func_calculate_confusion_matrix = calculate_confusion_matrix_np
         func_predict_top_k = predict_top_k_np
@@ -186,9 +185,9 @@ def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray
         print(f"Starting iteration {i} ...")
         utility, G = calculate_utility_with_gradient(utility_func, C, reg)
         meta["utilities"].append(utility)
-        print(f"  utility: {utility * 100}")
+        print(f"  utility: {utility}")
 
-        # print(f"  Gradients: {G}")
+        print(f"  gradients: {G}, a = {G[:,0] - G[:,1] - G[:,2]}, b = {G[:,1]}")
         # print(f"  Grad sum {np.sum(G, axis=1)}")
         # print(f"  C matrix: {C}")
         
@@ -196,9 +195,10 @@ def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray
         y_pred = func_predict_top_k(y_proba, G, k)
         C_i = func_calculate_confusion_matrix(y_true, y_pred, C_shape)
         utility_i = calculate_utility(utility_func, C_i)
-        print(f"  utility_i: {utility_i * 100}")
+        print(f"  utility_i: {utility_i}")
         
         alpha = find_alpha(C, C_i, utility_func)
+        #alpha = 2 / (i + 1)
         meta["alphas"].append(alpha)
         print(f"  alpha: {alpha}")
         
@@ -208,11 +208,6 @@ def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray
 
         #print(f"  C_i matrix : {C_i}")
         #print(f"  new C matrix : {C}")
-
-        # utility = calculate_utility(utility_func, C)
-        # print(f"  utility: {utility * 100}")
-        # sampled_utility = sample_utility_from_classfiers(y_proba, classifiers, classifier_weights, utility_func, y_true, C_shape, k=k, s=10)
-        # print(f"  Sampled utility: {sampled_utility* 100}")
 
         if alpha == 0 and stop_on_zero:
             print("  Alpha is zero, stopping")
@@ -224,7 +219,7 @@ def frank_wolfe(y_true: Union[np.ndarray, csr_matrix], y_proba: Union[np.ndarray
 
     # Final utility calculation
     final_utility = calculate_utility(utility_func, C)
-    print(f"  Final utility: {final_utility * 100}")
+    print(f"  Final utility: {final_utility}")
 
     # sampled_utility = sample_utility_from_classfiers(y_proba, classifiers, classifier_weights, utility_func, y_true, C_shape, k=k)
     # print(f"  Final sampled utility: {sampled_utility* 100}")
