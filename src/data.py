@@ -7,7 +7,7 @@ from math import log2, log
 from tqdm import tqdm
 import pickle
 
-from utils_misc import construct_csr_matrix
+from utils_sparse import construct_csr_matrix
 
 
 def load_dataset(path: Path) -> np.ndarray:
@@ -39,11 +39,17 @@ def load_npy_dataset(path: str, num_ins, num_lbl):
     return label_matrix
 
 
-def load_txt_labels(path: str, header=True, labels_delimiter=",", labels_features_delimiter=" ", labels_map: dict=None):
+def load_txt_labels(
+    path: str,
+    header=True,
+    labels_delimiter=",",
+    labels_features_delimiter=" ",
+    labels_map: dict = None,
+):
     """
     Loads the sparse label matrix from the XMC repository dataset or similar text format
     """
-    with open(path, 'r') as file:
+    with open(path, "r") as file:
         data = []
         indices = []
         indptr = [0]
@@ -75,17 +81,21 @@ def load_txt_labels(path: str, header=True, labels_delimiter=",", labels_feature
             indptr.append(len(indices))
 
     if requires_sort:
-        print("  Sorting of the matrix's indices is required. This may take a while ...")
+        print(
+            "  Sorting of the matrix's indices is required. This may take a while ..."
+        )
 
-    return construct_csr_matrix(data, indices, indptr, dtype=np.float32, sort_indices=requires_sort)
+    return construct_csr_matrix(
+        data, indices, indptr, dtype=np.float32, sort_indices=requires_sort
+    )
 
 
 def load_txt_sparse_pred(path: str):
     """
     Loads the sparse prediction matrix from libsvm like format:
-    <label>:<value> <label>:<value> ... 
+    <label>:<value> <label>:<value> ...
     """
-    with open(path, 'r') as file:
+    with open(path, "r") as file:
         data = []
         indices = []
         indptr = [0]
@@ -103,17 +113,21 @@ def load_txt_sparse_pred(path: str):
                 prev = ind
             indptr.append(len(indices))
 
-    return construct_csr_matrix(data, indices, indptr, dtype=np.float32, sort_indices=requires_sort)
+    return construct_csr_matrix(
+        data, indices, indptr, dtype=np.float32, sort_indices=requires_sort
+    )
 
 
 def load_npy_sparse_pred(path: str):
     indices = np.load(path + "-labels.npy", allow_pickle=True)
     data = np.load(path + "-scores.npy", allow_pickle=True)
     indptr = np.arange(0, indices.shape[0] + 1, 1, dtype=np.int32) * indices.shape[1]
-    return construct_csr_matrix(data.flatten(), indices.flatten(), indptr, dtype=np.float32, sort_indices=True)
+    return construct_csr_matrix(
+        data.flatten(), indices.flatten(), indptr, dtype=np.float32, sort_indices=True
+    )
 
 
-def load_npy_full_pred(path: str, keep_top_k: int=0, **kwargs):
+def load_npy_full_pred(path: str, keep_top_k: int = 0, **kwargs):
     dense_data = np.load(path, allow_pickle=True)
 
     if keep_top_k < 0:
@@ -122,7 +136,9 @@ def load_npy_full_pred(path: str, keep_top_k: int=0, **kwargs):
     data = -np.partition(-dense_data, keep_top_k, axis=1)[:, :keep_top_k]
     indices = np.argpartition(-dense_data, keep_top_k, axis=1)[:, :keep_top_k]
     indptr = np.arange(0, indices.shape[0] + 1, 1, dtype=np.int32) * indices.shape[1]
-    return construct_csr_matrix(data.flatten(), indices.flatten(), indptr, dtype=np.float32, sort_indices=True)
+    return construct_csr_matrix(
+        data.flatten(), indices.flatten(), indptr, dtype=np.float32, sort_indices=True
+    )
 
 
 def load_cache_npz_file(path: Union[str, Path], load_func: callable, **load_func_args):
@@ -130,10 +146,10 @@ def load_cache_npz_file(path: Union[str, Path], load_func: callable, **load_func
     Loads a npz file from the given path. If the file does not exist, it is created using the given load_func.
     """
     print(f"Loading {path} ...")
-    if(not os.path.exists(path + ".npz")):
+    if not os.path.exists(path + ".npz"):
         print(f"  Creating cache under {path}.npz for faster loading ...")
         data = load_func(path, **load_func_args)
-        save_npz(path + ".npz",data)
+        save_npz(path + ".npz", data)
     else:
         data = load_npz(path + ".npz")
 
@@ -156,7 +172,7 @@ def labels_priors(Y: Union[np.ndarray, csr_matrix]):
     counts = count_labels(Y)
     priors = counts / Y.shape[0]
 
-    return priors    
+    return priors
 
 
 def jpv_propensity(Y: Union[np.ndarray, csr_matrix], A=0.55, B=1.5):
@@ -183,7 +199,7 @@ def load_weights_file(filepath):
         for line in file:
             v.append(float(line.strip()))
         return v
-    
+
 
 def calculate_lightxml_labels(train_data_path, test_data_path):
     print("Creating lightxml label map ...")
@@ -191,12 +207,12 @@ def calculate_lightxml_labels(train_data_path, test_data_path):
 
     with open(train_data_path) as f:
         for i in tqdm(f):
-            for l in i.replace('\n', '').split():
+            for l in i.replace("\n", "").split():
                 label_map[l.strip()] = 0
 
     with open(test_data_path) as f:
         for i in tqdm(f):
-            for l in i.replace('\n', '').split():
+            for l in i.replace("\n", "").split():
                 label_map[l.strip()] = 0
 
     for i, k in enumerate(sorted(label_map.keys())):
@@ -215,11 +231,12 @@ def save_npz_wrapper(path: Union[str, Path], data: csr_matrix, **kwargs):
 
 # Store data (serialize)
 def save_pickle(path, data):
-    with open(path, 'wb') as handle:
+    with open(path, "wb") as handle:
         pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
 
 # Load data (deserialize)
 def load_pickle(path):
-    with open(path, 'rb') as handle:
+    with open(path, "rb") as handle:
         unserialized_data = pickle.load(handle)
     return unserialized_data

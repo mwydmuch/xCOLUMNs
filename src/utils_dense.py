@@ -1,11 +1,14 @@
 import numpy as np
 
+
 def _make_filler(num_labels: int, k: int):
     all_labels = set(range(num_labels))
 
     def filler(target: np.ndarray, already_selected: np.ndarray):
         free_labels = list(all_labels - set(already_selected))
-        additional = np.random.choice(free_labels, k - len(already_selected), replace=False)
+        additional = np.random.choice(
+            free_labels, k - len(already_selected), replace=False
+        )
         target[already_selected] = 1.0
         target[additional] = 1.0
 
