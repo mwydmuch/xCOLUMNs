@@ -8,10 +8,12 @@ from random import randrange
 
 # TODO: Move some static functions to utils
 
+
 class SparseDataset(Dataset):
     """
     Dataset that wraps data in sparse csr_matrix format.
     """
+
     def __init__(
         self,
         input: csr_matrix,
@@ -23,16 +25,22 @@ class SparseDataset(Dataset):
         target_negative_samples: int = 0,  # Number of negative samples to add to target
     ):
         super().__init__()
-        
+
         if not isinstance(input, csr_matrix):
-            raise ValueError(f"Unsupported type {type(input)}, use scipy.sparse.csr_matrix")
+            raise ValueError(
+                f"Unsupported type {type(input)}, use scipy.sparse.csr_matrix"
+            )
 
         if target is not None and not isinstance(target, csr_matrix):
-            raise ValueError(f"Unsupported type {type(target)}, use scipy.sparse.csr_matrix")
+            raise ValueError(
+                f"Unsupported type {type(target)}, use scipy.sparse.csr_matrix"
+            )
 
         if original_target is not None and not isinstance(original_target, csr_matrix):
-            raise ValueError(f"Unsupported type {type(original_target)}, use scipy.sparse.csr_matrix")
-        
+            raise ValueError(
+                f"Unsupported type {type(original_target)}, use scipy.sparse.csr_matrix"
+            )
+
         if target is not None:
             assert input.shape[0] == target.shape[0]
 
@@ -49,9 +57,14 @@ class SparseDataset(Dataset):
         self.target_negative_samples = target_negative_samples
         self.original_target = original_target
 
-        print(f"Initializing SparseDataset with input shape={self.input.shape} as {'dense' if input_dense_vec else 'sparse'}", end="")
+        print(
+            f"Initializing SparseDataset with input shape={self.input.shape} as {'dense' if input_dense_vec else 'sparse'}",
+            end="",
+        )
         if self.target is not None:
-            print(f", target shape={target.shape} as {'dense' if target_dense_vec else 'sparse'}")
+            print(
+                f", target shape={target.shape} as {'dense' if target_dense_vec else 'sparse'}"
+            )
         else:
             print("")
 
@@ -93,7 +106,7 @@ class SparseDataset(Dataset):
                 batch.update(SparseDataset.collate_sequence(items, key, mask=True))
             if key in items[0]:
                 batch[key] = SparseDataset.collate_dense_vec(items, key)
-                
+
         return batch
 
     def collate_function(self):
@@ -107,7 +120,7 @@ class SparseDataset(Dataset):
 
     def target_size(self):
         return self.target.shape[1]
-    
+
     def original_target_size(self):
         return self.original_target.shape[1]
 
@@ -125,14 +138,14 @@ class SparseDataset(Dataset):
         tensor = torch.zeros(shape, dtype=dtype)
         tensor[csr_vec.indices] = torch.tensor(csr_vec.data, dtype=dtype)
         return tensor
-    
+
     def add_negative_samples(csr_vec, num_negative_samples, max_samples=None):
         num_positive_samples = csr_vec.indices.shape[0]
         all_samples = num_positive_samples + num_negative_samples
         if max_samples is not None:
             all_samples = min(all_samples, max_samples)
         num_labels = csr_vec.shape[1]
-        
+
         indptr = csr_vec.indptr.copy()
         indptr[1] = all_samples
         indices = csr_vec.indices.copy()
@@ -148,28 +161,42 @@ class SparseDataset(Dataset):
                     break
             indices[i] = l
             data[i] = 0
-        
+
         return csr_matrix((data, indices, indptr), shape=csr_vec.shape)
 
     def __getitem__(self, idx):
         input_idx = self.input[idx]
-        item = SparseDataset.get_seq_data(input_idx, "input")  # Return as padded sequence
+        item = SparseDataset.get_seq_data(
+            input_idx, "input"
+        )  # Return as padded sequence
         if self.input_dense_vec:  # Return as dense vec
-            item["input"] = SparseDataset.sparse_to_dense_tensor(input_idx, self.input.shape[1])
+            item["input"] = SparseDataset.sparse_to_dense_tensor(
+                input_idx, self.input.shape[1]
+            )
 
         if self.target is not None:
             target_idx = self.target[idx]
             if self.target_negative_samples > 0:
-                target_idx = SparseDataset.add_negative_samples(target_idx, self.target_negative_samples, self.target.shape[1])
+                target_idx = SparseDataset.add_negative_samples(
+                    target_idx, self.target_negative_samples, self.target.shape[1]
+                )
 
-            item.update(SparseDataset.get_seq_data(target_idx, "target"))  # Return as padded sequence with mask
+            item.update(
+                SparseDataset.get_seq_data(target_idx, "target")
+            )  # Return as padded sequence with mask
             if self.target_dense_vec:  # Add Return as dense vec
-                item["target"] = SparseDataset.sparse_to_dense_tensor(target_idx, self.target.shape[1])
-        
+                item["target"] = SparseDataset.sparse_to_dense_tensor(
+                    target_idx, self.target.shape[1]
+                )
+
         if self.original_target is not None:
             original_target_idx = self.original_target[idx]
-            item.update(SparseDataset.get_seq_data(self.original_target[idx], "original_target"))
+            item.update(
+                SparseDataset.get_seq_data(self.original_target[idx], "original_target")
+            )
             if self.target_dense_vec:  # Add Return as dense vec
-                item["original_target"] = SparseDataset.sparse_to_dense_tensor(original_target_idx, self.original_target.shape[1])  
+                item["original_target"] = SparseDataset.sparse_to_dense_tensor(
+                    original_target_idx, self.original_target.shape[1]
+                )
 
         return item

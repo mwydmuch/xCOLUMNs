@@ -59,7 +59,7 @@ class SelectiveLossOutput(nn.Module):
             padding_idx=padding_idx,
             sparse=sparse,
         )
-        #nn.init.xavier_uniform_(self.embedding.weight.data) 
+        # nn.init.xavier_uniform_(self.embedding.weight.data)
         nn.init.zeros_(self.embedding.weight.data)
         self.embedding.weight.data[padding_idx] = torch.zeros(self.embed_size)
         print(f"Initializing SelectiveLossOutput with linear layers sequence={units}")
@@ -77,14 +77,18 @@ class SelectiveLossOutput(nn.Module):
     def forward(self, x, target_ids=None, target_values=None, target_mask=None):
         x = self._predict_last_hidden(x)
 
-        if target_ids is not None and target_values is not None and target_mask is not None:
+        if (
+            target_ids is not None
+            and target_values is not None
+            and target_mask is not None
+        ):
             # Calculate output
             target_embeddings = self.embedding(target_ids)
             output = torch.bmm(target_embeddings, x.unsqueeze(2)).squeeze(2)
 
             # Calculate loss
             loss = self.loss(output, target_values, weight=target_mask)
-            return loss, self.output_nonlin(output) # This output shouldn't be used
+            return loss, self.output_nonlin(output)  # This output shouldn't be used
         else:
             # Else predict
             return self._predict_output(x)

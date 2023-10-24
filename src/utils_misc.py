@@ -4,6 +4,14 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 
+def align_dim1(a, b):
+    if a.shape[1] != b.shape[1]:
+        print("  Fixing shapes ...")
+        new_size = max(a.shape[1], b.shape[1])
+        a.resize((a.shape[0], new_size))
+        b.resize((b.shape[0], new_size))
+
+
 def loprint(array):
     print(array.shape, array.dtype, array.min(), array.max(), array.mean(), array.std())
 

@@ -18,6 +18,8 @@ class TransformerDataModule(BaseDataModule):
     def setup(self, stage=None):
         print(f"Obtaining tokenizer ...")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path, use_fast=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name_or_path, use_fast=True
+        )
         for d in self.dataset.values():
             d.setup(self.tokenizer, self.max_seq_length)

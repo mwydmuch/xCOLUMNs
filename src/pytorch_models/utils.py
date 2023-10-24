@@ -111,4 +111,4 @@ def tp_at_k(output, target, top_k):
 
 def get_memory_usage():
     process = psutil.Process()
-    return process.memory_info().rss / (1024 ** 2)
+    return process.memory_info().rss / (1024**2)

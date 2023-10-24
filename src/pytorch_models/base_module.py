@@ -1,6 +1,11 @@
 from torch import optim
 from pytorch_lightning import LightningModule
-from transformers import get_linear_schedule_with_warmup, get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup, get_cosine_with_hard_restarts_schedule_with_warmup
+from transformers import (
+    get_linear_schedule_with_warmup,
+    get_constant_schedule_with_warmup,
+    get_cosine_schedule_with_warmup,
+    get_cosine_with_hard_restarts_schedule_with_warmup,
+)
 from torchmetrics import Metric, MetricCollection
 from pytorch_models.metrics_at_k import *
 from pprint import pprint
@@ -11,7 +16,7 @@ from collections.abc import Mapping
 class BaseModule(LightningModule):
     """
     Base LightningModule that configures learning for modules with dense and sparse gradients.
-    """ 
+    """
 
     def __init__(
         self,
@@ -21,7 +26,9 @@ class BaseModule(LightningModule):
         scheduler: str = "constant",  # "linear" or "constant" or "cosine" or "cosine_restart"
         warmup_steps: float = 0.0,  # from 0-1 for % of training steps, >1 for number of steps
         num_cycles: int = 1,  # Only used for "cosine" and "cosine_restart"
-        dense_optim_class: Type[optim.Optimizer] = optim.AdamW,  # optim.AdamW or optim.Adam are recommended
+        dense_optim_class: Type[
+            optim.Optimizer
+        ] = optim.AdamW,  # optim.AdamW or optim.Adam are recommended
         sparse_optim_class: Type[optim.Optimizer] = optim.SparseAdam,
         metric_dict: Mapping[str, Metric] = None,
     ):
@@ -61,8 +68,10 @@ class BaseModule(LightningModule):
 
         print("Warmup_steps:", self.num_warmup_steps)
         print("Total steps:", self.total_steps)
-    
-    def _get_scheduler(self, optimizer, num_warmup_steps=None, num_trainig_steps=None, num_cycles=None):
+
+    def _get_scheduler(
+        self, optimizer, num_warmup_steps=None, num_trainig_steps=None, num_cycles=None
+    ):
         available_scheduler_getters = {
             "constant": get_constant_schedule_with_warmup,
             "linear": get_linear_schedule_with_warmup,
@@ -82,7 +91,6 @@ class BaseModule(LightningModule):
 
         return scheduler_getter(optimizer, **scheduler_args)
 
-
     def _get_optimizer_and_scheduler(self, optim_cls, params):
         optim_args = {"lr": self.hparams.learning_rate}
         optim_supported_args = optim_cls.__init__.__code__.co_varnames
@@ -91,7 +99,9 @@ class BaseModule(LightningModule):
         if "weight_decay" in optim_supported_args:
             optim_args["weight_decay"] = self.hparams.weight_decay
         optimizer = optim_cls(params, **optim_args)
-        scheduler = self._get_scheduler(optimizer, self.num_warmup_steps, self.total_steps, self.hparams.num_cycles)
+        scheduler = self._get_scheduler(
+            optimizer, self.num_warmup_steps, self.total_steps, self.hparams.num_cycles
+        )
 
         return optimizer, scheduler
 
@@ -104,12 +114,16 @@ class BaseModule(LightningModule):
         schedulers = []
 
         if len(dense_params):
-            o, s = self._get_optimizer_and_scheduler(self.hparams.dense_optim_class, dense_params)
+            o, s = self._get_optimizer_and_scheduler(
+                self.hparams.dense_optim_class, dense_params
+            )
             optimizers.append(o)
             schedulers.append(s)
 
         if len(sparse_params):
-            o, s = self._get_optimizer_and_scheduler(self.hparams.sparse_optim_class, sparse_params)
+            o, s = self._get_optimizer_and_scheduler(
+                self.hparams.sparse_optim_class, sparse_params
+            )
             optimizers.append(o)
             schedulers.append(s)
 
@@ -143,7 +157,9 @@ class BaseModule(LightningModule):
         for sch in lr_schedulers:
             sch.step()
 
-        self.log("train_loss", loss, on_step=True, on_epoch=True, logger=True, prog_bar=True)
+        self.log(
+            "train_loss", loss, on_step=True, on_epoch=True, logger=True, prog_bar=True
+        )
         return loss
 
     def train_log(self):
@@ -151,7 +167,7 @@ class BaseModule(LightningModule):
 
     def _eval_step(self, batch, batch_idx, step_name="eval"):
         loss, output = self.forward(**batch)
-        
+
         if self.metrics is not None:
             self.log(
                 f"{step_name}_performance",
@@ -162,20 +178,19 @@ class BaseModule(LightningModule):
 
         self.log(f"{step_name}_loss", loss, on_epoch=True, logger=True)
         return loss
-    
+
     def validation_step(self, batch, batch_idx):
         return self._eval_step(batch, batch_idx, step_name="val")
-    
+
     def test_step(self, batch, batch_idx):
         return self._eval_step(batch, batch_idx, step_name="test")
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         output = self.forward(**batch)
         return output
-    
+
     def validation_epoch_end(self, outputs):
         if self.metrics is not None:
             print("Validation performance:")
             pprint(self.metrics.compute())
             self.metrics.reset()
-

@@ -40,6 +40,7 @@ def frank_wolfe_wrapper(
     reg=0,
     pred_repeat=10,
     average=False,
+    use_last=False,
     **kwargs,
 ):
     classifiers, classifier_weights, meta = frank_wolfe(
@@ -47,7 +48,13 @@ def frank_wolfe_wrapper(
     )
     print(f"  classifiers weights: {classifier_weights}")
     y_preds = []
-    if not average:
+    if use_last:
+        print("  using last classifier")
+        y_pred = predict_top_k_for_classfiers(
+                pred_test, classifiers[-1:], np.array([1]), k=k, seed=seed
+            )
+        y_preds.append(y_pred)
+    elif not average:
         print("  predicting with randomized classfier")
         for i in range(pred_repeat):
             y_pred = predict_top_k_for_classfiers(
@@ -63,7 +70,7 @@ def frank_wolfe_wrapper(
         y_pred = predict_top_k(pred_test, avg_classifier_weights, k)
         y_preds.append(y_pred)
 
-    return y_preds
+    return y_preds, meta
 
 
 def frank_wolfe_macro_recall(
@@ -90,10 +97,33 @@ def frank_wolfe_macro_f1(
     )
 
 
+
+def frank_wolfe_instance_alpha_macro_f1(
+    Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, alpha=0, **kwargs
+):
+    func_C = lambda C: instance_alpha_macro_f1_C(C, alpha=alpha)
+
+    return frank_wolfe_wrapper(
+        Y_val, pred_val, pred_test, func_C, k=k, seed=seed, **kwargs
+    )
+
+
+def frank_wolfe_instance_alpha_macro_precision(
+    Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, alpha=0, **kwargs
+):
+    func_C = lambda C: instance_alpha_macro_precision_C(C, alpha=alpha)
+
+    return frank_wolfe_wrapper(
+        Y_val, pred_val, pred_test, func_C, k=k, seed=seed, **kwargs
+    )
+
+
 def report_metrics(data, predictions, k):
     results = {}
     for metric, func in METRICS.items():
         values = []
+        if not isinstance(predictions, (list, tuple)):
+            predictions = [predictions]
         for pred in predictions:
             value = func(data, pred)
             values.append(value)
@@ -108,25 +138,25 @@ def report_metrics(data, predictions, k):
 def fw_optimal_instance_precision_wrapper(
     Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs
 ):
-    return [optimal_instance_precision(pred_test, k=k, **kwargs)[0]]
+    return optimal_instance_precision(pred_test, k=k, **kwargs)
 
 
-def fw_optimal_macro_recal_wrapper(
+def fw_optimal_macro_recall_wrapper(
     Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs
 ):
-    return [optimal_macro_recall(pred_test, k=k, **kwargs)[0]]
+    return optimal_macro_recall(pred_test, k=k, **kwargs)
 
 
 def fw_power_law_weighted_instance_wrapper(
     Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs
 ):
-    return [power_law_weighted_instance(pred_test, k=k, **kwargs)[0]]
+    return power_law_weighted_instance(pred_test, k=k, **kwargs)
 
 
 def fw_log_weighted_instance_wrapper(
     Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs
 ):
-    return [log_weighted_instance(pred_test, k=k, **kwargs)[0]]
+    return log_weighted_instance(pred_test, k=k, **kwargs)
 
 
 METRICS = {
@@ -143,7 +173,7 @@ METRICS = {
 
 METHODS = {
     "fw-split-optimal-instance-prec": (fw_optimal_instance_precision_wrapper, {}),
-    "fw-split-optimal-macro-recall": (fw_optimal_macro_recal_wrapper, {}),
+    "fw-split-optimal-macro-recall": (fw_optimal_macro_recall_wrapper, {}),
     "fw-split-power-law-with-beta=0.5": (
         fw_power_law_weighted_instance_wrapper,
         {"beta": 0.5},
@@ -156,12 +186,37 @@ METHODS = {
     "frank-wolfe-macro-recall": (frank_wolfe_macro_recall, {}),
     "frank-wolfe-macro-precision": (frank_wolfe_macro_precision, {}),
     "frank-wolfe-macro-f1": (frank_wolfe_macro_f1, {}),
+    # "frank-wolfe-macro-recall-last": (frank_wolfe_macro_recall, {"use_last": True}),
+    # "frank-wolfe-macro-precision-last": (frank_wolfe_macro_precision, {"use_last": True}),
+    # "frank-wolfe-macro-f1-last": (frank_wolfe_macro_f1, {"use_last": True}),
     # "frank-wolfe-macro-recall-avg": (frank_wolfe_macro_recall, {"average": True}),
     # "frank-wolfe-macro-precision-avg": (frank_wolfe_macro_precision, {"average": True}),
     # "frank-wolfe-macro-f1-avg": (frank_wolfe_macro_f1, {"average": True}),
-    # "frank-wolfe-macro-recall-rnd": (frank_wolfe_macro_recall, {"init": "random"}),
-    # "frank-wolfe-macro-precision-rnd": (frank_wolfe_macro_precision, {"init": "random"}),
-    # "frank-wolfe-macro-f1-rnd": (frank_wolfe_macro_f1, {"init": "random"}),
+    "frank-wolfe-macro-recall-rnd": (frank_wolfe_macro_recall, {"init": "random"}),
+    "frank-wolfe-macro-precision-rnd": (frank_wolfe_macro_precision, {"init": "random"}),
+    "frank-wolfe-macro-f1-rnd": (frank_wolfe_macro_f1, {"init": "random"}),
+    
+    # "frank-wolfe-instance-alpha-macro-precision_alpha=0.1": (frank_wolfe_instance_alpha_macro_precision, {"alpha": 0.1}),
+    # "frank-wolfe-instance-alpha-macro-f1_alpha=0.1": (frank_wolfe_instance_alpha_macro_f1, {"alpha": 0.1}),
+    # "frank-wolfe-instance-alpha-macro-precision_alpha=0.01": (frank_wolfe_instance_alpha_macro_precision, {"alpha": 0.01}),
+    # "frank-wolfe-instance-alpha-macro-f1_alpha=0.01": (frank_wolfe_instance_alpha_macro_f1, {"alpha": 0.01}),
+    # "frank-wolfe-instance-alpha-macro-precision_alpha=0.001": (frank_wolfe_instance_alpha_macro_precision, {"alpha": 0.001}),
+    # "frank-wolfe-instance-alpha-macro-f1_alpha=0.001": (frank_wolfe_instance_alpha_macro_f1, {"alpha": 0.001}),
+    # "frank-wolfe-instance-alpha-macro-precision_alpha=0.0001": (frank_wolfe_instance_alpha_macro_precision, {"alpha": 0.0001}),
+    # "frank-wolfe-instance-alpha-macro-f1_alpha=0.0001": (frank_wolfe_instance_alpha_macro_f1, {"alpha": 0.0001}),
+    # "frank-wolfe-instance-alpha-macro-precision_alpha=0.00001": (frank_wolfe_instance_alpha_macro_precision, {"alpha": 0.00001}),
+    # "frank-wolfe-instance-alpha-macro-f1_alpha=0.00001": (frank_wolfe_instance_alpha_macro_f1, {"alpha": 0.00001}),
+
+    # "frank-wolfe-instance-alpha-macro-precision-rnd_alpha=0.1": (frank_wolfe_instance_alpha_macro_precision, {"init": "random", "alpha": 0.1}),
+    # "frank-wolfe-instance-alpha-macro-f1-rnd_alpha=0.1": (frank_wolfe_instance_alpha_macro_f1, {"init": "random", "alpha": 0.1}),
+    # "frank-wolfe-instance-alpha-macro-precision-rnd_alpha=0.01": (frank_wolfe_instance_alpha_macro_precision, {"init": "random", "alpha": 0.01}),
+    # "frank-wolfe-instance-alpha-macro-f1-rnd_alpha=0.01": (frank_wolfe_instance_alpha_macro_f1, {"init": "random", "alpha": 0.01}),
+    # "frank-wolfe-instance-alpha-macro-precision-rnd_alpha=0.001": (frank_wolfe_instance_alpha_macro_precision, {"init": "random", "alpha": 0.001}),
+    # "frank-wolfe-instance-alpha-macro-f1-rnd_alpha=0.001": (frank_wolfe_instance_alpha_macro_f1, {"init": "random", "alpha": 0.001}),
+    # "frank-wolfe-instance-alpha-macro-precision-rnd_alpha=0.0001": (frank_wolfe_instance_alpha_macro_precision, {"init": "random", "alpha": 0.0001}),
+    # "frank-wolfe-instance-alpha-macro-f1-rnd_alpha=0.0001": (frank_wolfe_instance_alpha_macro_f1, {"init": "random", "alpha": 0.0001}),
+    # "frank-wolfe-instance-alpha-macro-precision-rnd_alpha=0.00001": (frank_wolfe_instance_alpha_macro_precision, {"init": "random", "alpha": 0.00001}),
+    # "frank-wolfe-instance-alpha-macro-f1-rnd_alpha=0.00001": (frank_wolfe_instance_alpha_macro_f1, {"init": "random", "alpha": 0.00001}),
 }
 
 
@@ -170,14 +225,6 @@ def log_loss(true, pred):
     pred = pred.toarray()
     pred = np.clip(pred, 1e-6, 1 - 1e-6)
     return -np.mean(true * np.log(pred) + (1 - true) * np.log(1 - pred))
-
-
-def fix_shape(csr_a, csr_b):
-    if csr_a.shape[1] != csr_b.shape[1]:
-        print("  Fixing shapes ...")
-        new_size = max(csr_a.shape[1], csr_b.shape[1])
-        csr_a.resize((csr_a.shape[0], new_size))
-        csr_b.resize((csr_b.shape[0], new_size))
 
 
 def load_txt_data():
@@ -272,7 +319,7 @@ torch.set_float32_matmul_precision("medium")
 
 
 class PytorchModel(ModelWrapper):
-    def __init__(self, model_path, seed, loss="bce", hidden_units=()):
+    def __init__(self, model_path, seed, loss="bce", hidden_units=()): # 512 for mediamill, 1024 for flicker, 0 for rcv1x
         super().__init__(model_path, seed)
 
         self.loss = None
@@ -295,15 +342,15 @@ class PytorchModel(ModelWrapper):
             self.loss,
             learning_rate=0.01,
             weight_decay=0.00001,
-            max_epochs=30,
+            max_epochs=3,
             precision=16,
             hidden_units=hidden_units,
             ckpt_dir=model_path,
         )
 
     def fit(self, X, Y, X_val, Y_val):
-        self.model.fit(X, Y, X_val=X_val, Y_val=Y_val)
-        # self.model.fit(X, Y)
+        #self.model.fit(X, Y, X_val=X_val, Y_val=Y_val)
+        self.model.fit(X, Y)
 
     def predict_proba(self, X, top_k):
         pred = []
@@ -480,6 +527,16 @@ def main(experiment, k, seed, testsplit, reg):
             "load_func": load_txt_data,
         }
 
+    elif "wikilshtc" in experiment:
+        test_path = {
+            "path": "datasets/wikiLSHTC/wikiLSHTC_test.txt",
+            "load_func": load_txt_data,
+        }
+        train_path = {
+            "path": "datasets/wikiLSHTC/wikiLSHTC_train.txt",
+            "load_func": load_txt_data,
+        }
+
     elif "amazon" in experiment:
         test_path = {
             "path": "datasets/amazon/amazon_test.txt",
@@ -512,6 +569,7 @@ def main(experiment, k, seed, testsplit, reg):
 
     print(f"Y_train before processing: type={type(Y_train)}, shape={Y_train.shape}")
     print(f"Y_test before processing: type={type(Y_test)}, shape={Y_test.shape}")
+    align_dim1(Y_train, Y_test)
 
     Y_all = sp.vstack((Y_train, Y_test))
     print(
@@ -521,14 +579,14 @@ def main(experiment, k, seed, testsplit, reg):
         f"Avg labels per point: {Y_train.sum() / Y_train.shape[0]}, avg. samples per label: {Y_train.sum() / Y_train.shape[1]}"
     )
 
-    # For some sparse format this resize might be necessary
-    fix_shape(Y_train, Y_test)
-
     # Calculate marginals and propensities
     with Timer():
         print("Calculating marginals and propensities ...")
         marginals = labels_priors(Y_train)
         inv_ps = jpv_inverse_propensity(Y_train)
+
+    print(f"marginals: type={type(marginals)}, shape={marginals.shape}")
+    print(f"inv. propensities: type={type(inv_ps)}, shape={inv_ps.shape}")
 
     print("  Spliting to train and validation ...")
     if testsplit != 0:
@@ -644,11 +702,11 @@ def main(experiment, k, seed, testsplit, reg):
         if not os.path.exists(val_pred_path) or RETRAIN_MODEL:
             with Timer():
                 pred_val = model.predict_proba(X_val, top_k=top_k)
-                fix_shape(Y_train, pred_val)
+                align_dim1(Y_train, pred_val)
                 # save_npz_wrapper(val_pred_path, pred_val)
                 save_pickle(val_pred_path, pred_val)
         else:
-            # pred_val = load_npz_wrapper(val_pred_path)
+            #pred_val = load_npz_wrapper(val_pred_path)
             pred_val = load_pickle(val_pred_path)
         print("  Done")
 
@@ -657,11 +715,11 @@ def main(experiment, k, seed, testsplit, reg):
         if not os.path.exists(test_pred_path) or RETRAIN_MODEL:
             with Timer():
                 pred_test = model.predict_proba(X_test, top_k=top_k)
-                fix_shape(Y_train, pred_test)
+                align_dim1(Y_train, pred_test)
                 # save_npz_wrapper(test_pred_path, pred_test)
                 save_pickle(test_pred_path, pred_test)
         else:
-            # pred_test = load_npz_wrapper(test_pred_path)
+            #pred_test = load_npz_wrapper(test_pred_path)
             pred_test = load_pickle(test_pred_path)
         print("  Done")
         del model
@@ -690,11 +748,11 @@ def main(experiment, k, seed, testsplit, reg):
             if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
                 results = {}
                 if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
-                    results["test_log_loss"] = log_loss(Y_test, pred_test)
-                    results["val_log_loss"] = log_loss(Y_val, pred_val)
+                    # results["test_log_loss"] = log_loss(Y_test, pred_test)
+                    # results["val_log_loss"] = log_loss(Y_val, pred_val)
 
                     with Timer() as t:
-                        y_preds = func[0](
+                        y_pred, meta = func[0](
                             Y_val,
                             pred_val,
                             pred_test,
@@ -705,17 +763,18 @@ def main(experiment, k, seed, testsplit, reg):
                             reg=reg,
                             **func[1],
                         )
+                        results["iters"] = meta["iters"]
                         results["time"] = t.get_time()
                     # save_npz_wrapper(pred_path, y_pred)
-                    save_pickle(pred_path, y_preds)
+                    save_pickle(pred_path, y_pred)
                     save_json(results_path, results)
                 else:
                     # y_pred = load_npz_wrapper(pred_path)
-                    y_preds = load_pickle(pred_path)
+                    y_pred = load_pickle(pred_path)
                     results = load_json(results_path)
 
                 print("  Calculating metrics:")
-                results.update(report_metrics(Y_test, y_preds, k))
+                results.update(report_metrics(Y_test, y_pred, k))
                 save_json(results_path, results)
 
             print("  Done")

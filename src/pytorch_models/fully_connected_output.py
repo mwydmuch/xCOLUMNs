@@ -10,7 +10,7 @@ class FullyConnectedOutput(nn.Module):
         output_size,
         layer_units=(),
         nonlin=nn.ReLU(),
-        hidden_dropout=0,
+        hidden_dropout=0.0,
         output_nonlin=F.sigmoid,
         loss=F.binary_cross_entropy_with_logits,
         bias: bool = True,

@@ -1,6 +1,7 @@
 datasets
 predictions
 results
+lightning_logs
 
 __pycache__
 .vscode

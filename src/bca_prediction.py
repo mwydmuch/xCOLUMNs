@@ -9,8 +9,8 @@ from typing import Union
 
 # Enable slow (without use of specialized numba functions) but still memory efficient implementation
 SLOW = False
-EPS = 1e-5
-
+EPS = 1e-6
+#TOLERANCE = 1e-7
 
 def bca_with_0approx_np(
     y_proba: np.ndarray,
@@ -102,6 +102,7 @@ def bca_with_0approx_np(
 def bca_coverage_np(
     y_proba: csr_matrix,
     k: int,
+    alpha: float = 0,
     greedy_start=False,
     tolerance: float = 1e-5,
     max_iter: int = 10,
@@ -138,6 +139,8 @@ def bca_coverage_np(
 
             # calculate gain and selection
             g = f * y_proba[i]
+            if alpha > 0:
+                g = (1 - alpha) * g + alpha * y_proba[i] / k
             top_k = np.argpartition(-g, k)[:k]
 
             # update y_proba
@@ -148,6 +151,7 @@ def bca_coverage_np(
             f *= 1 - y_pred[i] * y_proba[i]
 
         new_cov = 1 - np.mean(f)
+
         meta["utilities"].append(new_cov)
         print(
             f"  Iteration {j + 1} finished, expected coverage: {old_cov} -> {new_cov}"
@@ -330,6 +334,7 @@ def bca_with_0approx_csr(
 def bca_coverage_csr(
     y_proba: csr_matrix,
     k: int,
+    alpha: float = 0,
     greedy_start=False,
     tolerance: float = 1e-5,
     max_iter: int = 10,
@@ -374,6 +379,8 @@ def bca_coverage_csr(
             )
 
         old_cov = 1 - np.mean(failure_prob)
+        if(alpha > 0):
+            old_cov = (1 - alpha) * old_cov + alpha * np.asarray(calculate_tp_csr(y_proba, y_pred) / ni / k).ravel().mean()
 
         for i in tqdm(order):
             # for i in order:
@@ -395,6 +402,8 @@ def bca_coverage_csr(
 
             # Calculate gain and selectio
             gains = failure_prob[p_indices] * p_data
+            if alpha > 0:
+                gains = (1 - alpha) * gains + alpha * p_data / k
             if gains.size > k:
                 top_k = np.argpartition(-gains, k)[:k]
                 y_pred.indices[r_start:r_end] = sorted(p_indices[top_k])
@@ -410,6 +419,8 @@ def bca_coverage_csr(
             failure_prob[indices] *= data
 
         new_cov = 1 - np.mean(failure_prob)
+        if(alpha > 0):
+            new_cov = (1 - alpha) * new_cov + alpha * np.asarray(calculate_tp_csr(y_proba, y_pred) / ni / k).ravel().mean()
         meta["utilities"].append(new_cov)
         print(
             f"  Iteration {j + 1} finished, expected coverage: {old_cov} -> {new_cov}"
@@ -488,15 +499,15 @@ def instance_precision_at_k_on_conf_matrix(tp, fp, fn, k):
     return np.asarray(tp / k).ravel()
 
 
-def macro_precision_on_conf_matrix(tp, fp, fn, epsilon=1e-5):
+def macro_precision_on_conf_matrix(tp, fp, fn, epsilon=EPS):
     return np.asarray(tp / (tp + fp + epsilon)).ravel()
 
 
-def macro_recall_on_conf_matrix(tp, fp, fn, epsilon=1e-5):
+def macro_recall_on_conf_matrix(tp, fp, fn, epsilon=EPS):
     return np.asarray(tp / (tp + fn + epsilon)).ravel()
 
 
-def macro_fmeasure_on_conf_matrix(tp, fp, fn, beta=1.0, epsilon=1e-5):
+def macro_fmeasure_on_conf_matrix(tp, fp, fn, beta=1.0, epsilon=EPS):
     precision = macro_precision_on_conf_matrix(tp, fp, fn, epsilon=epsilon)
     recall = macro_recall_on_conf_matrix(tp, fp, fn, epsilon=epsilon)
     return (
@@ -508,9 +519,9 @@ def macro_fmeasure_on_conf_matrix(tp, fp, fn, beta=1.0, epsilon=1e-5):
 
 
 def block_coordinate_coverage(
-    y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs
+    y_proba: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 0, **kwargs
 ):
-    return bca_coverage(y_proba, k=k, **kwargs)
+    return bca_coverage(y_proba, k=k, alpha=alpha, **kwargs)
 
 
 def block_coordinate_macro_precision(
@@ -537,7 +548,7 @@ def block_coordinate_macro_f1(
     )
 
 
-def block_coordinate_mixed_precision(
+def block_coordinate_mixed_instance_prec_macro_prec(
     y_proba: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 0.5, **kwargs
 ):
     def mixed_precision_alpha_fn(tp, fp, fn):
@@ -550,7 +561,7 @@ def block_coordinate_mixed_precision(
     )
 
 
-def block_coordinate_instance_prec_macro_f1(
+def block_coordinate_mixed_instance_prec_macro_f1(
     y_proba: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 0.5, **kwargs
 ):
     def mixed_precision_alpha_fn(tp, fp, fn):
@@ -561,3 +572,17 @@ def block_coordinate_instance_prec_macro_f1(
     return bca_with_0approx(
         y_proba, k=k, utility_func=mixed_precision_alpha_fn, **kwargs
     )
+
+
+def block_coordinate_mixed_instance_prec_macro_recall(
+    y_proba: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 0.5, **kwargs
+):
+    def mixed_precision_alpha_fn(tp, fp, fn):
+        return alpha * instance_precision_at_k_on_conf_matrix(tp, fp, fn, k) + (
+            1 - alpha
+        ) * macro_recall_on_conf_matrix(tp, fp, fn)
+
+    return bca_with_0approx(
+        y_proba, k=k, utility_func=mixed_precision_alpha_fn, **kwargs
+    )
+

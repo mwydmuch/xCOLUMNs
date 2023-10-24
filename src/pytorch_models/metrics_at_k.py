@@ -3,12 +3,18 @@ from torchmetrics import Metric
 
 
 class MetricAtK(Metric):
-    def __init__(self, top_k: int = 1, dist_sync_on_step: bool = False, dense_pred: bool = True):
+    def __init__(
+        self, top_k: int = 1, dist_sync_on_step: bool = False, dense_pred: bool = True
+    ):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.top_k = top_k
-        self.add_state("sum", default=torch.tensor(0, dtype=torch.float), dist_reduce_fx="sum")
-        self.add_state("count", default=torch.tensor(0, dtype=torch.int), dist_reduce_fx="sum")
+        self.add_state(
+            "sum", default=torch.tensor(0, dtype=torch.float), dist_reduce_fx="sum"
+        )
+        self.add_state(
+            "count", default=torch.tensor(0, dtype=torch.int), dist_reduce_fx="sum"
+        )
         self.dense_pred = dense_pred
 
     @staticmethod
@@ -25,9 +31,11 @@ class MetricAtK(Metric):
             top_k_pred = torch.argsort(pred, dim=1, descending=True)[:, : self.top_k]
         else:
             top_k_pred = pred[:, : self.top_k]
-        tp_at_k = torch.zeros(target_ids.shape[0], dtype=torch.float, device=self.device)
+        tp_at_k = torch.zeros(
+            target_ids.shape[0], dtype=torch.float, device=self.device
+        )
         for i in range(self.top_k):
-            tp_at_k += (target_ids == top_k_pred[:,i].unsqueeze(1)).sum(dim=1)
+            tp_at_k += (target_ids == top_k_pred[:, i].unsqueeze(1)).sum(dim=1)
         return tp_at_k
 
     def compute(self):
@@ -35,8 +43,12 @@ class MetricAtK(Metric):
 
 
 class PrecisionAtK(MetricAtK):
-    def __init__(self, top_k: int = 1, dist_sync_on_step: bool = False, dense_pred: bool = True):
-        super().__init__(top_k=top_k, dist_sync_on_step=dist_sync_on_step, dense_pred=dense_pred)
+    def __init__(
+        self, top_k: int = 1, dist_sync_on_step: bool = False, dense_pred: bool = True
+    ):
+        super().__init__(
+            top_k=top_k, dist_sync_on_step=dist_sync_on_step, dense_pred=dense_pred
+        )
 
     def update(self, pred: torch.Tensor, target_ids: torch.Tensor):
         tp_at_k = self._tp_at_k(pred, target_ids)
@@ -45,8 +57,16 @@ class PrecisionAtK(MetricAtK):
 
 
 class RecallAtK(MetricAtK):
-    def __init__(self, top_k: int = 1, dist_sync_on_step: bool = False, dense_pred: bool = True, eps=1e-8):
-        super().__init__(top_k=top_k, dist_sync_on_step=dist_sync_on_step, dense_pred=dense_pred)
+    def __init__(
+        self,
+        top_k: int = 1,
+        dist_sync_on_step: bool = False,
+        dense_pred: bool = True,
+        eps=1e-8,
+    ):
+        super().__init__(
+            top_k=top_k, dist_sync_on_step=dist_sync_on_step, dense_pred=dense_pred
+        )
         self.eps = eps
 
     def update(self, pred: torch.Tensor, target_ids: torch.Tensor):

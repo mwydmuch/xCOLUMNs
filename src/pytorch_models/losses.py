@@ -25,14 +25,22 @@ class FocalLoss(nn.Module):
         y: targets (multi-label binarized vector)
         """
         p = torch.sigmoid(x)
-        loss = y * torch.log(p) * ((1 - p) ** self.gamma) + (1 - y) * (p ** self.gamma) * torch.log(1 - p)
-        
+        loss = y * torch.log(p) * ((1 - p) ** self.gamma) + (1 - y) * (
+            p**self.gamma
+        ) * torch.log(1 - p)
+
         return -loss.sum()
 
 
-
 class AsymmetricLoss(nn.Module):
-    def __init__(self, gamma_neg=4, gamma_pos=1, clip=0.05, eps=1e-8, disable_torch_grad_focal_loss=True):
+    def __init__(
+        self,
+        gamma_neg=4,
+        gamma_pos=1,
+        clip=0.05,
+        eps=1e-8,
+        disable_torch_grad_focal_loss=True,
+    ):
         super(AsymmetricLoss, self).__init__()
 
         self.gamma_neg = gamma_neg
@@ -42,7 +50,7 @@ class AsymmetricLoss(nn.Module):
         self.eps = eps
 
     def forward(self, x, y):
-        """"
+        """ "
         Parameters
         ----------
         x: input logits
@@ -80,10 +88,17 @@ class AsymmetricLoss(nn.Module):
 
 
 class AsymmetricLossOptimized(nn.Module):
-    ''' Notice - optimized version, minimizes memory allocation and gpu uploading,
-    favors inplace operations'''
+    """Notice - optimized version, minimizes memory allocation and gpu uploading,
+    favors inplace operations"""
 
-    def __init__(self, gamma_neg=4, gamma_pos=1, clip=0.05, eps=1e-8, disable_torch_grad_focal_loss=False):
+    def __init__(
+        self,
+        gamma_neg=4,
+        gamma_pos=1,
+        clip=0.05,
+        eps=1e-8,
+        disable_torch_grad_focal_loss=False,
+    ):
         super(AsymmetricLossOptimized, self).__init__()
 
         self.gamma_neg = gamma_neg
@@ -93,10 +108,12 @@ class AsymmetricLossOptimized(nn.Module):
         self.eps = eps
 
         # prevent memory allocation and gpu uploading every iteration, and encourages inplace operations
-        self.targets = self.anti_targets = self.xs_pos = self.xs_neg = self.asymmetric_w = self.loss = None
+        self.targets = (
+            self.anti_targets
+        ) = self.xs_pos = self.xs_neg = self.asymmetric_w = self.loss = None
 
     def forward(self, x, y):
-        """"
+        """ "
         Parameters
         ----------
         x: input logits
@@ -124,8 +141,10 @@ class AsymmetricLossOptimized(nn.Module):
                 torch.set_grad_enabled(False)
             self.xs_pos = self.xs_pos * self.targets
             self.xs_neg = self.xs_neg * self.anti_targets
-            self.asymmetric_w = torch.pow(1 - self.xs_pos - self.xs_neg,
-                                          self.gamma_pos * self.targets + self.gamma_neg * self.anti_targets)
+            self.asymmetric_w = torch.pow(
+                1 - self.xs_pos - self.xs_neg,
+                self.gamma_pos * self.targets + self.gamma_neg * self.anti_targets,
+            )
             if self.disable_torch_grad_focal_loss:
                 torch.set_grad_enabled(True)
             self.loss *= self.asymmetric_w
@@ -134,10 +153,11 @@ class AsymmetricLossOptimized(nn.Module):
 
 
 class ASLSingleLabel(nn.Module):
-    '''
+    """
     This loss is intended for single-label classification problems
-    '''
-    def __init__(self, gamma_pos=0, gamma_neg=4, eps: float = 0.1, reduction='mean'):
+    """
+
+    def __init__(self, gamma_pos=0, gamma_neg=4, eps: float = 0.1, reduction="mean"):
         super(ASLSingleLabel, self).__init__()
 
         self.eps = eps
@@ -148,13 +168,15 @@ class ASLSingleLabel(nn.Module):
         self.reduction = reduction
 
     def forward(self, inputs, target):
-        '''
+        """
         "input" dimensions: - (batch_size,number_classes)
         "target" dimensions: - (batch_size)
-        '''
+        """
         num_classes = inputs.size()[-1]
         log_preds = self.logsoftmax(inputs)
-        self.targets_classes = torch.zeros_like(inputs).scatter_(1, target.long().unsqueeze(1), 1)
+        self.targets_classes = torch.zeros_like(inputs).scatter_(
+            1, target.long().unsqueeze(1), 1
+        )
 
         # ASL weights
         targets = self.targets_classes
@@ -163,18 +185,22 @@ class ASLSingleLabel(nn.Module):
         xs_neg = 1 - xs_pos
         xs_pos = xs_pos * targets
         xs_neg = xs_neg * anti_targets
-        asymmetric_w = torch.pow(1 - xs_pos - xs_neg,
-                                 self.gamma_pos * targets + self.gamma_neg * anti_targets)
+        asymmetric_w = torch.pow(
+            1 - xs_pos - xs_neg,
+            self.gamma_pos * targets + self.gamma_neg * anti_targets,
+        )
         log_preds = log_preds * asymmetric_w
 
         if self.eps > 0:  # label smoothing
-            self.targets_classes = self.targets_classes.mul(1 - self.eps).add(self.eps / num_classes)
+            self.targets_classes = self.targets_classes.mul(1 - self.eps).add(
+                self.eps / num_classes
+            )
 
         # loss calculation
-        loss = - self.targets_classes.mul(log_preds)
+        loss = -self.targets_classes.mul(log_preds)
 
         loss = loss.sum(dim=-1)
-        if self.reduction == 'mean':
+        if self.reduction == "mean":
             loss = loss.mean()
 
         return loss

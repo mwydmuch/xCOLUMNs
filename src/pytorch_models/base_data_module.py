@@ -3,10 +3,12 @@ from torch.utils.data import Dataset, DataLoader
 from collections.abc import Callable, Mapping
 from multiprocessing import cpu_count
 
+
 class BaseDataModule(LightningDataModule):
     """
     Base LightningDataModule that configures dataloaders for datasets.
     """
+
     def __init__(
         self,
         dataset: Mapping[str, Dataset],
@@ -46,7 +48,9 @@ class BaseDataModule(LightningDataModule):
                 collate_fn=collate_fn,
                 batch_size=batch_size,
                 num_workers=self.num_workers,
-                persistent_workers=self.persistent_workers if self.num_workers > 0 else False,
+                persistent_workers=self.persistent_workers
+                if self.num_workers > 0
+                else False,
                 pin_memory=self.pin_memory,
                 shuffle=shuffle,
             )
@@ -54,13 +58,15 @@ class BaseDataModule(LightningDataModule):
             return None
 
     def train_dataloader(self):
-        return self._create_dataloader("train", batch_size=self.train_batch_size, shuffle=self.train_shuffle)
+        return self._create_dataloader(
+            "train", batch_size=self.train_batch_size, shuffle=self.train_shuffle
+        )
 
     def val_dataloader(self):
         return self._create_dataloader("val", batch_size=self.eval_batch_size)
 
     def test_dataloader(self):
         return self._create_dataloader("test", batch_size=self.eval_batch_size)
-    
+
     def predict_dataloader(self):
         return self._create_dataloader("predict", batch_size=self.eval_batch_size)

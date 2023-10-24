@@ -4,7 +4,7 @@ from utils_sparse import *
 from typing import Union
 
 
-MARGINALS_EPS = 1e5
+MARGINALS_EPS = 1e-6
 
 
 def weighted_per_instance_np(y_proba: np.ndarray, weights: np.ndarray, k: int = 5):

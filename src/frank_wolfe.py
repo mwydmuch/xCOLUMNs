@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from scipy.sparse import csr_matrix
-from .utils_sparse import *
+from utils_sparse import *
 from random import randint
 
 from typing import Union
@@ -9,11 +9,12 @@ from typing import Union
 
 FLOAT_TYPE = np.float32
 IND_TYPE = np.int32
-EPS = 1e-5
+EPS = 1e-6
 
 
 
 # Utility functions defined using PyTorch
+
 
 def macro_jaccard_C(C, epsilon=EPS):
     return C[:, 0] / (C[:, 0] + C[:, 1] + C[:, 2] + epsilon)
@@ -38,6 +39,13 @@ def macro_precision_C(C, epsilon=EPS):
 def macro_f1_C(C, epsilon=EPS):
     return 2 * C[:, 0] / (2 * C[:, 0] + C[:, 1] + C[:, 2] + epsilon)
 
+
+def instance_alpha_macro_precision_C(C, alpha=0.001, epsilon=EPS):
+    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_precision_C(C)
+
+
+def instance_alpha_macro_f1_C(C, alpha=0.9, epsilon=EPS):
+    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_f1_C(C)
 
 
 def select_top_k_csr(y_proba, G, k):
@@ -172,7 +180,7 @@ def frank_wolfe(
     y_true: Union[np.ndarray, csr_matrix],
     y_proba: Union[np.ndarray, csr_matrix],
     utility_func,
-    max_iters: int = 100,
+    max_iters: int = 20,
     init: str = "topk",
     k: int = 5,
     use_best_alpha: bool = True,
@@ -230,8 +238,8 @@ def frank_wolfe(
         # log(f"    prev C matrix = {C}")
         log(f"    utility = {utility}")
         # log(f"    gradients = {G}")
-        log(f"    new a = {G[:,0] - G[:,1] - G[:,2] + G[:, 3]}")
-        log(f"    new b = {G[:,1] - G[:, 3]}")
+        #log(f"    new a = {G[:,0] - G[:,1] - G[:,2] + G[:, 3]}")
+        #log(f"    new b = {G[:,1] - G[:, 3]}")
 
         classifiers[i] = G
         y_pred = func_predict_top_k(y_proba, G, k)

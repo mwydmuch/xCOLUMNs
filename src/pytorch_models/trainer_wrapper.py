@@ -9,9 +9,9 @@ class TrainerWrapper:
         monitor="val_loss",
         ckpt_dir=None,
         trainer_args=None,
-        early_stopping: bool =False,
+        early_stopping: bool = False,
         early_stopping_args=None,
-        model_checkpoint: bool =True,
+        model_checkpoint: bool = True,
         model_checkpoint_args=None,
         callbacks=None,
         verbose: bool = True,
@@ -41,7 +41,7 @@ class TrainerWrapper:
             self.early_stopping_args = {
                 "monitor": monitor,
                 "min_delta": 0.001,
-                "patience": 3,
+                "patience": 3, # 10
                 "mode": "min",
                 "verbose": verbose,
             }
@@ -57,7 +57,7 @@ class TrainerWrapper:
             "callbacks": callbacks,
             # "weights_summary": "top" if verbose else None,
             "enable_progress_bar": verbose,
-            #"profiler": "simple"
+            # "profiler": "simple"
         }
         if trainer_args:
             self.trainer_args.update(trainer_args)
