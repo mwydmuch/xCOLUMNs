@@ -181,7 +181,7 @@ def numba_calculate_prod_1_sparse_mat_mul_ones_minus_mat(
     return y_pred
 
 
-# @njit
+@njit
 def numba_argtopk(data, indices, k):
     """
     Returns the indices of the top k elements
@@ -191,12 +191,13 @@ def numba_argtopk(data, indices, k):
     # To enable njit, we shoud implement our own argpartition (TODO)
     if data.size > k:
         top_k = indices[np.argpartition(-data, k)[:k]]
-        return sorted(top_k)
+        top_k.sort()
+        return top_k
     else:
         return indices
 
 
-# @njit
+@njit
 def numba_weighted_per_instance(
     data: np.ndarray,
     indices: np.ndarray,
@@ -217,7 +218,6 @@ def numba_weighted_per_instance(
         row_weights = weights[row_indices].reshape(-1) * row_data
         top_k = numba_argtopk(row_weights, row_indices, k)
         y_pred_indices[i * k : i * k + len(top_k)] = top_k
-        # y_pred_indices[i * k:(i + 1) * k] = top_k
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
 
     return y_pred_data, y_pred_indices, y_pred_indptr
@@ -287,3 +287,29 @@ def calculate_fn_csr(y_proba: csr_matrix, y_pred: csr_matrix):
     return numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
         *unpack_csr_matrices(y_proba, y_pred), ni, nl
     )
+
+
+@njit
+def numba_balanced_accuracy(
+    data: np.ndarray,
+    indices: np.ndarray,
+    indptr: np.ndarray,
+    marginals: np.ndarray,
+    ni: int,
+    nl: int,
+    k: int,
+):
+    y_pred_data = np.ones(ni * k, dtype=FLOAT_TYPE)
+    y_pred_indices = np.zeros(ni * k, dtype=INT_TYPE)
+    y_pred_indptr = np.zeros(ni + 1, dtype=INT_TYPE)
+
+    for i in range(ni):
+        row_data = data[indptr[i] : indptr[i + 1]]
+        row_indices = indices[indptr[i] : indptr[i + 1]]
+        row_marginals = marginals[row_indices].reshape(-1)
+        row_gains = row_data / row_marginals - (1 - row_data) / (1 - row_marginals)
+        top_k = numba_argtopk(row_gains, row_indices, k)
+        y_pred_indices[i * k : i * k + len(top_k)] = top_k
+        y_pred_indptr[i + 1] = y_pred_indptr[i] + k
+
+    return y_pred_data, y_pred_indices, y_pred_indptr

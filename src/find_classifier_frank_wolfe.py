@@ -12,42 +12,6 @@ IND_TYPE = np.int32
 EPS = 1e-6
 
 
-
-# Utility functions defined using PyTorch
-
-
-def macro_jaccard_C(C, epsilon=EPS):
-    return C[:, 0] / (C[:, 0] + C[:, 1] + C[:, 2] + epsilon)
-
-
-def macro_sqrt_tp_C(C, epsilon=EPS):
-    return torch.sqrt(C[:,0] + epsilon)
-
-
-def precision_at_k_C(C, k=5):
-    return C[:, 0] / k
-
-
-def macro_recall_C(C, epsilon=EPS):
-    return C[:, 0] / (C[:, 0] + C[:, 2] + epsilon)
-
-
-def macro_precision_C(C, epsilon=EPS):
-    return C[:, 0] / (C[:, 0] + C[:, 1] + epsilon)
-
-
-def macro_f1_C(C, epsilon=EPS):
-    return 2 * C[:, 0] / (2 * C[:, 0] + C[:, 1] + C[:, 2] + epsilon)
-
-
-def instance_alpha_macro_precision_C(C, alpha=0.001, epsilon=EPS):
-    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_precision_C(C)
-
-
-def instance_alpha_macro_f1_C(C, alpha=0.9, epsilon=EPS):
-    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_f1_C(C)
-
-
 def select_top_k_csr(y_proba, G, k):
     # True negatives are not used in the utility function, so we can ignore them here
     u = (
@@ -176,7 +140,7 @@ def find_best_alpha(C, C_i, utility_func, search_step=0.001):
     return max_alpha
 
 
-def frank_wolfe(
+def find_classifier_frank_wolfe(
     y_true: Union[np.ndarray, csr_matrix],
     y_proba: Union[np.ndarray, csr_matrix],
     utility_func,
@@ -345,3 +309,40 @@ def sample_utility_from_classfiers_csr(
         classfiers_C = calculate_confusion_matrix_csr(classfiers_pred, y_true, C_shape)
         utilities.append(calculate_utility(utility_func, classfiers_C))
     return np.mean(utilities)
+
+
+# Utility functions defined using PyTorch
+def macro_jaccard_C(C, epsilon=EPS):
+    return C[:, 0] / (C[:, 0] + C[:, 1] + C[:, 2] + epsilon)
+
+
+def macro_sqrt_tp_C(C, epsilon=EPS):
+    return torch.sqrt(C[:,0] + epsilon)
+
+
+def precision_at_k_C(C, k=5):
+    return C[:, 0] / k
+
+
+def macro_recall_C(C, epsilon=EPS):
+    return C[:, 0] / (C[:, 0] + C[:, 2] + epsilon)
+
+
+def macro_precision_C(C, epsilon=EPS):
+    return C[:, 0] / (C[:, 0] + C[:, 1] + epsilon)
+
+
+def macro_f1_C(C, epsilon=EPS):
+    return 2 * C[:, 0] / (2 * C[:, 0] + C[:, 1] + C[:, 2] + epsilon)
+
+
+def balanced_acc_C(C):
+    return (C[:, 0] / (C[:, 0] + C[:, 2])) * (C[:, 0] / (C[:, 0] + C[:, 1]))
+
+
+def mixed_instance_prec_macro_prec_C(C, alpha=0.001, epsilon=EPS):
+    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_precision_C(C)
+
+
+def mixed_instance_prec_macro_f1_C(C, alpha=0.9, epsilon=EPS):
+    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_f1_C(C)

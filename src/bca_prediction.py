@@ -10,15 +10,15 @@ from typing import Union
 # Enable slow (without use of specialized numba functions) but still memory efficient implementation
 SLOW = False
 EPS = 1e-6
-#TOLERANCE = 1e-7
+
 
 def bca_with_0approx_np(
     y_proba: np.ndarray,
     k: int,
     utility_func: callable,
     greedy_start=False,
-    tolerance: float = 1e-5,
-    max_iter: int = 10,
+    tolerance: float = 1e-6,
+    max_iter: int = 100,
     shuffle_order: bool = True,
     seed: int = None,
     **kwargs,
@@ -102,10 +102,10 @@ def bca_with_0approx_np(
 def bca_coverage_np(
     y_proba: csr_matrix,
     k: int,
-    alpha: float = 0,
+    alpha: float = 1,
     greedy_start=False,
-    tolerance: float = 1e-5,
-    max_iter: int = 10,
+    tolerance: float = 1e-6,
+    max_iter: int = 100,
     shuffle_order: bool = True,
     seed: int = None,
     filename: str = None,
@@ -131,7 +131,10 @@ def bca_coverage_np(
             f = np.ones(nl, np.float32)
         else:
             f = np.product(1 - y_pred * y_proba, axis=0)
+        
         old_cov = 1 - np.mean(f)
+        if(alpha < 1):
+            old_cov = alpha * old_cov + (1 - alpha) * (np.sum(y_pred * y_proba, axis=0) / ni / k).mean()
 
         for i in order:
             # adjust f locally
@@ -139,8 +142,8 @@ def bca_coverage_np(
 
             # calculate gain and selection
             g = f * y_proba[i]
-            if alpha > 0:
-                g = (1 - alpha) * g + alpha * y_proba[i] / k
+            if alpha > 1:
+                g = alpha * g + (1 - alpha) * y_proba[i] / k
             top_k = np.argpartition(-g, k)[:k]
 
             # update y_proba
@@ -151,6 +154,8 @@ def bca_coverage_np(
             f *= 1 - y_pred[i] * y_proba[i]
 
         new_cov = 1 - np.mean(f)
+        if(alpha < 1):
+            new_cov = alpha * new_cov + (1 - alpha) * (np.sum(y_pred * y_proba, axis=0) / ni / k).mean()
 
         meta["utilities"].append(new_cov)
         print(
@@ -168,8 +173,8 @@ def bca_with_0approx_csr(
     k: int,
     utility_func: callable,
     greedy_start=False,
-    tolerance: float = 1e-5,
-    max_iter: int = 10,
+    tolerance: float = 1e-6,
+    max_iter: int = 100,
     shuffle_order: bool = True,
     seed: int = None,
     filename: str = None,
@@ -334,10 +339,10 @@ def bca_with_0approx_csr(
 def bca_coverage_csr(
     y_proba: csr_matrix,
     k: int,
-    alpha: float = 0,
+    alpha: float = 1,
     greedy_start=False,
-    tolerance: float = 1e-5,
-    max_iter: int = 10,
+    tolerance: float = 1e-6,
+    max_iter: int = 100,
     shuffle_order: bool = True,
     seed: int = None,
     filename: str = None,
@@ -379,8 +384,8 @@ def bca_coverage_csr(
             )
 
         old_cov = 1 - np.mean(failure_prob)
-        if(alpha > 0):
-            old_cov = (1 - alpha) * old_cov + alpha * np.asarray(calculate_tp_csr(y_proba, y_pred) / ni / k).ravel().mean()
+        if(alpha < 1):
+            old_cov = alpha * old_cov + (1 - alpha) * np.asarray(calculate_tp_csr(y_proba, y_pred) / ni / k).ravel().mean()
 
         for i in tqdm(order):
             # for i in order:
@@ -402,8 +407,8 @@ def bca_coverage_csr(
 
             # Calculate gain and selectio
             gains = failure_prob[p_indices] * p_data
-            if alpha > 0:
-                gains = (1 - alpha) * gains + alpha * p_data / k
+            if alpha < 1:
+                gains = alpha * gains + (1 - alpha) * p_data / k
             if gains.size > k:
                 top_k = np.argpartition(-gains, k)[:k]
                 y_pred.indices[r_start:r_end] = sorted(p_indices[top_k])
@@ -419,8 +424,8 @@ def bca_coverage_csr(
             failure_prob[indices] *= data
 
         new_cov = 1 - np.mean(failure_prob)
-        if(alpha > 0):
-            new_cov = (1 - alpha) * new_cov + alpha * np.asarray(calculate_tp_csr(y_proba, y_pred) / ni / k).ravel().mean()
+        if(alpha < 1):
+            new_cov = alpha * new_cov + (1 - alpha) * np.asarray(calculate_tp_csr(y_proba, y_pred) / ni / k).ravel().mean()
         meta["utilities"].append(new_cov)
         print(
             f"  Iteration {j + 1} finished, expected coverage: {old_cov} -> {new_cov}"
@@ -438,8 +443,8 @@ def bca_coverage_csr(
 def bca_coverage(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
-    tolerance: float = 1e-5,
-    max_iter=10,
+    tolerance: float = 1e-6,
+    max_iter: int = 100,
     seed: int = None,
     **kwargs,
 ):
@@ -461,8 +466,8 @@ def bca_with_0approx(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     utility_func: callable,
-    tolerance: float = 1e-5,
-    max_iter=100,
+    tolerance: float = 1e-6,
+    max_iter: int = 100,
     seed: int = None,
     **kwargs,
 ):
@@ -492,8 +497,8 @@ def bca_with_0approx(
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
 
 
-# Implementations of functions for optimizing specific measures
 
+# Implementations of functions for optimizing specific measures
 
 def instance_precision_at_k_on_conf_matrix(tp, fp, fn, k):
     return np.asarray(tp / k).ravel()
@@ -552,9 +557,7 @@ def block_coordinate_mixed_instance_prec_macro_prec(
     y_proba: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 0.5, **kwargs
 ):
     def mixed_precision_alpha_fn(tp, fp, fn):
-        return alpha * instance_precision_at_k_on_conf_matrix(tp, fp, fn, k) + (
-            1 - alpha
-        ) * macro_precision_on_conf_matrix(tp, fp, fn)
+        return (1 - alpha) * instance_precision_at_k_on_conf_matrix(tp, fp, fn, k) + alpha * macro_precision_on_conf_matrix(tp, fp, fn)
 
     return bca_with_0approx(
         y_proba, k=k, utility_func=mixed_precision_alpha_fn, **kwargs
@@ -565,9 +568,7 @@ def block_coordinate_mixed_instance_prec_macro_f1(
     y_proba: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 0.5, **kwargs
 ):
     def mixed_precision_alpha_fn(tp, fp, fn):
-        return alpha * instance_precision_at_k_on_conf_matrix(tp, fp, fn, k) + (
-            1 - alpha
-        ) * macro_fmeasure_on_conf_matrix(tp, fp, fn)
+        return (1 - alpha) * instance_precision_at_k_on_conf_matrix(tp, fp, fn, k) + alpha * macro_fmeasure_on_conf_matrix(tp, fp, fn)
 
     return bca_with_0approx(
         y_proba, k=k, utility_func=mixed_precision_alpha_fn, **kwargs
@@ -578,9 +579,7 @@ def block_coordinate_mixed_instance_prec_macro_recall(
     y_proba: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 0.5, **kwargs
 ):
     def mixed_precision_alpha_fn(tp, fp, fn):
-        return alpha * instance_precision_at_k_on_conf_matrix(tp, fp, fn, k) + (
-            1 - alpha
-        ) * macro_recall_on_conf_matrix(tp, fp, fn)
+        return (1 - alpha) * instance_precision_at_k_on_conf_matrix(tp, fp, fn, k) + alpha * macro_recall_on_conf_matrix(tp, fp, fn)
 
     return bca_with_0approx(
         y_proba, k=k, utility_func=mixed_precision_alpha_fn, **kwargs

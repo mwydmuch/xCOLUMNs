@@ -1,6 +1,6 @@
 numpy
 scipy
-numba
+numba>=0.58.0
 click
 torch
 tqdm

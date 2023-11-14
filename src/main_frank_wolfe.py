@@ -4,7 +4,7 @@ import scipy.sparse as sp
 from metrics import *
 from data import *
 from utils_misc import *
-from frank_wolfe import *
+from src.find_classifier_frank_wolfe import *
 from weighted_prediction import *
 from sklearn.model_selection import train_test_split
 from napkinxc.models import PLT, BR
@@ -43,7 +43,7 @@ def frank_wolfe_wrapper(
     use_last=False,
     **kwargs,
 ):
-    classifiers, classifier_weights, meta = frank_wolfe(
+    classifiers, classifier_weights, meta = find_classifier_frank_wolfe(
         Y_val, pred_val, utility_func, max_iters=20, k=k, reg=reg, **kwargs
     )
     print(f"  classifiers weights: {classifier_weights}")
@@ -97,21 +97,28 @@ def frank_wolfe_macro_f1(
     )
 
 
+def frank_wolfe_balanced_accuracy(
+    Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs
+):
+    return frank_wolfe_wrapper(
+        Y_val, pred_val, pred_test, balanced_accuracy_C, k=k, seed=seed, **kwargs
+    )
 
-def frank_wolfe_instance_alpha_macro_f1(
+
+def frank_wolfe_mixed_instance_prec_macro_f1(
     Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, alpha=0, **kwargs
 ):
-    func_C = lambda C: instance_alpha_macro_f1_C(C, alpha=alpha)
+    func_C = lambda C: mixed_instance_prec_macro_f1_C(C, alpha=alpha)
 
     return frank_wolfe_wrapper(
         Y_val, pred_val, pred_test, func_C, k=k, seed=seed, **kwargs
     )
 
 
-def frank_wolfe_instance_alpha_macro_precision(
+def frank_wolfe_mixed_instance_prec_macro_prec(
     Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, alpha=0, **kwargs
 ):
-    func_C = lambda C: instance_alpha_macro_precision_C(C, alpha=alpha)
+    func_C = lambda C: mixed_instance_prec_macro_prec_C(C, alpha=alpha)
 
     return frank_wolfe_wrapper(
         Y_val, pred_val, pred_test, func_C, k=k, seed=seed, **kwargs
@@ -159,6 +166,12 @@ def fw_log_weighted_instance_wrapper(
     return log_weighted_instance(pred_test, k=k, **kwargs)
 
 
+def fw_optimal_balanced_accuracy_wrapper(
+    Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs
+):
+    return optimal_balanced_accuracy(pred_test, k=k, **kwargs)
+
+
 METRICS = {
     "mC": macro_abandonment,
     "iC": instance_abandonment,
@@ -174,6 +187,7 @@ METRICS = {
 METHODS = {
     "fw-split-optimal-instance-prec": (fw_optimal_instance_precision_wrapper, {}),
     "fw-split-optimal-macro-recall": (fw_optimal_macro_recall_wrapper, {}),
+    "fw-split-optimal-balanced-accuracy": (fw_optimal_balanced_accuracy_wrapper, {}),
     "fw-split-power-law-with-beta=0.5": (
         fw_power_law_weighted_instance_wrapper,
         {"beta": 0.5},
@@ -186,6 +200,7 @@ METHODS = {
     "frank-wolfe-macro-recall": (frank_wolfe_macro_recall, {}),
     "frank-wolfe-macro-precision": (frank_wolfe_macro_precision, {}),
     "frank-wolfe-macro-f1": (frank_wolfe_macro_f1, {}),
+    "frank-wolfe-balanced-acc": (frank_wolfe_balanced_accuracy, {}),
     # "frank-wolfe-macro-recall-last": (frank_wolfe_macro_recall, {"use_last": True}),
     # "frank-wolfe-macro-precision-last": (frank_wolfe_macro_precision, {"use_last": True}),
     # "frank-wolfe-macro-f1-last": (frank_wolfe_macro_f1, {"use_last": True}),
@@ -196,27 +211,28 @@ METHODS = {
     "frank-wolfe-macro-precision-rnd": (frank_wolfe_macro_precision, {"init": "random"}),
     "frank-wolfe-macro-f1-rnd": (frank_wolfe_macro_f1, {"init": "random"}),
     
-    # "frank-wolfe-instance-alpha-macro-precision_alpha=0.1": (frank_wolfe_instance_alpha_macro_precision, {"alpha": 0.1}),
-    # "frank-wolfe-instance-alpha-macro-f1_alpha=0.1": (frank_wolfe_instance_alpha_macro_f1, {"alpha": 0.1}),
-    # "frank-wolfe-instance-alpha-macro-precision_alpha=0.01": (frank_wolfe_instance_alpha_macro_precision, {"alpha": 0.01}),
-    # "frank-wolfe-instance-alpha-macro-f1_alpha=0.01": (frank_wolfe_instance_alpha_macro_f1, {"alpha": 0.01}),
-    # "frank-wolfe-instance-alpha-macro-precision_alpha=0.001": (frank_wolfe_instance_alpha_macro_precision, {"alpha": 0.001}),
-    # "frank-wolfe-instance-alpha-macro-f1_alpha=0.001": (frank_wolfe_instance_alpha_macro_f1, {"alpha": 0.001}),
-    # "frank-wolfe-instance-alpha-macro-precision_alpha=0.0001": (frank_wolfe_instance_alpha_macro_precision, {"alpha": 0.0001}),
-    # "frank-wolfe-instance-alpha-macro-f1_alpha=0.0001": (frank_wolfe_instance_alpha_macro_f1, {"alpha": 0.0001}),
-    # "frank-wolfe-instance-alpha-macro-precision_alpha=0.00001": (frank_wolfe_instance_alpha_macro_precision, {"alpha": 0.00001}),
-    # "frank-wolfe-instance-alpha-macro-f1_alpha=0.00001": (frank_wolfe_instance_alpha_macro_f1, {"alpha": 0.00001}),
+    "frank-wolfe-mixed-prec-prec_alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.1}),
+    "frank-wolfe-mixed-prec-prec_alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.01}),
+    "frank-wolfe-mixed-prec-prec_alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.001}),
+    "frank-wolfe-mixed-prec-prec_alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.0001}),
+    "frank-wolfe-mixed-prec-prec_alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00001}),
 
-    # "frank-wolfe-instance-alpha-macro-precision-rnd_alpha=0.1": (frank_wolfe_instance_alpha_macro_precision, {"init": "random", "alpha": 0.1}),
-    # "frank-wolfe-instance-alpha-macro-f1-rnd_alpha=0.1": (frank_wolfe_instance_alpha_macro_f1, {"init": "random", "alpha": 0.1}),
-    # "frank-wolfe-instance-alpha-macro-precision-rnd_alpha=0.01": (frank_wolfe_instance_alpha_macro_precision, {"init": "random", "alpha": 0.01}),
-    # "frank-wolfe-instance-alpha-macro-f1-rnd_alpha=0.01": (frank_wolfe_instance_alpha_macro_f1, {"init": "random", "alpha": 0.01}),
-    # "frank-wolfe-instance-alpha-macro-precision-rnd_alpha=0.001": (frank_wolfe_instance_alpha_macro_precision, {"init": "random", "alpha": 0.001}),
-    # "frank-wolfe-instance-alpha-macro-f1-rnd_alpha=0.001": (frank_wolfe_instance_alpha_macro_f1, {"init": "random", "alpha": 0.001}),
-    # "frank-wolfe-instance-alpha-macro-precision-rnd_alpha=0.0001": (frank_wolfe_instance_alpha_macro_precision, {"init": "random", "alpha": 0.0001}),
-    # "frank-wolfe-instance-alpha-macro-f1-rnd_alpha=0.0001": (frank_wolfe_instance_alpha_macro_f1, {"init": "random", "alpha": 0.0001}),
-    # "frank-wolfe-instance-alpha-macro-precision-rnd_alpha=0.00001": (frank_wolfe_instance_alpha_macro_precision, {"init": "random", "alpha": 0.00001}),
-    # "frank-wolfe-instance-alpha-macro-f1-rnd_alpha=0.00001": (frank_wolfe_instance_alpha_macro_f1, {"init": "random", "alpha": 0.00001}),
+    "frank-wolfe-mixed-prec-f1_alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.1}),
+    "frank-wolfe-mixed-prec-f1_alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.01}),
+    "frank-wolfe-mixed-prec-f1_alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.001}),
+    "frank-wolfe-mixed-prec-f1_alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0001}),
+    "frank-wolfe-mixed-prec-f1_alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00001}),
+
+    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd_alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.1}),
+    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd_alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.1}),
+    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd_alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.01}),
+    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd_alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.01}),
+    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd_alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.001}),
+    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd_alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.001}),
+    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd_alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.0001}),
+    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd_alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.0001}),
+    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd_alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.00001}),
+    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd_alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.00001}),
 }
 
 
@@ -319,7 +335,7 @@ torch.set_float32_matmul_precision("medium")
 
 
 class PytorchModel(ModelWrapper):
-    def __init__(self, model_path, seed, loss="bce", hidden_units=()): # 512 for mediamill, 1024 for flicker, 0 for rcv1x
+    def __init__(self, model_path, seed, loss="bce", hidden_units=()): # 512 for mediamill, 1024 for flicker, 2048 for rcv1x
         super().__init__(model_path, seed)
 
         self.loss = None
@@ -546,6 +562,9 @@ def main(experiment, k, seed, testsplit, reg):
             "path": "datasets/amazon/amazon_train.txt",
             "load_func": load_txt_data,
         }
+
+    else:
+        raise ValueError("Unknown experiment")
 
     if "routers21578" in experiment:
         pass
