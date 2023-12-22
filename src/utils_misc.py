@@ -47,3 +47,40 @@ def save_json(filepath, data):
 def load_json(filepath):
     with open(filepath) as file:
         return json.load(file)
+
+
+def lin_search(low, high, step, func):
+    best = None
+    best_score = None
+    for i in np.arange(low, high, step):
+        score = func(i)
+        if best_score is None or score > best_score:
+            best = i
+            best_score = score
+    return best, best_score
+
+
+def bin_search(low, high, eps, func):
+    while high - low > eps:
+        mid = (low + high) / 2
+        mid_next = (mid + high) / 2
+
+        if func(mid) < func(mid_next):
+            high = mid_next
+        else:
+            low = mid
+
+    return (low + high) / 2
+
+
+def ternary_search(low, high, eps, func):
+    while high - low > eps:
+        mid1 = low + (high - low) / 3
+        mid2 = high - (high - low) / 3
+
+        if func(mid1) < func(mid2):
+            high = mid2
+        else:
+            low = mid1
+
+    return (low + high) / 2

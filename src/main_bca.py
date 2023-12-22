@@ -9,9 +9,9 @@ from utils_misc import *
 import sys
 import click
 
-RECALCULATE_RESUTLS = False
-RECALCULATE_PREDICTION = False
-K = (1, 3, 5, 10)
+# TODO: refactor this
+RECALCULATE_RESUTLS = True
+RECALCULATE_PREDICTION = True
 
 METRICS = {
     "mC": macro_abandonment,
@@ -24,25 +24,24 @@ METRICS = {
     "iF": instance_f1,
 }
 
-
 METHODS = {
     # Instance-wise measures / baselines
     # "random": (predict_random_at_k,{}),
-    "optimal-instance-prec": (optimal_instance_precision, {}),
+    "optimal-instance-prec": (predict_for_optimal_instance_precision, {}),
     "optimal-instance-ps-prec": (inv_propensity_weighted_instance, {}),
     #"power-law-with-beta=0.875": (power_law_weighted_instance, {"beta": 0.875}),
     "power-law-with-beta=0.75": (power_law_weighted_instance, {"beta": 0.75}),
     "power-law-with-beta=0.5": (power_law_weighted_instance, {"beta": 0.5}),
     "power-law-with-beta=0.25": (power_law_weighted_instance, {"beta": 0.25}),
     #"power-law-with-beta=0.125": (power_law_weighted_instance, {"beta": 0.125}),
-    "log": (log_weighted_instance, {}),
-    "optimal-macro-recall-test-marginals": (optimal_macro_recall, {}),
-    "optimal-macro-recall": (optimal_macro_recall, {}),
+    "log": (predict_log_weighted_per_instance, {}),
+    "optimal-macro-recall": (predict_for_optimal_macro_recall, {}),
 
     # Block coordinate with default paramters - commented out because it better to use variatns with specific tolerance to stoping condition
     # "block-coord-macro-prec": (block_coordinate_macro_precision, {}),
     # "block-coord-macro-recall": (block_coordinate_macro_recall, {}),
     # "block-coord-macro-f1": (block_coordinate_macro_f1, {}),
+    # "block-coord-cov": (block_coordinate_coverage, {}),
     
     # Mixed precision
     "block-coord-mixed-prec-prec-alpha=0.1-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.1, "tolerance": 1e-7}),
@@ -100,23 +99,20 @@ METHODS = {
     # "greedy-mixed-prec-f1-alpha=0.0000003162": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.0000003162, "greedy_start": True, "max_iter": 1}),
     # "greedy-mixed-prec-f1-alpha=0.0000001": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.0000001, "greedy_start": True, "max_iter": 1}),
     
-    # Greedy
+    # Greedy / 1 iter variants
     "greedy-macro-prec": (block_coordinate_macro_precision, {"greedy_start": True, "max_iter": 1}),
     "greedy-macro-recall": (block_coordinate_macro_precision, {"greedy_start": True, "max_iter": 1}),
     "greedy-macro-f1": (block_coordinate_macro_f1, {"greedy_start": True, "max_iter": 1}),
-    "block-coord-macro-prec-iter=1": (block_coordinate_macro_precision, {"max_iter": 1}),
-    #"block-coord-macro-recall-iter=1": (block_coordinate_macro_precision, {"max_iter": 1}),
-    "block-coord-macro-f1-iter=1": (block_coordinate_macro_f1, {"max_iter": 1}),
-    # "greedy-start-block-coord-macro-prec": (block_coordinate_macro_precision, {"greedy_start": True}),
-    # "greedy-start-block-coord-macro-recall": (block_coordinate_macro_f1, {"greedy_start": True}),
-    # "greedy-start-block-coord-macro-f1": (block_coordinate_macro_f1, {"greedy_start": True}),
-
-    # Coverage
-    "block-coord-cov": (block_coordinate_coverage, {}),
     "greedy-cov": (block_coordinate_coverage, {"greedy_start": True, "max_iter": 1}),
+    "block-coord-macro-prec-iter=1": (block_coordinate_macro_precision, {"max_iter": 1}),
+    "block-coord-macro-recall-iter=1": (block_coordinate_macro_precision, {"max_iter": 1}),
+    "block-coord-macro-f1-iter=1": (block_coordinate_macro_f1, {"max_iter": 1}),
     "block-coord-cov-iter=1": (block_coordinate_coverage, {"max_iter": 1}),
-    # "greedy-start-block-coord-cov": (block_coordinate_coverage, {"greedy_start": True}),
-    
+    "greedy-start-block-coord-macro-prec": (block_coordinate_macro_precision, {"greedy_start": True}),
+    "greedy-start-block-coord-macro-recall": (block_coordinate_macro_f1, {"greedy_start": True}),
+    "greedy-start-block-coord-macro-f1": (block_coordinate_macro_f1, {"greedy_start": True}),
+    "greedy-start-block-coord-cov": (block_coordinate_coverage, {"greedy_start": True}),
+
     # Tolerance on stopping condiction experiments
     #"block-coord-macro-prec-tol=1e-1": (block_coordinate_macro_precision, {"tolerance": 1e-1}),
     #"block-coord-macro-prec-tol=1e-2": (block_coordinate_macro_precision, {"tolerance": 1e-2}),
@@ -127,7 +123,9 @@ METHODS = {
     "block-coord-macro-prec-tol=1e-7": (block_coordinate_macro_precision,{"tolerance": 1e-7}),
     #"block-coord-macro-prec-tol=1e-8": (block_coordinate_macro_precision,{"tolerance": 1e-8}),
     
-    #"block-coord-macro-recall-tol=1e-3": (block_coordinate_macro_recall,{"tolerance": 1e-3}),
+    #"block-coord-macro-recall-tol=1e-1": (block_coordinate_macro_recall,{"tolerance": 1e-1}),
+    #"block-coord-macro-recall-tol=1e-2": (block_coordinate_macro_recall,{"tolerance": 1e-2}),
+    "block-coord-macro-recall-tol=1e-3": (block_coordinate_macro_recall,{"tolerance": 1e-3}),
     "block-coord-macro-recall-tol=1e-4": (block_coordinate_macro_recall,{"tolerance": 1e-4}),
     "block-coord-macro-recall-tol=1e-5": (block_coordinate_macro_recall,{"tolerance": 1e-5}),
     "block-coord-macro-recall-tol=1e-6": (block_coordinate_macro_recall,{"tolerance": 1e-6}),
@@ -172,25 +170,33 @@ METHODS = {
 }
 
 
-def report_metrics(data, predictions, k):
+def calculate_and_report_metrics(data, predictions, k, metrics):
     results = {}
-    for metric, func in METRICS.items():
+    for metric, func in metrics.items():
         value = func(data, predictions)
         results[f"{metric}@{k}"] = value
-        print(f"  {metric}: {100 * value:>5.2f}")
+        print(f"  {metric}@{k}: {100 * value:>5.2f}")
 
     return results
 
 
 @click.command()
 @click.argument("experiment", type=str, required=True)
-@click.option("-k", type=int, required=False, default=None)
-@click.option("-s", "--seed", type=int, required=False, default=None)
-def main(experiment, k, seed):
+@click.option("-k", type=int, required=True)
+@click.option("-s", "--seed", type=int, required=True)
+@click.option("-m", "--method", type=str, required=False, default=None)
+@click.option("-p", "--probabilities_path", type=str, required=False, default=None)
+@click.option("-l", "--labels_path", type=str, required=False, default=None)
+@click.option("-r", "--results_dir", type=str, required=False, default="results_bca")
+def main(experiment, k, seed, method, probabilities_path, labels_path, results_dir):
     print(experiment)
 
-    if k is not None:
-        K = (k,)
+    if method is None:
+        methods = METHODS
+    elif method in METHODS:
+        methods = {method: METHODS[method]}
+    else:
+        raise ValueError(f"Unknown method: {method}")
 
     true_as_pred = "true_as_pred" in experiment
     lightxml_data = "lightxml" in experiment
@@ -208,6 +214,7 @@ def main(experiment, k, seed):
         "header": True,
     }
 
+    # Predefined experiments
     if "yeast_plt" in experiment:
         # yeast - PLT
         xmlc_data_load_config["header"] = False
@@ -526,47 +533,43 @@ def main(experiment, k, seed):
     # y_true = y_true.toarray()
     # eta_pred = eta_pred.toarray()
 
-    # This does not work at the moment, since original dense code was writeen
-    # y_true = y_true.todense() # As np.matrix
-    # eta_pred = eta_pred.todense() # As np.matrix
-
-    output_path_prefix = f"results_bca/{experiment}/"
+    output_path_prefix = f"results_bca2/{experiment}/"
     os.makedirs(output_path_prefix, exist_ok=True)
-    for k in K:
-        for method, func in METHODS.items():
-            print(f"{experiment} - {method} @ {k}: ")
+    for method, func in methods.items():
+        print(f"{experiment} - {method} @ {k}: ")
 
-            output_path = f"{output_path_prefix}{method}_k={k}_s={seed}"
-            results_path = f"{output_path}_results.json"
-            pred_path = f"{output_path}_pred.npz"
+        output_path = f"{output_path_prefix}{method}_k={k}_s={seed}"
+        results_path = f"{output_path}_results.json"
+        pred_path = f"{output_path}_pred.npz"
 
-            if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
-                results = {}
-                if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
-                    with Timer() as t:
-                        # y_pred = func[0](eta_pred, k, marginals=marginals, inv_ps=inv_ps, filename=output_path, **func[1])
-                        y_pred, meta = func[0](
-                            eta_pred,
-                            k,
-                            marginals=marginals,
-                            inv_ps=inv_ps,
-                            seed=seed,
-                            **func[1],
-                        )
-                        results["iters"] = meta["iters"]
-                        results["time"] = t.get_time()
-                        print("  Iters: ", meta["iters"])
-                    save_npz_wrapper(pred_path, y_pred)
-                    save_json(results_path, results)
-                else:
-                    y_pred = load_npz_wrapper(pred_path)
-                    results = load_json(results_path)
-
-                print("  Calculating metrics:")
-                results.update(report_metrics(y_true, y_pred, k))
+        func[1]["include_meta"] = True  # Include meta data in results
+        if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
+            results = {}
+            if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
+                with Timer() as t:
+                    # y_pred = func[0](eta_pred, k, marginals=marginals, inv_ps=inv_ps, filename=output_path, **func[1])
+                    y_pred, meta = func[0](
+                        eta_pred,
+                        k,
+                        marginals=marginals,
+                        inv_ps=inv_ps,
+                        seed=seed,
+                        **func[1],
+                    )
+                    results["iters"] = meta["iters"]
+                    results["time"] = t.get_time()
+                    print("  Iters: ", meta["iters"])
+                #save_npz_wrapper(pred_path, y_pred)
                 save_json(results_path, results)
+            else:
+                #y_pred = load_npz_wrapper(pred_path)
+                results = load_json(results_path)
 
-            print("  Done")
+            print("  Calculating metrics:")
+            results.update(calculate_and_report_metrics(y_true, y_pred, k, METRICS))
+            save_json(results_path, results)
+
+        print("  Done")
 
 
 if __name__ == "__main__":

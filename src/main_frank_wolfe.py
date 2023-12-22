@@ -4,8 +4,9 @@ import scipy.sparse as sp
 from metrics import *
 from data import *
 from utils_misc import *
-from src.find_classifier_frank_wolfe import *
+from find_classifier_frank_wolfe import *
 from weighted_prediction import *
+from bca_prediction import *
 from sklearn.model_selection import train_test_split
 from napkinxc.models import PLT, BR
 from napkinxc.datasets import to_csr_matrix, load_libsvm_file
@@ -24,10 +25,10 @@ import click
 from tqdm import trange
 
 
+# TODO: refactor this
 RECALCULATE_RESUTLS = False
 RECALCULATE_PREDICTION = False
 RETRAIN_MODEL = False
-K = (1, 3, 5, 10)
 
 
 def frank_wolfe_wrapper(
@@ -166,10 +167,30 @@ def fw_log_weighted_instance_wrapper(
     return log_weighted_instance(pred_test, k=k, **kwargs)
 
 
-def fw_optimal_balanced_accuracy_wrapper(
+def fw_optimal_macro_balanced_accuracy_wrapper(
     Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs
 ):
-    return optimal_balanced_accuracy(pred_test, k=k, **kwargs)
+    return optimal_macro_balanced_accuracy(pred_test, k=k, **kwargs)
+
+
+def fw_bca_macro_precision_wrapper(
+    Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs
+):
+    return block_coordinate_macro_precision(pred_test, k=k, **kwargs)
+
+
+def fw_bca_macro_f1_wrapper(
+    Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs
+):
+    return block_coordinate_macro_f1(pred_test, k=k, **kwargs)
+
+
+def fw_bca_macro_recall_wrapper(
+    Y_val, pred_val, pred_test, k: int = 5, seed: int = 0, **kwargs
+):
+    return block_coordinate_macro_recall(pred_test, k=k, **kwargs)
+
+
 
 
 METRICS = {
@@ -181,13 +202,15 @@ METRICS = {
     "iR": instance_recall,
     "mF": macro_f1,
     "iF": instance_f1,
+    "mBA": macro_balanced_accuracy,
+    "iBA": instance_balanced_accuracy,
 }
 
 
 METHODS = {
     "fw-split-optimal-instance-prec": (fw_optimal_instance_precision_wrapper, {}),
     "fw-split-optimal-macro-recall": (fw_optimal_macro_recall_wrapper, {}),
-    "fw-split-optimal-balanced-accuracy": (fw_optimal_balanced_accuracy_wrapper, {}),
+    "fw-split-optimal-macro-balanced-acc": (fw_optimal_macro_balanced_accuracy_wrapper, {}),
     "fw-split-power-law-with-beta=0.5": (
         fw_power_law_weighted_instance_wrapper,
         {"beta": 0.5},
@@ -198,9 +221,14 @@ METHODS = {
     ),
     "fw-split-log": (fw_log_weighted_instance_wrapper, {}),
     "frank-wolfe-macro-recall": (frank_wolfe_macro_recall, {}),
-    "frank-wolfe-macro-precision": (frank_wolfe_macro_precision, {}),
+    "frank-wolfe-macro-prec": (frank_wolfe_macro_precision, {}),
     "frank-wolfe-macro-f1": (frank_wolfe_macro_f1, {}),
-    "frank-wolfe-balanced-acc": (frank_wolfe_balanced_accuracy, {}),
+    "frank-wolfe-macro-balanced-acc": (frank_wolfe_balanced_accuracy, {}),
+
+    "fw-split-bca-macro-recall": (fw_bca_macro_recall_wrapper, {}),
+    "fw-split-bca-macro-prec": (fw_bca_macro_precision_wrapper, {}),
+    "fw-split-bca-macro-f1": (fw_bca_macro_f1_wrapper, {}),
+
     # "frank-wolfe-macro-recall-last": (frank_wolfe_macro_recall, {"use_last": True}),
     # "frank-wolfe-macro-precision-last": (frank_wolfe_macro_precision, {"use_last": True}),
     # "frank-wolfe-macro-f1-last": (frank_wolfe_macro_f1, {"use_last": True}),
@@ -208,31 +236,110 @@ METHODS = {
     # "frank-wolfe-macro-precision-avg": (frank_wolfe_macro_precision, {"average": True}),
     # "frank-wolfe-macro-f1-avg": (frank_wolfe_macro_f1, {"average": True}),
     "frank-wolfe-macro-recall-rnd": (frank_wolfe_macro_recall, {"init": "random"}),
-    "frank-wolfe-macro-precision-rnd": (frank_wolfe_macro_precision, {"init": "random"}),
+    "frank-wolfe-macro-prec-rnd": (frank_wolfe_macro_precision, {"init": "random"}),
     "frank-wolfe-macro-f1-rnd": (frank_wolfe_macro_f1, {"init": "random"}),
+    "frank-wolfe-macro-balanced-acc-rnd": (frank_wolfe_macro_f1, {"init": "random"}),
+
+    "frank-wolfe-macro-prec-step=0.01": (frank_wolfe_macro_precision, {"alpha_lin_search_step": 0.01}),
+    "frank-wolfe-macro-f1-step=0.01": (frank_wolfe_macro_f1, {"alpha_lin_search_step": 0.01}),
+
+    "frank-wolfe-macro-prec-step=0.0001": (frank_wolfe_macro_precision, {"alpha_lin_search_step": 0.0001}),
+    "frank-wolfe-macro-f1-step=0.0001": (frank_wolfe_macro_f1, {"alpha_lin_search_step": 0.0001}),
     
-    "frank-wolfe-mixed-prec-prec_alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.1}),
-    "frank-wolfe-mixed-prec-prec_alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.01}),
-    "frank-wolfe-mixed-prec-prec_alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.001}),
-    "frank-wolfe-mixed-prec-prec_alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.0001}),
-    "frank-wolfe-mixed-prec-prec_alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.1, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.03162": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.03162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.01, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.003162": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.0003162": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.0003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.0001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.00003162": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.000003162": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.000001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000001, "alpha_lin_search_step": 0.0001}),
 
-    "frank-wolfe-mixed-prec-f1_alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.1}),
-    "frank-wolfe-mixed-prec-f1_alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.01}),
-    "frank-wolfe-mixed-prec-f1_alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.001}),
-    "frank-wolfe-mixed-prec-f1_alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0001}),
-    "frank-wolfe-mixed-prec-f1_alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.1, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.03162": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.03162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.01, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.003162": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.0003162": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.00003162": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.000003162": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.000001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000001, "alpha_lin_search_step": 0.0001}),
 
-    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd_alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.1}),
-    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd_alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.1}),
-    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd_alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.01}),
-    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd_alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.01}),
-    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd_alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.001}),
-    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd_alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.001}),
-    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd_alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.0001}),
-    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd_alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.0001}),
-    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd_alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.00001}),
-    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd_alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.00001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.1-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.1, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.03162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.03162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.01-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.01, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.003162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.0003162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.0003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.0001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.0001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.00003162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.00001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.000003162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.000001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000001, "alpha_lin_search_step": 0.0001}),
+
+    # "frank-wolfe-mixed-prec-f1-alpha=0.1-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.1, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.03162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.03162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.01-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.01, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.003162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.0003162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.0001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.00003162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.00001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00001, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.000003162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000003162, "alpha_lin_search_step": 0.0001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.000001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000001, "alpha_lin_search_step": 0.0001}),
+
+    "frank-wolfe-mixed-prec-prec-alpha=0.1-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.1, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-prec-alpha=0.03162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.03162, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-prec-alpha=0.01-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.01, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-prec-alpha=0.003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.003162, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-prec-alpha=0.001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.001, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-prec-alpha=0.0003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.0003162, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-prec-alpha=0.0001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.0001, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-prec-alpha=0.00003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00003162, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-prec-alpha=0.00001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00001, "alpha_lin_search_step": 0.001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.000003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000003162, "alpha_lin_search_step": 0.001}),
+    # "frank-wolfe-mixed-prec-prec-alpha=0.000001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000001, "alpha_lin_search_step": 0.001}),
+
+    "frank-wolfe-mixed-prec-f1-alpha=0.1-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.1, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-f1-alpha=0.03162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.03162, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-f1-alpha=0.01-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.01, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-f1-alpha=0.003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.003162, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-f1-alpha=0.001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.001, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-f1-alpha=0.0003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0003162, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-f1-alpha=0.0001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0001, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-f1-alpha=0.00003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00003162, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-f1-alpha=0.00001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00001, "alpha_lin_search_step": 0.001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.000003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000003162, "alpha_lin_search_step": 0.001}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.000001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000001, "alpha_lin_search_step": 0.001}),
+
+    # "frank-wolfe-mixed-prec-f1-alpha=0.1-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.1, "alpha_lin_search_step": 0.01}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.03162-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.03162, "alpha_lin_search_step": 0.01}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.01-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.01, "alpha_lin_search_step": 0.01}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.003162-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.003162, "alpha_lin_search_step": 0.01}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.001-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.001, "alpha_lin_search_step": 0.01}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.0003162-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0003162, "alpha_lin_search_step": 0.01}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.0001-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0001, "alpha_lin_search_step": 0.01}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.00003162-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00003162, "alpha_lin_search_step": 0.01}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.00001-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00001, "alpha_lin_search_step": 0.01}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.000003162-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000003162, "alpha_lin_search_step": 0.01}),
+    # "frank-wolfe-mixed-prec-f1-alpha=0.000001-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000001, "alpha_lin_search_step": 0.01}),
+
+    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd-alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.1}),
+    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd-alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.1}),
+    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd-alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.01}),
+    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd-alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.01}),
+    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd-alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.001}),
+    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd-alpha=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.001}),
+    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd-alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.0001}),
+    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd-alpha=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.0001}),
+    # "frank-wolfe-mixed-instance-prec-macro-prec-rnd-alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.00001}),
+    # "frank-wolfe-mixed-instance-prec-macro-f1-rnd-alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.00001}),
 }
 
 
@@ -405,29 +512,29 @@ class PytorchModel(ModelWrapper):
 
 @click.command()
 @click.argument("experiment", type=str, required=True)
-@click.option("-k", type=int, required=False, default=None)
-@click.option("-s", "--seed", type=int, required=False, default=None)
+@click.option("-k", type=int, required=True)
+@click.option("-s", "--seed", type=int, required=True)
+@click.option("-m", "--method", type=str, required=False, default=None)
 @click.option("-t", "--testsplit", type=float, required=False, default=0)
 @click.option("-r", "--reg", type=float, required=False, default=0)
-def main(experiment, k, seed, testsplit, reg):
+def main(experiment, k, seed, method, testsplit, reg):
     print(experiment)
 
-    if k is not None:
-        K = (k,)
+    if method is None:
+        methods = METHODS
+    elif method in METHODS:
+        methods = {method: METHODS[method]}
+    else:
+        raise ValueError(f"Unknown method: {method}")
 
-    lightxml_data_load_config = {
-        "labels_delimiter": " ",
-        "labels_features_delimiter": None,
-        "header": False,
-    }
-    xmlc_data_load_config = {
+    data_load_config = {
         "labels_delimiter": ",",
         "labels_features_delimiter": " ",
         "header": True,
     }
 
     if "yeast" in experiment:
-        xmlc_data_load_config["header"] = False
+        data_load_config["header"] = False
         test_path = {
             "path": "datasets/yeast/yeast_test.txt",
             "load_func": load_txt_data,
@@ -438,7 +545,7 @@ def main(experiment, k, seed, testsplit, reg):
         }
 
     elif "youtube_deepwalk" in experiment:
-        xmlc_data_load_config["header"] = False
+        data_load_config["header"] = False
         test_path = {
             "path": "datasets/youtube_deepwalk/youtube_deepwalk_test.svm",
             "load_func": load_txt_data,
@@ -449,7 +556,7 @@ def main(experiment, k, seed, testsplit, reg):
         }
 
     elif "eurlex_lexglue" in experiment:
-        xmlc_data_load_config["header"] = False
+        data_load_config["header"] = False
         test_path = {
             "path": "datasets/eurlex_lexglue/eurlex_lexglue_test.svm",
             "load_func": load_txt_data,
@@ -460,7 +567,7 @@ def main(experiment, k, seed, testsplit, reg):
         }
 
     elif "mediamill" in experiment:
-        xmlc_data_load_config["header"] = False
+        data_load_config["header"] = False
         test_path = {
             "path": "datasets/mediamill/mediamill_test.txt",
             "load_func": load_txt_data,
@@ -471,7 +578,7 @@ def main(experiment, k, seed, testsplit, reg):
         }
 
     elif "bibtex" in experiment:
-        xmlc_data_load_config["header"] = False
+        data_load_config["header"] = False
         test_path = {
             "path": "datasets/bibtex/bibtex_test.svm",
             "load_func": load_txt_data,
@@ -482,7 +589,7 @@ def main(experiment, k, seed, testsplit, reg):
         }
 
     elif "delicious" in experiment:
-        xmlc_data_load_config["header"] = False
+        data_load_config["header"] = False
         test_path = {
             "path": "datasets/delicious/delicious_test.svm",
             "load_func": load_txt_data,
@@ -493,7 +600,7 @@ def main(experiment, k, seed, testsplit, reg):
         }
 
     elif "flicker_deepwalk" in experiment:
-        xmlc_data_load_config["header"] = False
+        data_load_config["header"] = False
         test_path = {
             "path": "datasets/flicker_deepwalk/flicker_deepwalk_test.svm",
             "load_func": load_txt_data,
@@ -637,7 +744,7 @@ def main(experiment, k, seed, testsplit, reg):
                 seed=seed,
                 max_leaves=200,
                 liblinear_eps=0.001,
-                liblinear_c=16,
+                liblinear_c=10,
             ),
             PLT(
                 model_path + "_second",
@@ -645,8 +752,8 @@ def main(experiment, k, seed, testsplit, reg):
                 threads=15,
                 seed=seed,
                 max_leaves=200,
-                liblinear_eps=0.001,
-                liblinear_c=16,
+                liblinear_eps=0.1,
+                liblinear_c=10,
             ),
         )
     elif "plt" in experiment:
@@ -658,9 +765,12 @@ def main(experiment, k, seed, testsplit, reg):
                 verbose=True,
                 threads=15,
                 seed=seed,
-                max_leaves=200,
-                liblinear_eps=0.001,
-                liblinear_c=16,
+                # max_leaves=200,
+                # liblinear_eps=0.001,
+                # liblinear_c=16,
+                liblinear_eps=0.1,
+                liblinear_c=10,
+                ensemble=3,
             ),
         )
     elif "sbr" in experiment:
@@ -716,6 +826,8 @@ def main(experiment, k, seed, testsplit, reg):
 
         # top_k = min(1000, Y_train.shape[1])
         top_k = min(200, Y_train.shape[1])
+        if "plt" in experiment:
+            top_k = 100
         print("Predicting for validation set ...")
         val_pred_path = f"models_and_predictions/{experiment}_seed={seed}_split={1 - testsplit}_top_k={top_k}_pred_val.pkl"
         if not os.path.exists(val_pred_path) or RETRAIN_MODEL:
@@ -752,51 +864,50 @@ def main(experiment, k, seed, testsplit, reg):
         pred_test = sp.csr_matrix(pred_test)
 
     print("Calculating metrics ...")
-    output_path_prefix = f"results/{experiment}/"
+    output_path_prefix = f"results_fw/{experiment}/"
     os.makedirs(output_path_prefix, exist_ok=True)
-    for k in K:
-        for method, func in METHODS.items():
-            print(f"{method} @ {k}: ")
+    for method, func in methods.items():
+        print(f"{experiment} - {method} @ {k}: ")
 
-            output_path = (
-                f"{output_path_prefix}{method}_k={k}_s={seed}_t={testsplit}_r={reg}"
-            )
-            results_path = f"{output_path}_results.json"
-            pred_path = f"{output_path}_pred.pkl"
+        output_path = (
+            f"{output_path_prefix}{method}_k={k}_s={seed}_t={testsplit}_r={reg}"
+        )
+        results_path = f"{output_path}_results.json"
+        pred_path = f"{output_path}_pred.pkl"
 
-            if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
-                results = {}
-                if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
-                    # results["test_log_loss"] = log_loss(Y_test, pred_test)
-                    # results["val_log_loss"] = log_loss(Y_val, pred_val)
+        if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
+            results = {}
+            if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
+                # results["test_log_loss"] = log_loss(Y_test, pred_test)
+                # results["val_log_loss"] = log_loss(Y_val, pred_val)
 
-                    with Timer() as t:
-                        y_pred, meta = func[0](
-                            Y_val,
-                            pred_val,
-                            pred_test,
-                            k=k,
-                            marginals=marginals,
-                            inv_ps=inv_ps,
-                            seed=seed,
-                            reg=reg,
-                            **func[1],
-                        )
-                        results["iters"] = meta["iters"]
-                        results["time"] = t.get_time()
-                    # save_npz_wrapper(pred_path, y_pred)
-                    save_pickle(pred_path, y_pred)
-                    save_json(results_path, results)
-                else:
-                    # y_pred = load_npz_wrapper(pred_path)
-                    y_pred = load_pickle(pred_path)
-                    results = load_json(results_path)
-
-                print("  Calculating metrics:")
-                results.update(report_metrics(Y_test, y_pred, k))
+                with Timer() as t:
+                    y_pred, meta = func[0](
+                        Y_val,
+                        pred_val,
+                        pred_test,
+                        k=k,
+                        marginals=marginals,
+                        inv_ps=inv_ps,
+                        seed=seed,
+                        reg=reg,
+                        **func[1],
+                    )
+                    results["iters"] = meta["iters"]
+                    results["time"] = t.get_time()
+                # save_npz_wrapper(pred_path, y_pred)
+                save_pickle(pred_path, y_pred)
                 save_json(results_path, results)
+            else:
+                # y_pred = load_npz_wrapper(pred_path)
+                y_pred = load_pickle(pred_path)
+                results = load_json(results_path)
 
-            print("  Done")
+            print("  Calculating metrics:")
+            results.update(report_metrics(Y_test, y_pred, k))
+            save_json(results_path, results)
+
+        print("  Done")
 
 
 if __name__ == "__main__":

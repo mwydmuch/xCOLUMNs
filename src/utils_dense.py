@@ -15,7 +15,7 @@ def _make_filler(num_labels: int, k: int):
     return filler
 
 
-def predict_random_at_k(y_proba: np.ndarray, k: int = 5):
+def predict_random_at_k(y_proba: np.ndarray, k: int):
     """
     Randomly select among the true labels. A very simple baseline
     that requires 0/1 inputs.
@@ -33,10 +33,13 @@ def predict_random_at_k(y_proba: np.ndarray, k: int = 5):
     return result
 
 
-def random_at_k(y_proba: np.ndarray, k: int = 5):
+def random_k(y_proba: np.ndarray, k: int, seed: int = None):
     """
     Select predicted labels completely randomly, ignoring whether they are true/false.
     """
+    if seed is not None:
+        np.random.seed(seed)
+
     ni, nl = y_proba.shape
     result = np.zeros_like(y_proba)
     all_labels = list(range(nl))

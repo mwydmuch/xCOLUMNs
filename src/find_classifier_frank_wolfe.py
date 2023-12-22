@@ -2,14 +2,24 @@ import numpy as np
 import torch
 from scipy.sparse import csr_matrix
 from utils_sparse import *
+from utils_misc import *
 from random import randint
 
 from typing import Union
 
 
+# Types
 FLOAT_TYPE = np.float32
 IND_TYPE = np.int32
+
+# Epsilon for division by zero
 EPS = 1e-6
+
+# Indexes of confusion matrix columns
+TP = 0
+FP = 1
+FN = 2
+TN = 3
 
 
 def select_top_k_csr(y_proba, G, k):
@@ -91,6 +101,7 @@ def calculate_confusion_matrix_csr(y_true, y_pred, C_shape):
     C[:, 1] = calculate_fp_csr(y_true, y_pred)
     C[:, 2] = calculate_fn_csr(y_true, y_pred)
     C = C / y_true.shape[0]
+    C[:, 3] = 1 - C[:, 0] - C[:, 1] - C[:, 2]
 
     return C
 
@@ -106,6 +117,7 @@ def calculate_confusion_matrix_np(y_true, y_pred, C_shape):
     C[:, 1] = np.sum(y_pred * (1 - y_true), axis=0)
     C[:, 2] = np.sum((1 - y_pred) * y_true, axis=0)
     C = C / y_true.shape[0]
+    C[:, 3] = 1 - C[:, 0] - C[:, 1] - C[:, 2]
 
     return C
 
@@ -125,19 +137,16 @@ def calculate_utility_with_gradient(fn, C):
     return float(utility), np.array(C.grad)
 
 
-def find_best_alpha(C, C_i, utility_func, search_step=0.001):
-    max_utility = 0
-    max_alpha = 0
-
-    for alpha in np.arange(0, 1, search_step):
-        new_C = (1 - alpha) * C + alpha * C_i
-        utility = calculate_utility(utility_func, new_C)
-
-        if utility > max_utility:
-            max_utility = utility
-            max_alpha = alpha
-
-    return max_alpha
+def find_best_alpha(C, C_i, utility_func, search_algo="lin", eps=0.001, lin_search_step=0.001):
+    func = lambda alpha: calculate_utility(utility_func, (1 - alpha) * C + alpha * C_i)
+    if search_algo == "lin":
+        return lin_search(0, 1, lin_search_step, func)
+    elif search_algo == "bin":
+        return bin_search(0, 1, eps, func)
+    elif search_algo == "ternary":
+        return ternary_search(0, 1, eps, func)
+    else:
+        raise ValueError(f"Unknown search algorithm {search_algo}")
 
 
 def find_classifier_frank_wolfe(
@@ -147,9 +156,11 @@ def find_classifier_frank_wolfe(
     max_iters: int = 20,
     init: str = "topk",
     k: int = 5,
-    use_best_alpha: bool = True,
+    search_for_best_alpha: bool = True,
     stop_on_alpha_zero: bool = True,
-    alpha_search_step: float = 0.001,
+    alpha_search_algo: str = "lin",
+    alpha_eps: float = 0.001,
+    alpha_lin_search_step: float = 0.001,
     verbose: bool = True,
     **kwargs,
 ):
@@ -210,8 +221,8 @@ def find_classifier_frank_wolfe(
         C_i = func_calculate_confusion_matrix(y_true, y_pred, C_shape=C_shape)
         utility_i = calculate_utility(utility_func, C_i)
 
-        if use_best_alpha:
-            alpha = find_best_alpha(C, C_i, utility_func, search_step=alpha_search_step)
+        if search_for_best_alpha:
+            alpha = find_best_alpha(C, C_i, utility_func, search_algo=alpha_search_algo, eps=alpha_eps, lin_search_step=alpha_lin_search_step)
         else:
             alpha = 2 / (i + 1)
         meta["alphas"].append(alpha)
@@ -226,8 +237,8 @@ def find_classifier_frank_wolfe(
         # log(f"  C_i matrix : {C_i}")
         # log(f"  new C matrix : {C}")
 
-        if alpha == 0 and stop_on_alpha_zero:
-            log("    alpha is 0, stopping")
+        if alpha < alpha_eps:
+            log(f"    alpha is < {alpha_eps}, stopping")
             classifiers = classifiers[:i]
             classifier_weights = classifier_weights[:i]
             break
@@ -336,13 +347,13 @@ def macro_f1_C(C, epsilon=EPS):
     return 2 * C[:, 0] / (2 * C[:, 0] + C[:, 1] + C[:, 2] + epsilon)
 
 
-def balanced_acc_C(C):
-    return (C[:, 0] / (C[:, 0] + C[:, 2])) * (C[:, 0] / (C[:, 0] + C[:, 1]))
+def balanced_accuracy_C(C):
+    return C[:, 0] / 2 / (C[:, 0] + C[:, 2]) + C[:, 3] / 2 / (C[:, 1] + C[:, 3])
 
 
 def mixed_instance_prec_macro_prec_C(C, alpha=0.001, epsilon=EPS):
-    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_precision_C(C)
+    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_precision_C(C, epsilon=epsilon)
 
 
 def mixed_instance_prec_macro_f1_C(C, alpha=0.9, epsilon=EPS):
-    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_f1_C(C)
+    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_f1_C(C, epsilon=epsilon)

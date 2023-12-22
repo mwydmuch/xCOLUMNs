@@ -1,10 +1,7 @@
 import numpy as np
 from scipy.sparse import csr_matrix
+from default_types import INT_TYPE, FLOAT_TYPE
 from numba import njit
-
-
-FLOAT_TYPE = np.float32
-INT_TYPE = np.int32
 
 
 def unpack_csr_matrix(matrix: csr_matrix):
@@ -47,6 +44,9 @@ def numba_first_k(ni, k):
 def numba_random_at_k(
     indices: np.ndarray, indptr: np.ndarray, ni: int, nl: int, k: int, seed: int = None
 ):
+    """
+    Selects k random labels for each instance.
+    """
     if seed is not None:
         np.random.seed(seed)
 
@@ -186,9 +186,6 @@ def numba_argtopk(data, indices, k):
     """
     Returns the indices of the top k elements
     """
-    # return indices[np.argsort(-data)[:k]]
-    # argpartition is faster than sort for large datasets, but not supported by Numba due to undefined behaviours
-    # To enable njit, we shoud implement our own argpartition (TODO)
     if data.size > k:
         top_k = indices[np.argpartition(-data, k)[:k]]
         top_k.sort()
@@ -290,7 +287,7 @@ def calculate_fn_csr(y_proba: csr_matrix, y_pred: csr_matrix):
 
 
 @njit
-def numba_balanced_accuracy(
+def numba_macro_balanced_accuracy(
     data: np.ndarray,
     indices: np.ndarray,
     indptr: np.ndarray,
@@ -299,6 +296,9 @@ def numba_balanced_accuracy(
     nl: int,
     k: int,
 ):
+    """
+    Predicts k labels for each instance according to the optimal strategy for macro-balanced accuracy.
+    """
     y_pred_data = np.ones(ni * k, dtype=FLOAT_TYPE)
     y_pred_indices = np.zeros(ni * k, dtype=INT_TYPE)
     y_pred_indptr = np.zeros(ni + 1, dtype=INT_TYPE)
