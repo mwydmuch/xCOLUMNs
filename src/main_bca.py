@@ -542,7 +542,7 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
         results_path = f"{output_path}_results.json"
         pred_path = f"{output_path}_pred.npz"
 
-        func[1]["include_meta"] = True  # Include meta data in results
+        func[1]["return_meta"] = True  # Include meta data in results
         if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
             results = {}
             if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:

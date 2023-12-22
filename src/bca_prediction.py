@@ -74,7 +74,8 @@ def bca_with_0approx_np(
     max_iter: int = 100,
     shuffle_order: bool = True,
     seed: int = None,
-    filename: str = None,
+    verbose: bool = False,
+    return_meta: bool = False,
     **kwargs,
 ):
     if seed is not None:
@@ -126,11 +127,12 @@ def bca_with_0approx_np(
         if new_utility <= old_utility + tolerance:
             break
 
-        if filename is not None:
-            save_npz(f"{filename}_pred_iter_{j}.npz", y_pred)
-
     meta["iters"] = j
-    return y_pred, meta
+
+    if return_meta:
+        return y_pred, meta
+    else:
+        return y_pred
 
 
 
@@ -156,12 +158,12 @@ def bca_with_0approx_csr_step(y_proba, y_pred, i, Etp, Efp, Efn, Etn, ni, k, uti
             r_data, r_indices, p_data, p_indices
         )
         Efp[indices] -= data
-        Efn[indices] += data
+        Etn[indices] += data
         data, indices = numba_sparse_vec_mul_ones_minus_vec(
             p_data, p_indices, r_data, r_indices
         )
         Efn[indices] -= data
-        Efp[indices] += data
+        Etn[indices] += data
 
     n_Etp = Etp[p_indices]
     n_Efp = Efp[p_indices]
@@ -223,7 +225,7 @@ def bca_with_0approx_csr(
     shuffle_order: bool = True,
     seed: int = None,
     verbose: bool = False,
-    filename: str = None,
+    return_meta: bool = False,
     **kwargs,
 ):
     if seed is not None:
@@ -242,7 +244,7 @@ def bca_with_0approx_csr(
             y_pred_data, y_pred_indices, y_pred_indptr, shape=(ni, nl), sort_indices=True
         )
     elif init_y_pred == "topk":
-        y_pred = predict_top_k(y_proba, k, include_meta=False)
+        y_pred = predict_top_k(y_proba, k, return_meta=False)
     else:
         y_pred = init_y_pred
     
@@ -267,31 +269,11 @@ def bca_with_0approx_csr(
             Efp = calculate_fp_csr(y_proba, y_pred)
             Efn = calculate_fn_csr(y_proba, y_pred)
             Etn = np.full(nl, ni, dtype=FLOAT_TYPE) - Etp - Efp - Efn  # All sum to ni
-        
-            assert Etp.shape == (nl,)
-            assert Efp.shape == (nl,)
-            assert Efn.shape == (nl,)
-            assert Etn.shape == (nl,)
-    
+
         old_utility = calculate_objective(Etp / ni, Efp / ni, Efn / ni, Etn / ni, utility_func, utility_aggregation_func)
 
-        for i in tqdm(order):
-            # print(y_pred[i], y_pred[i].shape)
-            # print("---")
+        for i in tqdm(order, disable=verbose):
             bca_with_0approx_csr_step(y_proba, y_pred, i, Etp, Efp, Efn, Etn, ni, k, utility_func, greedy=(greedy_start and j == 0))
-            # print(y_pred[i], y_pred[i].shape)
-            # print("---")
-            # input()
-
-        assert Etp.shape == (nl,)
-        assert Efp.shape == (nl,)
-        assert Efn.shape == (nl,)
-        assert Etn.shape == (nl,)
-
-        Etp = calculate_tp_csr(y_proba, y_pred)
-        Efp = calculate_fp_csr(y_proba, y_pred)
-        Efn = calculate_fn_csr(y_proba, y_pred)
-        Etn = np.full(nl, ni, dtype=FLOAT_TYPE) - Etp - Efp - Efn  # All sum to ni
 
         new_utility = calculate_objective(Etp / ni, Efp / ni, Efn / ni, Etn / ni, utility_func, utility_aggregation_func)
         meta["utilities"].append(new_utility)
@@ -301,11 +283,12 @@ def bca_with_0approx_csr(
         if new_utility <= old_utility + tolerance:
             break
 
-        if filename is not None:
-            save_npz(f"{filename}_pred_iter_{j}.npz", y_pred)
-
     meta["iters"] = j
-    return y_pred, meta
+    
+    if return_meta:
+        return y_pred, meta
+    else:
+        return y_pred
 
 
 def bca_with_0approx(
@@ -318,7 +301,8 @@ def bca_with_0approx(
     max_iter: int = 100,
     shuffle_order: bool = True,
     seed: int = None,
-    filename: str = None,
+    verbose: bool = False,
+    return_meta: bool = False,
     **kwargs,
 ):
     """
@@ -340,7 +324,8 @@ def bca_with_0approx(
             max_iter=max_iter,
             shuffle_order=shuffle_order,
             seed=seed,
-            filename=filename,
+            verbose=verbose,
+            return_meta=return_meta,
             **kwargs,
         )
     elif isinstance(y_proba, csr_matrix):
@@ -355,7 +340,8 @@ def bca_with_0approx(
             max_iter=max_iter,
             shuffle_order=shuffle_order,
             seed=seed,
-            filename=filename,
+            verbose=verbose,
+            return_meta=return_meta,
             **kwargs,
         )
     else:
