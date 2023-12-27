@@ -1,0 +1,97 @@
+# Package ######################################################################
+
+[build-system]
+requires = ["setuptools >= 61.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "columns"
+description = "A small library for Consistent Optimization of Label-wise Utilites in Multi-label clasifficatioN"
+readme = "README.md"
+requires-python = ">= 3.8"
+authors = [{ name = "Marek Wydmuch, Erik Schultheis, Wojciech Kotłowski, Rohit Babbar, Krzysztof Dembczyński", email = "mwydmuch@cs.put.poznan.pl" }]
+license = { text = "MIT License" }
+keywords = [
+    "machine learning", 
+    "multi-label classification", 
+    "performance metrics",
+    "label-wise utilities", 
+    "classification metrics", 
+    "macro-measures", 
+    "optimization"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",  # change to `5 - Production/Stable` when ready
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "numba>=0.58.0",
+    "click",
+    "torch",
+    "tqdm",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/mwydmuch/luo"
+Repository = "https://github.com/mwydmuch/luo"
+Documentation = "https://github.com/mwydmuch/luo"
+"Bug Report" = "https://github.com/mwydmuch/luo/issues"
+
+[tool.setuptools.packages.find]
+include = ["luo", "luo.*"]
+
+
+# Linters and Test tools #######################################################
+
+[tool.black]
+safe = true
+
+[tool.isort]
+atomic = true
+profile = "black"
+src_paths = ["gymnasium", "tests", "docs/_scripts"]
+extra_standard_library = ["typing_extensions"]
+indent = 4
+lines_after_imports = 2
+multi_line_output = 3
+
+[tool.pyright]
+include = ["luo/**", "tests/**"]
+exclude = ["**/__pycache__"]
+strict = []
+
+typeCheckingMode = "basic"
+pythonVersion = "3.8"
+pythonPlatform = "All"
+typeshedPath = "typeshed"
+enableTypeIgnoreComments = true
+
+# This is required as the CI pre-commit does not download the module (i.e. numpy)
+#   Therefore, we have to ignore missing imports
+reportMissingImports = "none"
+# Some modules are missing type stubs, which is an issue when running pyright locally
+reportMissingTypeStubs = false
+# For warning and error, will raise an error when
+reportInvalidTypeVarUse = "none"
+
+# reportUnknownMemberType = "warning"  # -> raises 6035 warnings
+# reportUnknownParameterType = "warning"  # -> raises 1327 warnings
+# reportUnknownVariableType = "warning"  # -> raises 2585 warnings
+# reportUnknownArgumentType = "warning"  # -> raises 2104 warnings
+reportGeneralTypeIssues = "none"  # -> commented out raises 489 errors
+# reportUntypedFunctionDecorator = "none"  # -> pytest.mark.parameterize issues
+
+reportPrivateUsage = "warning"
+reportUnboundVariable = "warning"
