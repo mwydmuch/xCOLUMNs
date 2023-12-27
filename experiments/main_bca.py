@@ -1,10 +1,12 @@
 import numpy as np
 
-from metrics import *
 from data import *
-from weighted_prediction import *
-from bca_prediction import *
-from utils_misc import *
+
+from columns.metrics import *
+from columns.weighted_prediction import *
+from columns.block_coordinate import *
+from columns.online_block_coordinate import *
+from columns.utils_misc import *
 
 import sys
 import click
@@ -25,9 +27,11 @@ METRICS = {
 }
 
 METHODS = {
+    "pu-through-etu-macro-f1": (pu_through_etu_macro_f1, {}),
     # Instance-wise measures / baselines
     # "random": (predict_random_at_k,{}),
     "optimal-instance-prec": (predict_for_optimal_instance_precision, {}),
+    "block-coord-instance-prec": (block_coordinate_instance_precision_at_k, {}),
     "optimal-instance-ps-prec": (inv_propensity_weighted_instance, {}),
     #"power-law-with-beta=0.875": (power_law_weighted_instance, {"beta": 0.875}),
     "power-law-with-beta=0.75": (power_law_weighted_instance, {"beta": 0.75}),
@@ -36,7 +40,7 @@ METHODS = {
     #"power-law-with-beta=0.125": (power_law_weighted_instance, {"beta": 0.125}),
     "log": (predict_log_weighted_per_instance, {}),
     "optimal-macro-recall": (predict_for_optimal_macro_recall, {}),
-
+   
     # Block coordinate with default paramters - commented out because it better to use variatns with specific tolerance to stoping condition
     # "block-coord-macro-prec": (block_coordinate_macro_precision, {}),
     # "block-coord-macro-recall": (block_coordinate_macro_recall, {}),
@@ -530,8 +534,9 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
     print(f"eta_pred: type={type(eta_pred)}, shape={eta_pred.shape}")
 
     # Convert to array to check if it gives the same results
-    # y_true = y_true.toarray()
-    # eta_pred = eta_pred.toarray()
+    y_true = y_true.toarray()
+    eta_pred = eta_pred.toarray()
+    train_y_true = train_y_true.toarray()
 
     output_path_prefix = f"results_bca2/{experiment}/"
     os.makedirs(output_path_prefix, exist_ok=True)
@@ -543,6 +548,7 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
         pred_path = f"{output_path}_pred.npz"
 
         func[1]["return_meta"] = True  # Include meta data in results
+        func[1]["gt_valid"] = train_y_true
         if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
             results = {}
             if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:

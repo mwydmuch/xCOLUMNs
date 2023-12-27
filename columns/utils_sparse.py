@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.sparse import csr_matrix
-from default_types import INT_TYPE, FLOAT_TYPE
 from numba import njit
+
+from .default_types import INT_TYPE, FLOAT_TYPE
 
 
 def unpack_csr_matrix(matrix: csr_matrix):

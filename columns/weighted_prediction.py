@@ -3,7 +3,8 @@ from scipy.sparse import csr_matrix
 from utils_sparse import *
 from typing import Union
 from time import time
-from default_types import FLOAT_TYPE, INT_TYPE
+
+from .default_types import FLOAT_TYPE, INT_TYPE
 
 
 MARGINALS_EPS = 1e-6

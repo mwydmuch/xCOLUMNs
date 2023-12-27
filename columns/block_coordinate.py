@@ -1,12 +1,13 @@
 import numpy as np
 from scipy.sparse import csr_matrix, load_npz, save_npz
 from tqdm import tqdm, trange
-from weighted_prediction import predict_top_k
-from utils_sparse import *
-from utils_misc import *
-from utils_dense import *
 from typing import Union
-from default_types import FLOAT_TYPE, INT_TYPE
+
+from .weighted_prediction import predict_top_k
+from .utils_sparse import *
+from .utils_misc import *
+from .utils_dense import *
+from .default_types import FLOAT_TYPE, INT_TYPE
 
 
 # Enable slow (without use of specialized numba functions) but still memory efficient implementation (for debugging)
@@ -14,7 +15,7 @@ SLOW = False
 EPS = 1e-6
 
 
-def get_utility_aggregation_func(utility_aggregation: str):
+def _get_utility_aggregation_func(utility_aggregation: str):
     if utility_aggregation == "mean":
         return np.mean
     elif utility_aggregation == "sum":
@@ -23,14 +24,25 @@ def get_utility_aggregation_func(utility_aggregation: str):
         raise ValueError(f"Unsupported utility aggregation function: {utility_aggregation}, must be either 'mean' or 'sum'")
     
 
-def calculate_objective(Etp, Efp, Efn, Etn, utility_func, utility_aggregation_func):
-    if callable(utility_func):
-        return utility_aggregation_func(utility_func(Etp, Efp, Efn, Etn))
+def _calculate_utility(Etp, Efp, Efn, Etn, bin_utility_func, utility_aggregation_func):
+    if callable(bin_utility_func):
+        return utility_aggregation_func(bin_utility_func(Etp, Efp, Efn, Etn))
     else:
-        return utility_aggregation_func([f(Etp, Efp, Efn, Etn) for f in utility_func])
+        return utility_aggregation_func([f(Etp, Efp, Efn, Etn) for f in bin_utility_func])
     
 
-def bca_with_0approx_np_step(y_proba_i, y_pred_i, Etp, Efp, Efn, Etn, ni, k, utility_func, greedy = False):
+def _calculate_binary_utilities(bin_utility_func, p_Etp, p_Efp, p_Efn, p_Etn, n_Etp, n_Efp, n_Efn, n_Etn):
+    if callable(bin_utility_func):
+        p_utility = bin_utility_func(p_Etp, p_Efp, p_Efn, p_Etn)
+        n_utility = bin_utility_func(n_Etp, n_Efp, n_Efn, n_Etn)
+    else:
+        p_utility = np.array([f(p_Etp[i], p_Efp[i], p_Efn[i], p_Etn[i]) for i, f in enumerate(bin_utility_func)])
+        n_utility = np.array([f(n_Etp[i], n_Efp[i], n_Efn[i], n_Etn[i]) for f in bin_utility_func])
+
+    return p_utility - n_utility
+    
+
+def bc_with_0approx_np_step(y_proba_i, y_pred_i, Etp, Efp, Efn, Etn, ni, k, bin_utility_func, greedy = False, maximize=True):
     # Adjust local confusion matrix
     if not greedy:
         Etp -= y_pred_i * y_proba_i
@@ -43,14 +55,13 @@ def bca_with_0approx_np_step(y_proba_i, y_pred_i, Etp, Efp, Efn, Etn, ni, k, uti
     Efpp = Efp + (1 - y_proba_i)
     Efnn = Efn + y_proba_i
     Etnn = Etn + (1 - y_proba_i)
-    if callable(utility_func):
-        p_utility = utility_func(Etpp / ni, Efpp / ni, Efn / ni, Etn / ni)
-        n_utility = utility_func(Etp / ni, Efp / ni, Efnn / ni, Etnn / ni)
-    else:
-        p_utility = np.array([f(Etpp / ni, Efpp / ni, Efn / ni, Etn / ni) for f in utility_func])
-        n_utility = np.array([f(Etp / ni, Efp / ni, Efnn / ni, Etnn / ni) for f in utility_func])
-    gains = p_utility - n_utility
-    top_k = np.argpartition(-gains, k)[:k]
+    
+    gains = _calculate_binary_utilities(bin_utility_func, Etpp / ni, Efpp / ni, Efn / ni, Etn / ni, Etp / ni, Efp / ni, Efnn / ni, Etnn / ni)
+
+    if maximize:
+        gains = -gains
+    
+    top_k = np.argpartition(gains, k)[:k]
 
     # Update prediction
     y_pred_i[:] = 0.0
@@ -63,16 +74,17 @@ def bca_with_0approx_np_step(y_proba_i, y_pred_i, Etp, Efp, Efn, Etn, ni, k, uti
     Etn += (1 - y_pred_i) * (1 - y_proba_i)
 
 
-def bca_with_0approx_np(
+def bc_with_0approx_np(
     y_proba: np.ndarray,
     k: int,
-    utility_func: Union[callable, list[callable]],
-    utility_aggregation: str = "mean",  # "mean" or "sum"
+    bin_utility_func: Union[callable, list[callable]],
+    utility_aggregation: str = "sum",  # "mean" or "sum"
     greedy_start=False,
     tolerance: float = 1e-6,
-    init_y_pred: Union[str, np.ndarray] ="random",  # "random", "topk", or np.ndarray
+    init_y_pred: Union[str, np.ndarray] = "random",  # "random", "topk", or np.ndarray
     max_iter: int = 100,
     shuffle_order: bool = True,
+    maximize=True,
     seed: int = None,
     verbose: bool = False,
     return_meta: bool = False,
@@ -81,10 +93,11 @@ def bca_with_0approx_np(
     if seed is not None:
         np.random.seed(seed)
 
-    utility_aggregation_func = get_utility_aggregation_func(utility_aggregation)
+    utility_aggregation_func = _get_utility_aggregation_func(utility_aggregation)
 
     ni, nl = y_proba.shape
 
+    # TODO: Refactor
     # Initialize the prediction variable with some feasible value
     if init_y_pred == "random":
         y_pred = predict_random_at_k(y_proba, k)
@@ -113,12 +126,12 @@ def bca_with_0approx_np(
             Efn = np.sum((1 - y_pred) * y_proba, axis=0)
             Etn = np.full(nl, ni, dtype=FLOAT_TYPE) - Etp - Efp - Efn  # All sum to ni
 
-        old_utility = calculate_objective(Etp / ni, Efp / ni, Efn / ni, Etn / ni, utility_func, utility_aggregation_func)
+        old_utility = _calculate_utility(Etp / ni, Efp / ni, Efn / ni, Etn / ni, bin_utility_func, utility_aggregation_func)
 
         for i in order:
-            bca_with_0approx_np_step(y_proba[i, :], y_pred[i, :], Etp, Efp, Efn, Etn, ni, k, utility_func, greedy=(greedy_start and j == 0))
+            bc_with_0approx_np_step(y_proba[i, :], y_pred[i, :], Etp, Efp, Efn, Etn, ni, k, bin_utility_func, greedy=(greedy_start and j == 0), maximize=maximize)
             
-        new_utility = calculate_objective(Etp / ni, Efp / ni, Efn / ni, Etn / ni, utility_func, utility_aggregation_func)
+        new_utility = _calculate_utility(Etp / ni, Efp / ni, Efn / ni, Etn / ni, bin_utility_func, utility_aggregation_func)
 
         meta["utilities"].append(new_utility)
         print(
@@ -136,7 +149,7 @@ def bca_with_0approx_np(
 
 
 
-def bca_with_0approx_csr_step(y_proba, y_pred, i, Etp, Efp, Efn, Etn, ni, k, utility_func, greedy=False):
+def bc_with_0approx_csr_step(y_proba, y_pred, i, Etp, Efp, Efn, Etn, ni, k, bin_utility_func, greedy=False, maximize=True):
     r_start, r_end = y_pred.indptr[i], y_pred.indptr[i + 1]
     p_start, p_end = y_proba.indptr[i], y_proba.indptr[i + 1]
 
@@ -176,18 +189,15 @@ def bca_with_0approx_csr_step(y_proba, y_pred, i, Etp, Efp, Efn, Etn, ni, k, uti
     n_Etnn = Etn[p_indices] + (1 - p_data)
 
     # Calculate gain and selection
-    if callable(utility_func):
-        p_utility = utility_func(p_Etpp / ni, p_Efpp / ni, p_Efn / ni, p_Etn / ni)
-        n_utility = utility_func(n_Etp / ni, n_Efp / ni, n_Efnn / ni, n_Etnn / ni)
-    else:
-        p_utility = np.array([f(p_Etpp / ni, p_Efpp / ni, p_Efn / ni, p_Etn / ni) for f in utility_func])
-        n_utility = np.array([f(n_Etp / ni, n_Efp / ni, n_Efnn / ni, n_Etnn / ni) for f in utility_func])
-
-    # Update select labels with highest gain and update prediction
-    gains = p_utility - n_utility
+    gains = _calculate_binary_utilities(bin_utility_func, p_Etpp / ni, p_Efpp / ni, p_Efn / ni, p_Etn / ni, n_Etp / ni, n_Efp / ni, n_Efnn / ni, n_Etnn / ni)
     gains = np.asarray(gains).ravel()
+
+    if maximize:
+        gains = -gains
+
+    # Update select labels with the best gain and update prediction
     if gains.size > k:
-        top_k = np.argpartition(-gains, k)[:k]
+        top_k = np.argpartition(gains, k)[:k]
         y_pred.indices[r_start:r_end] = sorted(p_indices[top_k])
     else:
         p_indices = np.resize(p_indices, k)
@@ -213,16 +223,17 @@ def bca_with_0approx_csr_step(y_proba, y_pred, i, Etp, Efp, Efn, Etn, ni, k, uti
     Etn[indices] -= data
     
 
-def bca_with_0approx_csr(
+def bc_with_0approx_csr(
     y_proba: csr_matrix,
     k: int,
-    utility_func: Union[callable, list[callable]],
-    utility_aggregation: str = "mean",  # "mean" or "sum"
+    bin_utility_func: Union[callable, list[callable]],
+    utility_aggregation: str = "sum",  # "mean" or "sum"
     greedy_start=False,
     tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray] = "random",  # "random", "topk", or np.ndarray
     max_iter: int = 100,
     shuffle_order: bool = True,
+    maximize=True,
     seed: int = None,
     verbose: bool = False,
     return_meta: bool = False,
@@ -231,10 +242,11 @@ def bca_with_0approx_csr(
     if seed is not None:
         np.random.seed(seed)
 
-    utility_aggregation_func = get_utility_aggregation_func(utility_aggregation)
+    utility_aggregation_func = _get_utility_aggregation_func(utility_aggregation)
 
     ni, nl = y_proba.shape
 
+    # TODO: Refactor
     # Initialize the prediction variable with some feasible value
     if init_y_pred == "random":
         y_pred_data, y_pred_indices, y_pred_indptr = numba_random_at_k(
@@ -270,12 +282,12 @@ def bca_with_0approx_csr(
             Efn = calculate_fn_csr(y_proba, y_pred)
             Etn = np.full(nl, ni, dtype=FLOAT_TYPE) - Etp - Efp - Efn  # All sum to ni
 
-        old_utility = calculate_objective(Etp / ni, Efp / ni, Efn / ni, Etn / ni, utility_func, utility_aggregation_func)
+        old_utility = _calculate_utility(Etp / ni, Efp / ni, Efn / ni, Etn / ni, bin_utility_func, utility_aggregation_func)
 
         for i in tqdm(order, disable=verbose):
-            bca_with_0approx_csr_step(y_proba, y_pred, i, Etp, Efp, Efn, Etn, ni, k, utility_func, greedy=(greedy_start and j == 0))
+            bc_with_0approx_csr_step(y_proba, y_pred, i, Etp, Efp, Efn, Etn, ni, k, bin_utility_func, greedy=(greedy_start and j == 0), maximize=maximize)
 
-        new_utility = calculate_objective(Etp / ni, Efp / ni, Efn / ni, Etn / ni, utility_func, utility_aggregation_func)
+        new_utility = _calculate_utility(Etp / ni, Efp / ni, Efn / ni, Etn / ni, bin_utility_func, utility_aggregation_func)
         meta["utilities"].append(new_utility)
         print(
             f"  Iteration {j} finished, expected score: {old_utility} -> {new_utility}"
@@ -291,10 +303,11 @@ def bca_with_0approx_csr(
         return y_pred
 
 
-def bca_with_0approx(
+def bc_with_0approx(
     y_proba: csr_matrix,
     k: int,
-    utility_func: Union[callable, list[callable]],
+    bin_utility_func: Union[callable, list[callable]],
+    utility_aggregation: str = "sum",  # "mean" or "sum"
     greedy_start=False,
     tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray] = "random",  # "random", "topk", or np.ndarray
@@ -314,10 +327,11 @@ def bca_with_0approx(
     """
     if isinstance(y_proba, np.ndarray):
         # Invoke implementation for dense matrices
-        return bca_with_0approx_np(
+        return bc_with_0approx_np(
             y_proba,
             k,
-            utility_func,
+            bin_utility_func,
+            utility_aggregation=utility_aggregation,
             greedy_start=greedy_start,
             tolerance=tolerance,
             init_y_pred=init_y_pred,
@@ -330,10 +344,11 @@ def bca_with_0approx(
         )
     elif isinstance(y_proba, csr_matrix):
         # Invoke implementation for sparse matrices
-        return bca_with_0approx_csr(
+        return bc_with_0approx_csr(
             y_proba,
             k,
-            utility_func,
+            bin_utility_func,
+            utility_aggregation=utility_aggregation,
             greedy_start=greedy_start,
             tolerance=tolerance,
             init_y_pred=init_y_pred,
@@ -350,7 +365,7 @@ def bca_with_0approx(
 
 # Implementations of specialized BCA for coverage measure
 
-def bca_coverage_np(
+def bc_coverage_np(
     y_proba: csr_matrix,
     k: int,
     alpha: float = 1,
@@ -416,7 +431,7 @@ def bca_coverage_np(
     return y_pred, meta
 
 
-def bca_coverage_csr(
+def bc_coverage_csr(
     y_proba: csr_matrix,
     k: int,
     alpha: float = 1,
@@ -521,7 +536,7 @@ def bca_coverage_csr(
     return y_pred, meta
 
 
-def bca_coverage(
+def bc_coverage(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     tolerance: float = 1e-6,
@@ -535,19 +550,27 @@ def bca_coverage(
     print(kwargs)
     if isinstance(y_proba, np.ndarray):
         # Invoke original dense implementation of Erik
-        return bca_coverage_np(
+        return bc_coverage_np(
             y_proba, k, tolerance=tolerance, max_iter=max_iter, seed=seed, **kwargs
         )
     elif isinstance(y_proba, csr_matrix):
         # Invoke implementation for sparse matrices
-        return bca_coverage_csr(
+        return bc_coverage_csr(
             y_proba, k, tolerance=tolerance, max_iter=max_iter, seed=seed, **kwargs
         )
     else:
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
 
 
+
 # Implementations of functions for optimizing specific measures
+
+def get_mixed_bin_utility_func(bin_utility_func1, bin_utility_func2, alpha, k):
+    def mixed_bin_utility_func(tp, fp, fn, tn):
+        return (1 - alpha) * bin_utility_func1(tp, fp, fn, tn) + alpha * bin_utility_func2(tp, fp, fn, tn)
+    
+    return mixed_bin_utility_func
+
 
 def instance_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k):
     return np.asarray(tp / k).ravel()
@@ -571,34 +594,44 @@ def macro_fmeasure_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=EPS):
         / (beta**2 * precision + recall + epsilon)
     )
 
+def block_coordinate_instance_precision_at_k(
+    y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs
+):
+    def instance_precision_with_k_fn(tp, fp, fn, tn):
+        return instance_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k)
+
+    return bc_with_0approx(
+        y_proba, k=k, bin_utility_func=instance_precision_with_k_fn, utility_aggregation="sum", **kwargs
+    )
+
 
 def block_coordinate_coverage(
     y_proba: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 1, **kwargs
 ):
-    return bca_coverage(y_proba, k=k, alpha=alpha, **kwargs)
+    return bc_coverage(y_proba, k=k, alpha=alpha, **kwargs)
 
 
 def block_coordinate_macro_precision(
     y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs
 ):
-    return bca_with_0approx(
-        y_proba, k=k, utility_func=macro_precision_on_conf_matrix, **kwargs
+    return bc_with_0approx(
+        y_proba, k=k, bin_utility_func=macro_precision_on_conf_matrix, **kwargs
     )
 
 
 def block_coordinate_macro_recall(
     y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs
 ):
-    return bca_with_0approx(
-        y_proba, k=k, utility_func=macro_recall_on_conf_matrix, **kwargs
+    return bc_with_0approx(
+        y_proba, k=k, bin_utility_func=macro_recall_on_conf_matrix, **kwargs
     )
 
 
 def block_coordinate_macro_f1(
     y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs
 ):
-    return bca_with_0approx(
-        y_proba, k=k, utility_func=macro_fmeasure_on_conf_matrix, **kwargs
+    return bc_with_0approx(
+        y_proba, k=k, bin_utility_func=macro_fmeasure_on_conf_matrix, **kwargs
     )
 
 
@@ -608,8 +641,8 @@ def block_coordinate_mixed_instance_prec_macro_prec(
     def mixed_precision_alpha_fn(tp, fp, fn, tn):
         return (1 - alpha) * instance_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k) + alpha * macro_precision_on_conf_matrix(tp, fp, fn, tn)
 
-    return bca_with_0approx(
-        y_proba, k=k, utility_func=mixed_precision_alpha_fn, **kwargs
+    return bc_with_0approx(
+        y_proba, k=k, bin_utility_func=mixed_precision_alpha_fn, **kwargs
     )
 
 
@@ -619,8 +652,8 @@ def block_coordinate_mixed_instance_prec_macro_f1(
     def mixed_precision_alpha_fn(tp, fp, fn, tn):
         return (1 - alpha) * instance_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k) + alpha * macro_fmeasure_on_conf_matrix(tp, fp, fn, tn)
 
-    return bca_with_0approx(
-        y_proba, k=k, utility_func=mixed_precision_alpha_fn, **kwargs
+    return bc_with_0approx(
+        y_proba, k=k, bin_utility_func=mixed_precision_alpha_fn, **kwargs
     )
 
 
@@ -630,7 +663,7 @@ def block_coordinate_mixed_instance_prec_macro_recall(
     def mixed_precision_alpha_fn(tp, fp, fn, tn):
         return (1 - alpha) * instance_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k) + alpha * macro_recall_on_conf_matrix(tp, fp, fn, tn)
 
-    return bca_with_0approx(
-        y_proba, k=k, utility_func=mixed_precision_alpha_fn, **kwargs
+    return bc_with_0approx(
+        y_proba, k=k, bin_utility_func=mixed_precision_alpha_fn, **kwargs
     )
 
