@@ -1,15 +1,14 @@
-import numpy as np
+import sys
 
+import click
+import numpy as np
 from data import *
 
-from columns.metrics import *
-from columns.weighted_prediction import *
 from columns.block_coordinate import *
+from columns.metrics import *
 from columns.online_block_coordinate import *
-from columns.utils_misc import *
+from columns.weighted_prediction import *
 
-import sys
-import click
 
 # TODO: refactor this
 RECALCULATE_RESUTLS = True
@@ -27,151 +26,76 @@ METRICS = {
 }
 
 METHODS = {
-    "pu-through-etu-macro-f1": (pu_through_etu_macro_f1, {}),
+    # "pu-through-etu-macro-f1": (pu_through_etu_macro_f1, {}),
+
     # Instance-wise measures / baselines
     # "random": (predict_random_at_k,{}),
     "optimal-instance-prec": (predict_for_optimal_instance_precision, {}),
-    "block-coord-instance-prec": (block_coordinate_instance_precision_at_k, {}),
+    "block-coord-instance-prec": (bc_instance_precision_at_k, {}),
     "optimal-instance-ps-prec": (inv_propensity_weighted_instance, {}),
-    #"power-law-with-beta=0.875": (power_law_weighted_instance, {"beta": 0.875}),
+    # "power-law-with-beta=0.875": (power_law_weighted_instance, {"beta": 0.875}),
     "power-law-with-beta=0.75": (power_law_weighted_instance, {"beta": 0.75}),
     "power-law-with-beta=0.5": (power_law_weighted_instance, {"beta": 0.5}),
     "power-law-with-beta=0.25": (power_law_weighted_instance, {"beta": 0.25}),
-    #"power-law-with-beta=0.125": (power_law_weighted_instance, {"beta": 0.125}),
+    # "power-law-with-beta=0.125": (power_law_weighted_instance, {"beta": 0.125}),
     "log": (predict_log_weighted_per_instance, {}),
     "optimal-macro-recall": (predict_for_optimal_macro_recall, {}),
-   
-    # Block coordinate with default paramters - commented out because it better to use variatns with specific tolerance to stoping condition
-    # "block-coord-macro-prec": (block_coordinate_macro_precision, {}),
-    # "block-coord-macro-recall": (block_coordinate_macro_recall, {}),
-    # "block-coord-macro-f1": (block_coordinate_macro_f1, {}),
-    # "block-coord-cov": (block_coordinate_coverage, {}),
-    
-    # Mixed precision
-    "block-coord-mixed-prec-prec-alpha=0.1-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.1, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.03162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.03162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.01-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.01, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.001, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.0003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.0003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.0001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.0001, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.00003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.00003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.00001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.00001, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.000003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.000003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.000001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.000001, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.0000003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.0000003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.0000001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.0000001, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.00000003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.00000003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-prec-alpha=0.00000001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.00000001, "tolerance": 1e-7}),
 
-    # Greedy mixed precision 
-    # "greedy-mixed-prec-prec-alpha=0.01": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.01, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-prec-alpha=0.003162": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.003162, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-prec-alpha=0.001": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.001, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-prec-alpha=0.0003162": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.0003162, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-prec-alpha=0.0001": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.0001, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-prec-alpha=0.00003162": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.00003162, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-prec-alpha=0.00001": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.00001, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-prec-alpha=0.000003162": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.000003162, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-prec-alpha=0.000001": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.000001, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-prec-alpha=0.0000003162": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.0000003162, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-prec-alpha=0.0000001": (block_coordinate_mixed_instance_prec_macro_prec,{"alpha": 0.0000001, "greedy_start": True, "max_iter": 1}),
-   
-    # Mixed precision with macro f1
-    "block-coord-mixed-prec-f1-alpha=0.01-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.01, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-f1-alpha=0.003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-f1-alpha=0.001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.001, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-f1-alpha=0.0003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.0003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-f1-alpha=0.0001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.0001, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-f1-alpha=0.00003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.00003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-f1-alpha=0.00001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.00001, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-f1-alpha=0.000003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.000003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-f1-alpha=0.000001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.000001, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-f1-alpha=0.0000003162-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.0000003162, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-f1-alpha=0.0000001-tol=1e-7": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.0000001, "tolerance": 1e-7}),
-
-    # Greedy mixed precision with macro f1
-    # "greedy-mixed-prec-f1-alpha=0.01": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.01, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-f1-alpha=0.003162": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.003162, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-f1-alpha=0.001": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.001, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-f1-alpha=0.0003162": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.0003162, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-f1-alpha=0.0001": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.0001, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-f1-alpha=0.00003162": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.00003162, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-f1-alpha=0.00001": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.00001, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-f1-alpha=0.000003162": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.000003162, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-f1-alpha=0.000001": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.000001, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-f1-alpha=0.0000003162": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.0000003162, "greedy_start": True, "max_iter": 1}),
-    # "greedy-mixed-prec-f1-alpha=0.0000001": (block_coordinate_mixed_instance_prec_macro_f1,{"alpha": 0.0000001, "greedy_start": True, "max_iter": 1}),
+    # Block coordinate with default parameters - commented out because it better to use variatns with specific tolerance to stopping condition
+    # "block-coord-macro-prec": (bc_macro_precision, {}),
+    # "block-coord-macro-recall": (bc_macro_recall, {}),
+    # "block-coord-macro-f1": (bc_macro_f1, {}),
+    # "block-coord-cov": (bc_coverage, {}),
     
     # Greedy / 1 iter variants
-    "greedy-macro-prec": (block_coordinate_macro_precision, {"greedy_start": True, "max_iter": 1}),
-    "greedy-macro-recall": (block_coordinate_macro_precision, {"greedy_start": True, "max_iter": 1}),
-    "greedy-macro-f1": (block_coordinate_macro_f1, {"greedy_start": True, "max_iter": 1}),
-    "greedy-cov": (block_coordinate_coverage, {"greedy_start": True, "max_iter": 1}),
-    "block-coord-macro-prec-iter=1": (block_coordinate_macro_precision, {"max_iter": 1}),
-    "block-coord-macro-recall-iter=1": (block_coordinate_macro_precision, {"max_iter": 1}),
-    "block-coord-macro-f1-iter=1": (block_coordinate_macro_f1, {"max_iter": 1}),
-    "block-coord-cov-iter=1": (block_coordinate_coverage, {"max_iter": 1}),
-    "greedy-start-block-coord-macro-prec": (block_coordinate_macro_precision, {"greedy_start": True}),
-    "greedy-start-block-coord-macro-recall": (block_coordinate_macro_f1, {"greedy_start": True}),
-    "greedy-start-block-coord-macro-f1": (block_coordinate_macro_f1, {"greedy_start": True}),
-    "greedy-start-block-coord-cov": (block_coordinate_coverage, {"greedy_start": True}),
+    "greedy-macro-prec": (bc_macro_precision, {"init_y_pred": "greedy", "max_iter": 1}),
+    "greedy-macro-recall": (bc_macro_precision, {"init_y_pred": "greedy", "max_iter": 1}),
+    "greedy-macro-f1": (bc_macro_f1, {"init_y_pred": "greedy", "max_iter": 1}),
+    "greedy-cov": (bc_coverage, {"init_y_pred": "greedy", "max_iter": 1}),
+    "block-coord-macro-prec-iter=1": (bc_macro_precision, {"max_iter": 1}),
+    "block-coord-macro-recall-iter=1": (bc_macro_precision, {"max_iter": 1}),
+    "block-coord-macro-f1-iter=1": (bc_macro_f1, {"max_iter": 1}),
+    "block-coord-cov-iter=1": (bc_coverage, {"max_iter": 1}),
+    "greedy-start-block-coord-macro-prec": (bc_macro_precision, {"init_y_pred": "greedy"}),
+    "greedy-start-block-coord-macro-recall": (bc_macro_f1, {"init_y_pred": "greedy"}),
+    "greedy-start-block-coord-macro-f1": (bc_macro_f1, {"init_y_pred": "greedy"}),
+    "greedy-start-block-coord-cov": (bc_coverage, {"init_y_pred": "greedy"}),
 
     # Tolerance on stopping condiction experiments
-    #"block-coord-macro-prec-tol=1e-1": (block_coordinate_macro_precision, {"tolerance": 1e-1}),
-    #"block-coord-macro-prec-tol=1e-2": (block_coordinate_macro_precision, {"tolerance": 1e-2}),
-    "block-coord-macro-prec-tol=1e-3": (block_coordinate_macro_precision, {"tolerance": 1e-3}),
-    "block-coord-macro-prec-tol=1e-4": (block_coordinate_macro_precision, {"tolerance": 1e-4}),
-    "block-coord-macro-prec-tol=1e-5": (block_coordinate_macro_precision,{"tolerance": 1e-5}),
-    "block-coord-macro-prec-tol=1e-6": (block_coordinate_macro_precision,{"tolerance": 1e-6}),
-    "block-coord-macro-prec-tol=1e-7": (block_coordinate_macro_precision,{"tolerance": 1e-7}),
-    #"block-coord-macro-prec-tol=1e-8": (block_coordinate_macro_precision,{"tolerance": 1e-8}),
-    
-    #"block-coord-macro-recall-tol=1e-1": (block_coordinate_macro_recall,{"tolerance": 1e-1}),
-    #"block-coord-macro-recall-tol=1e-2": (block_coordinate_macro_recall,{"tolerance": 1e-2}),
-    "block-coord-macro-recall-tol=1e-3": (block_coordinate_macro_recall,{"tolerance": 1e-3}),
-    "block-coord-macro-recall-tol=1e-4": (block_coordinate_macro_recall,{"tolerance": 1e-4}),
-    "block-coord-macro-recall-tol=1e-5": (block_coordinate_macro_recall,{"tolerance": 1e-5}),
-    "block-coord-macro-recall-tol=1e-6": (block_coordinate_macro_recall,{"tolerance": 1e-6}),
-    "block-coord-macro-recall-tol=1e-7": (block_coordinate_macro_recall,{"tolerance": 1e-7}),
-    #"block-coord-macro-recall-tol=1e-8": (block_coordinate_macro_recall,{"tolerance": 1e-8}),
-    
-    #"block-coord-macro-f1-tol=1e-1": (block_coordinate_macro_f1,{"tolerance": 1e-1}),
-    #"block-coord-macro-f1-tol=1e-2": (block_coordinate_macro_f1,{"tolerance": 1e-2}),
-    "block-coord-macro-f1-tol=1e-3": (block_coordinate_macro_f1,{"tolerance": 1e-3}),
-    "block-coord-macro-f1-tol=1e-4": (block_coordinate_macro_f1,{"tolerance": 1e-4}),
-    "block-coord-macro-f1-tol=1e-5": (block_coordinate_macro_f1,{"tolerance": 1e-5}),
-    "block-coord-macro-f1-tol=1e-6": (block_coordinate_macro_f1,{"tolerance": 1e-6}),
-    "block-coord-macro-f1-tol=1e-7": (block_coordinate_macro_f1,{"tolerance": 1e-7}),
-    #"block-coord-macro-f1-tol=1e-8": (block_coordinate_macro_f1,{"tolerance": 1e-8}),
-    
+    "block-coord-macro-prec-tol=1e-3": (bc_macro_precision, {"tolerance": 1e-3}),
+    "block-coord-macro-prec-tol=1e-4": (bc_macro_precision, {"tolerance": 1e-4}),
+    "block-coord-macro-prec-tol=1e-5": (bc_macro_precision, {"tolerance": 1e-5}),
+    "block-coord-macro-prec-tol=1e-6": (bc_macro_precision, {"tolerance": 1e-6}),
+    "block-coord-macro-prec-tol=1e-7": (bc_macro_precision, {"tolerance": 1e-7}),
 
-    #"block-coord-cov-tol=1e-1": (block_coordinate_coverage,{"tolerance": 1e-1}),
-    #"block-coord-cov-tol=1e-2": (block_coordinate_coverage,{"tolerance": 1e-2}),
-    "block-coord-cov-tol=1e-3": (block_coordinate_coverage,{"tolerance": 1e-3}),
-    "block-coord-cov-tol=1e-4": (block_coordinate_coverage,{"tolerance": 1e-4}),
-    "block-coord-cov-tol=1e-5": (block_coordinate_coverage,{"tolerance": 1e-5}),
-    "block-coord-cov-tol=1e-6": (block_coordinate_coverage,{"tolerance": 1e-6}),
-    "block-coord-cov-tol=1e-7": (block_coordinate_coverage,{"tolerance": 1e-7}),
-    #"block-coord-cov-tol=1e-8": (block_coordinate_coverage,{"tolerance": 1e-8}),
+    # For recall all should be the same
+    "block-coord-macro-recall-tol=1e-3": (bc_macro_recall, {"tolerance": 1e-3}),
+    "block-coord-macro-recall-tol=1e-4": (bc_macro_recall, {"tolerance": 1e-4}),
+    "block-coord-macro-recall-tol=1e-5": (bc_macro_recall, {"tolerance": 1e-5}),
+    "block-coord-macro-recall-tol=1e-6": (bc_macro_recall, {"tolerance": 1e-6}),
+    "block-coord-macro-recall-tol=1e-7": (bc_macro_recall, {"tolerance": 1e-7}),
 
-    # Mixed precision with cov
-    "block-coord-mixed-prec-cov-alpha=0.001-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.001, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.01-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.01, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.05-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.05, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.1-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.1, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.2-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.2, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.3-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.3, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.4-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.4, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.5-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.5, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.6-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.6, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.7-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.7, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.8-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.8, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.9-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.9, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.95-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.95, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.99-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.99, "tolerance": 1e-7}),
-    "block-coord-mixed-prec-cov-alpha=0.999-tol=1e-7": (block_coordinate_coverage,{"alpha": 0.999, "tolerance": 1e-7}),
+    "block-coord-macro-f1-tol=1e-3": (bc_macro_f1, {"tolerance": 1e-3}),
+    "block-coord-macro-f1-tol=1e-4": (bc_macro_f1, {"tolerance": 1e-4}),
+    "block-coord-macro-f1-tol=1e-5": (bc_macro_f1, {"tolerance": 1e-5}),
+    "block-coord-macro-f1-tol=1e-6": (bc_macro_f1, {"tolerance": 1e-6}),
+    "block-coord-macro-f1-tol=1e-7": (bc_macro_f1, {"tolerance": 1e-7}),
+    
+    "block-coord-cov-tol=1e-3": (bc_coverage, {"tolerance": 1e-3}),
+    "block-coord-cov-tol=1e-4": (bc_coverage, {"tolerance": 1e-4}),
+    "block-coord-cov-tol=1e-5": (bc_coverage, {"tolerance": 1e-5}),
+    "block-coord-cov-tol=1e-6": (bc_coverage, {"tolerance": 1e-6}),
+    "block-coord-cov-tol=1e-7": (bc_coverage, {"tolerance": 1e-7}),
+    "block-coord-cov-1": (bc_coverage, {"tolerance": 1e-7}),
+    "block-coord-cov-2": (bc_coverage2, {"tolerance": 1e-7}),
 }
+
+# Add variants with different alpha for mixed utilities
+alphas = [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
+for alpha in alphas:
+    METHODS[f"block-coord-mixed-prec-f1-alpha={alpha}-tol=1e-7"] = (bc_mixed_instance_prec_macro_f1, {"alpha": alpha, "tolerance": 1e-7})
+    METHODS[f"block-coord-mixed-prec-prec-alpha={alpha}-tol=1e-7"] = (bc_mixed_instance_prec_macro_prec, {"alpha": alpha, "tolerance": 1e-7})
+    METHODS[f"block-coord-mixed-prec-cov-alpha={alpha}-tol=1e-7"] = (bc_coverage, {"alpha": alpha, "tolerance": 1e-7})
 
 
 def calculate_and_report_metrics(data, predictions, k, metrics):
@@ -179,7 +103,7 @@ def calculate_and_report_metrics(data, predictions, k, metrics):
     for metric, func in metrics.items():
         value = func(data, predictions)
         results[f"{metric}@{k}"] = value
-        print(f"  {metric}@{k}: {100 * value:>5.2f}")
+        print(f"    {metric}@{k}: {100 * value:>5.2f}")
 
     return results
 
@@ -479,7 +403,7 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
             "path": "datasets/Wiki-500K/train_labels.txt",
             "load_func": load_txt_labels,
         }
-    
+
     else:
         raise RuntimeError(f"No matching experiment: {experiment}")
 
@@ -534,11 +458,11 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
     print(f"eta_pred: type={type(eta_pred)}, shape={eta_pred.shape}")
 
     # Convert to array to check if it gives the same results
-    y_true = y_true.toarray()
-    eta_pred = eta_pred.toarray()
-    train_y_true = train_y_true.toarray()
+    # y_true = y_true.toarray()
+    # eta_pred = eta_pred.toarray()
+    # train_y_true = train_y_true.toarray()
 
-    output_path_prefix = f"results_bca2/{experiment}/"
+    output_path_prefix = f"results_bca3/{experiment}/"
     os.makedirs(output_path_prefix, exist_ok=True)
     for method, func in methods.items():
         print(f"{experiment} - {method} @ {k}: ")
@@ -552,26 +476,26 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
         if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
             results = {}
             if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
-                with Timer() as t:
-                    # y_pred = func[0](eta_pred, k, marginals=marginals, inv_ps=inv_ps, filename=output_path, **func[1])
-                    y_pred, meta = func[0](
-                        eta_pred,
-                        k,
-                        marginals=marginals,
-                        inv_ps=inv_ps,
-                        seed=seed,
-                        **func[1],
-                    )
-                    results["iters"] = meta["iters"]
-                    results["time"] = t.get_time()
-                    print("  Iters: ", meta["iters"])
-                #save_npz_wrapper(pred_path, y_pred)
+                # y_pred = func[0](eta_pred, k, marginals=marginals, inv_ps=inv_ps, filename=output_path, **func[1])
+                y_pred, meta = func[0](
+                    eta_pred,
+                    k,
+                    marginals=marginals,
+                    inv_ps=inv_ps,
+                    seed=seed,
+                    **func[1],
+                )
+                results["iters"] = meta["iters"]
+                results["time"] = meta["time"]
+                print(f"  Iters: {meta['iters']}")
+                print(f"  Time: {meta['time']:>5.2f} s")
+                # save_npz_wrapper(pred_path, y_pred)
                 save_json(results_path, results)
             else:
-                #y_pred = load_npz_wrapper(pred_path)
+                # y_pred = load_npz_wrapper(pred_path)
                 results = load_json(results_path)
 
-            print("  Calculating metrics:")
+            print("  Metrics:")
             results.update(calculate_and_report_metrics(y_true, y_pred, k, METRICS))
             save_json(results_path, results)
 

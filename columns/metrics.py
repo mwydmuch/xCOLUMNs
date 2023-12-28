@@ -1,9 +1,10 @@
-import numpy as np
-from scipy.sparse import csr_matrix
 from typing import Union
 
+import numpy as np
+from scipy.sparse import csr_matrix
 
-def _predicted_positives( # q in the paper
+
+def _predicted_positives(  # q in the paper
     y_pred: Union[np.ndarray, csr_matrix], axis: int = None, epsilon: float = 1e-5
 ):
     """
@@ -12,7 +13,7 @@ def _predicted_positives( # q in the paper
     return np.asarray(np.maximum(y_pred.mean(axis=axis), epsilon)).ravel()
 
 
-def _positives( # p in the paper
+def _positives(  # p in the paper
     y_true: Union[np.ndarray, csr_matrix], axis: int = None, epsilon: float = 1e-5
 ):
     """
@@ -21,7 +22,7 @@ def _positives( # p in the paper
     return np.asarray(y_true.mean(axis=axis)).ravel() + epsilon
 
 
-def _true_positives( # t in the paper
+def _true_positives(  # t in the paper
     y_true: Union[np.ndarray, csr_matrix],
     y_pred: Union[np.ndarray, csr_matrix],
     axis: int = None,
@@ -41,7 +42,7 @@ def precision(
     y_true: Union[np.ndarray, csr_matrix],
     y_pred: Union[np.ndarray, csr_matrix],
     axis: int,
-    epsilon: float = 1e-5
+    epsilon: float = 1e-5,
 ):
     """
     Given true and predicted labels, calculates the precision along the given axis.
@@ -79,7 +80,9 @@ def fmeasure(
     true_positives = _true_positives(y_pred, y_true, axis=axis)
     positives = _positives(y_true, axis=axis, epsilon=epsilon)
 
-    return (1 + beta ** 2) * true_positives / (beta ** 2 * predicted_positives + positives)
+    return (
+        (1 + beta**2) * true_positives / (beta**2 * predicted_positives + positives)
+    )
 
     # Alt
     # precision = true_positives / predicted_positives
@@ -118,14 +121,16 @@ def balanced_accuracy(
     true_positives = _true_positives(y_pred, y_true, axis=axis)
     positives = _positives(y_true, axis=axis)
 
-    return (true_positives + positives * (1 - predicted_positives - positives)) / (2 * positives * (1 - positives))
+    return (true_positives + positives * (1 - predicted_positives - positives)) / (
+        2 * positives * (1 - positives)
+    )
 
 
 def make_average(fn, **kwargs):
     def avg_fun(
         y_true: Union[np.ndarray, csr_matrix],
         y_pred: Union[np.ndarray, csr_matrix],
-        **inner_kw
+        **inner_kw,
     ) -> float:
         return fn(y_true=y_true, y_pred=y_pred, **kwargs, **inner_kw).mean()
 

@@ -1,49 +1,24 @@
 import numpy as np
-from scipy.sparse import csr_matrix
 from numba import njit
+from scipy.sparse import csr_matrix
 
-from .default_types import INT_TYPE, FLOAT_TYPE
-
-
-def unpack_csr_matrix(matrix: csr_matrix):
-    return matrix.data, matrix.indices, matrix.indptr
-
-
-def unpack_csr_matrices(*matrices):
-    y_pred = []
-    for m in matrices:
-        y_pred.extend(unpack_csr_matrix(m))
-    return y_pred
-
-
-def construct_csr_matrix(
-    data: np.ndarray,
-    indices: np.ndarray,
-    indptr: np.ndarray,
-    dtype=None,
-    shape=None,
-    sort_indices=False,
-):
-    mat = csr_matrix((data, indices, indptr), dtype=dtype, shape=shape)
-    if sort_indices:
-        mat.sort_indices()
-    return mat
+from .default_types import FLOAT_TYPE, INT_TYPE
 
 
 @njit
-def numba_first_k(ni, k):
-    y_pred_data = np.ones(ni * k, dtype=FLOAT_TYPE)
-    y_pred_indices = np.zeros(ni * k, dtype=INT_TYPE)
-    y_pred_indptr = np.zeros(ni + 1, dtype=INT_TYPE)
-    for i in range(ni):
+def numba_first_k(n: int, k: int):
+    y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
+    y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
+    y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
+    for i in range(n):
         y_pred_indices[(i * k) : ((i + 1) * k)] = np.arange(0, k, 1, FLOAT_TYPE)
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
 @njit
-def numba_random_at_k(
-    indices: np.ndarray, indptr: np.ndarray, ni: int, nl: int, k: int, seed: int = None
+def numba_random_at_k_from(
+    indices: np.ndarray, indptr: np.ndarray, n: int, m: int, k: int, seed: int = None
 ):
     """
     Selects k random labels for each instance.
@@ -51,11 +26,11 @@ def numba_random_at_k(
     if seed is not None:
         np.random.seed(seed)
 
-    y_pred_data = np.ones(ni * k, dtype=FLOAT_TYPE)
-    y_pred_indices = np.zeros(ni * k, dtype=INT_TYPE)
-    y_pred_indptr = np.zeros(ni + 1, dtype=INT_TYPE)
-    labels_range = np.arange(nl, dtype=INT_TYPE)
-    for i in range(ni):
+    y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
+    y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
+    y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
+    labels_range = np.arange(m, dtype=INT_TYPE)
+    for i in range(n):
         row_indices = indices[indptr[i] : indptr[i + 1]]
         if row_indices.size >= k:
             y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
@@ -65,6 +40,27 @@ def numba_random_at_k(
             y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
                 labels_range, k, replace=False
             )
+        y_pred_indptr[i + 1] = y_pred_indptr[i] + k
+
+    return y_pred_data, y_pred_indices, y_pred_indptr
+
+
+@njit
+def numba_random_at_k(n: int, m: int, k: int, seed: int = None):
+    """
+    Selects k random labels for each instance.
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
+    y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
+    y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
+    labels_range = np.arange(m, dtype=INT_TYPE)
+    for i in range(n):
+        y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
+            labels_range, k, replace=False
+        )
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
 
     return y_pred_data, y_pred_indices, y_pred_indptr
@@ -132,7 +128,7 @@ def numba_sparse_vec_mul_ones_minus_vec(
 
 @njit
 def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
-    a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, ni, nl
+    a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, n, m
 ):
     """
     Performs a fast multiplication of a sparse matrix a
@@ -140,8 +136,8 @@ def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
     Gives the same y_pred as a.multiply(ones - b) where a and b are sparse matrices.
     Requires a and b to have sorted indices (in ascending order).
     """
-    y_pred = np.zeros(nl, dtype=FLOAT_TYPE)
-    for i in range(ni):
+    y_pred = np.zeros(m, dtype=FLOAT_TYPE)
+    for i in range(n):
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
 
@@ -158,7 +154,7 @@ def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
 
 @njit
 def numba_calculate_prod_1_sparse_mat_mul_ones_minus_mat(
-    a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, ni, nl
+    a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, n, m
 ):
     """
     Performs a fast multiplication of a sparse matrix a
@@ -166,8 +162,8 @@ def numba_calculate_prod_1_sparse_mat_mul_ones_minus_mat(
     Gives the same y_pred as a.multiply(ones - b) where a and b are sparse matrices.
     Requires a and b to have sorted indices (in ascending order).
     """
-    y_pred = np.ones(nl, dtype=FLOAT_TYPE)
-    for i in range(ni):
+    y_pred = np.ones(m, dtype=FLOAT_TYPE)
+    for i in range(n):
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
 
@@ -201,16 +197,16 @@ def numba_weighted_per_instance(
     indices: np.ndarray,
     indptr: np.ndarray,
     weights: np.ndarray,
-    ni: int,
-    nl: int,
+    n: int,
+    m: int,
     k: int,
 ):
-    y_pred_data = np.ones(ni * k, dtype=FLOAT_TYPE)
-    y_pred_indices = np.zeros(ni * k, dtype=INT_TYPE)
-    y_pred_indptr = np.zeros(ni + 1, dtype=INT_TYPE)
+    y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
+    y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
+    y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
 
     # This can be done in parallel, but Numba parallelism seems to not work well here
-    for i in range(ni):
+    for i in range(n):
         row_data = data[indptr[i] : indptr[i + 1]]
         row_indices = indices[indptr[i] : indptr[i + 1]]
         row_weights = weights[row_indices].reshape(-1) * row_data
@@ -221,90 +217,24 @@ def numba_weighted_per_instance(
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
-def calculate_tp_csr_slow(y_proba: csr_matrix, y_pred: csr_matrix):
-    return (y_pred.multiply(y_proba)).sum(axis=0)
-
-
-def calculate_tp_csr(y_proba: csr_matrix, y_pred: csr_matrix):
-    """
-    Calculate 0 approx. of true positives or true number of true positives if y_proba = y_true
-    """
-    ni, nl = y_proba.shape
-    Etp = np.zeros(nl, dtype=FLOAT_TYPE)
-    for i in range(ni):
-        r_start, r_end = y_pred.indptr[i], y_pred.indptr[i + 1]
-        p_start, p_end = y_proba.indptr[i], y_proba.indptr[i + 1]
-
-        data, indices = numba_sparse_vec_mul_vec(
-            y_pred.data[r_start:r_end],
-            y_pred.indices[r_start:r_end],
-            y_proba.data[p_start:p_end],
-            y_proba.indices[p_start:p_end],
-        )
-        Etp[indices] += data
-
-    return Etp
-
-
-# This is a bit slow, TODO: make it faster (drop multiply and use custom method)
-def calculate_fp_csr_slow(y_proba: csr_matrix, y_pred: csr_matrix):
-    ni, nl = y_proba.shape
-    Efp = np.zeros(nl, dtype=FLOAT_TYPE)
-    dense_ones = np.ones(nl, dtype=FLOAT_TYPE)
-    for i in range(ni):
-        Efp += y_pred[i].multiply(dense_ones - y_proba[i])
-    return Efp
-
-
-def calculate_fp_csr(y_proba: csr_matrix, y_pred: csr_matrix):
-    """
-    Calculate 0 approx. of false positives or true number of false positives if y_proba = y_true
-    """
-    ni, nl = y_proba.shape
-    return numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
-        *unpack_csr_matrices(y_pred, y_proba), ni, nl
-    )
-
-
-# This is a bit slow, TODO: make it faster (drop multiply and use custom method)
-def calculate_fn_csr_slow(y_proba: csr_matrix, y_pred: csr_matrix):
-    ni, nl = y_proba.shape
-    Efn = np.zeros(nl, dtype=FLOAT_TYPE)
-    dense_ones = np.ones(nl, dtype=FLOAT_TYPE)
-    for i in range(ni):
-        Efn += y_proba[i].multiply(dense_ones - y_pred[i])
-
-    return Efn
-
-
-def calculate_fn_csr(y_proba: csr_matrix, y_pred: csr_matrix):
-    """
-    Calculate 0 approx. of false negatives or true number of false negatives if y_proba = y_true
-    """
-    ni, nl = y_proba.shape
-    return numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
-        *unpack_csr_matrices(y_proba, y_pred), ni, nl
-    )
-
-
 @njit
 def numba_macro_balanced_accuracy(
     data: np.ndarray,
     indices: np.ndarray,
     indptr: np.ndarray,
     marginals: np.ndarray,
-    ni: int,
-    nl: int,
+    n: int,
+    m: int,
     k: int,
 ):
     """
     Predicts k labels for each instance according to the optimal strategy for macro-balanced accuracy.
     """
-    y_pred_data = np.ones(ni * k, dtype=FLOAT_TYPE)
-    y_pred_indices = np.zeros(ni * k, dtype=INT_TYPE)
-    y_pred_indptr = np.zeros(ni + 1, dtype=INT_TYPE)
+    y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
+    y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
+    y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
 
-    for i in range(ni):
+    for i in range(n):
         row_data = data[indptr[i] : indptr[i + 1]]
         row_indices = indices[indptr[i] : indptr[i + 1]]
         row_marginals = marginals[row_indices].reshape(-1)

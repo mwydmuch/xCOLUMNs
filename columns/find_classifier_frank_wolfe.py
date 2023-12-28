@@ -1,11 +1,11 @@
+from random import randint
+from typing import Union
+
 import numpy as np
 import torch
 from scipy.sparse import csr_matrix
-from utils_sparse import *
-from utils_misc import *
-from random import randint
 
-from typing import Union
+from .utils import *
 
 
 # Types
@@ -137,7 +137,9 @@ def calculate_utility_with_gradient(fn, C):
     return float(utility), np.array(C.grad)
 
 
-def find_best_alpha(C, C_i, utility_func, search_algo="lin", eps=0.001, lin_search_step=0.001):
+def find_best_alpha(
+    C, C_i, utility_func, search_algo="lin", eps=0.001, lin_search_step=0.001
+):
     func = lambda alpha: calculate_utility(utility_func, (1 - alpha) * C + alpha * C_i)
     if search_algo == "lin":
         return lin_search(0, 1, lin_search_step, func)
@@ -176,7 +178,7 @@ def find_classifier_frank_wolfe(
         func_predict_top_k = predict_top_k_csr
     else:
         raise ValueError(
-            f"y_true and y_proba have unsuported combination of types {type(y_true)}, {type(y_proba)}"
+            f"y_true and y_proba have unsupported combination of types {type(y_true)}, {type(y_proba)}"
         )
 
     log("Starting Frank-Wolfe algorithm")
@@ -213,8 +215,8 @@ def find_classifier_frank_wolfe(
         # log(f"    prev C matrix = {C}")
         log(f"    utility = {utility}")
         # log(f"    gradients = {G}")
-        #log(f"    new a = {G[:,0] - G[:,1] - G[:,2] + G[:, 3]}")
-        #log(f"    new b = {G[:,1] - G[:, 3]}")
+        # log(f"    new a = {G[:,0] - G[:,1] - G[:,2] + G[:, 3]}")
+        # log(f"    new b = {G[:,1] - G[:, 3]}")
 
         classifiers[i] = G
         y_pred = func_predict_top_k(y_proba, G, k)
@@ -222,7 +224,14 @@ def find_classifier_frank_wolfe(
         utility_i = calculate_utility(utility_func, C_i)
 
         if search_for_best_alpha:
-            alpha = find_best_alpha(C, C_i, utility_func, search_algo=alpha_search_algo, eps=alpha_eps, lin_search_step=alpha_lin_search_step)
+            alpha = find_best_alpha(
+                C,
+                C_i,
+                utility_func,
+                search_algo=alpha_search_algo,
+                eps=alpha_eps,
+                lin_search_step=alpha_lin_search_step,
+            )
         else:
             alpha = 2 / (i + 1)
         meta["alphas"].append(alpha)
@@ -328,7 +337,7 @@ def macro_jaccard_C(C, epsilon=EPS):
 
 
 def macro_sqrt_tp_C(C, epsilon=EPS):
-    return torch.sqrt(C[:,0] + epsilon)
+    return torch.sqrt(C[:, 0] + epsilon)
 
 
 def precision_at_k_C(C, k=5):
@@ -352,7 +361,9 @@ def balanced_accuracy_C(C):
 
 
 def mixed_instance_prec_macro_prec_C(C, alpha=0.001, epsilon=EPS):
-    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_precision_C(C, epsilon=epsilon)
+    return (1 - alpha) * precision_at_k_C(C) + alpha * macro_precision_C(
+        C, epsilon=epsilon
+    )
 
 
 def mixed_instance_prec_macro_f1_C(C, alpha=0.9, epsilon=EPS):

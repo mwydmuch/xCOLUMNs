@@ -1,28 +1,26 @@
+import sys
+
+import click
 import numpy as np
 import scipy.sparse as sp
-
-from metrics import *
-from data import *
-from utils_misc import *
-from find_classifier_frank_wolfe import *
-from weighted_prediction import *
-from bca_prediction import *
-from sklearn.model_selection import train_test_split
-from napkinxc.models import PLT, BR
-from napkinxc.datasets import to_csr_matrix, load_libsvm_file
-
 import torch
-from pytorch_models.losses import *
+from bca_prediction import *
+from data import *
+from napkinxc.datasets import load_libsvm_file, to_csr_matrix
+from napkinxc.models import BR, PLT
 from pytorch_models.baseline_classifiers import *
+from pytorch_models.losses import *
 from pytorch_models.transformer_classifier import *
-
-from skmultilearn.problem_transform import LabelPowerset
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import normalize
-
-import sys
-import click
+from skmultilearn.problem_transform import LabelPowerset
 from tqdm import trange
+from utils_misc import *
+
+from find_classifier_frank_wolfe import *
+from metrics import *
+from weighted_prediction import *
 
 
 # TODO: refactor this
@@ -52,8 +50,8 @@ def frank_wolfe_wrapper(
     if use_last:
         print("  using last classifier")
         y_pred = predict_top_k_for_classfiers(
-                pred_test, classifiers[-1:], np.array([1]), k=k, seed=seed
-            )
+            pred_test, classifiers[-1:], np.array([1]), k=k, seed=seed
+        )
         y_preds.append(y_pred)
     elif not average:
         print("  predicting with randomized classfier")
@@ -191,8 +189,6 @@ def fw_bca_macro_recall_wrapper(
     return block_coordinate_macro_recall(pred_test, k=k, **kwargs)
 
 
-
-
 METRICS = {
     "mC": macro_abandonment,
     "iC": instance_abandonment,
@@ -210,7 +206,10 @@ METRICS = {
 METHODS = {
     "fw-split-optimal-instance-prec": (fw_optimal_instance_precision_wrapper, {}),
     "fw-split-optimal-macro-recall": (fw_optimal_macro_recall_wrapper, {}),
-    "fw-split-optimal-macro-balanced-acc": (fw_optimal_macro_balanced_accuracy_wrapper, {}),
+    "fw-split-optimal-macro-balanced-acc": (
+        fw_optimal_macro_balanced_accuracy_wrapper,
+        {},
+    ),
     "fw-split-power-law-with-beta=0.5": (
         fw_power_law_weighted_instance_wrapper,
         {"beta": 0.5},
@@ -224,11 +223,9 @@ METHODS = {
     "frank-wolfe-macro-prec": (frank_wolfe_macro_precision, {}),
     "frank-wolfe-macro-f1": (frank_wolfe_macro_f1, {}),
     "frank-wolfe-macro-balanced-acc": (frank_wolfe_balanced_accuracy, {}),
-
     "fw-split-bca-macro-recall": (fw_bca_macro_recall_wrapper, {}),
     "fw-split-bca-macro-prec": (fw_bca_macro_precision_wrapper, {}),
     "fw-split-bca-macro-f1": (fw_bca_macro_f1_wrapper, {}),
-
     # "frank-wolfe-macro-recall-last": (frank_wolfe_macro_recall, {"use_last": True}),
     # "frank-wolfe-macro-precision-last": (frank_wolfe_macro_precision, {"use_last": True}),
     # "frank-wolfe-macro-f1-last": (frank_wolfe_macro_f1, {"use_last": True}),
@@ -239,13 +236,22 @@ METHODS = {
     "frank-wolfe-macro-prec-rnd": (frank_wolfe_macro_precision, {"init": "random"}),
     "frank-wolfe-macro-f1-rnd": (frank_wolfe_macro_f1, {"init": "random"}),
     "frank-wolfe-macro-balanced-acc-rnd": (frank_wolfe_macro_f1, {"init": "random"}),
-
-    "frank-wolfe-macro-prec-step=0.01": (frank_wolfe_macro_precision, {"alpha_lin_search_step": 0.01}),
-    "frank-wolfe-macro-f1-step=0.01": (frank_wolfe_macro_f1, {"alpha_lin_search_step": 0.01}),
-
-    "frank-wolfe-macro-prec-step=0.0001": (frank_wolfe_macro_precision, {"alpha_lin_search_step": 0.0001}),
-    "frank-wolfe-macro-f1-step=0.0001": (frank_wolfe_macro_f1, {"alpha_lin_search_step": 0.0001}),
-    
+    "frank-wolfe-macro-prec-step=0.01": (
+        frank_wolfe_macro_precision,
+        {"alpha_lin_search_step": 0.01},
+    ),
+    "frank-wolfe-macro-f1-step=0.01": (
+        frank_wolfe_macro_f1,
+        {"alpha_lin_search_step": 0.01},
+    ),
+    "frank-wolfe-macro-prec-step=0.0001": (
+        frank_wolfe_macro_precision,
+        {"alpha_lin_search_step": 0.0001},
+    ),
+    "frank-wolfe-macro-f1-step=0.0001": (
+        frank_wolfe_macro_f1,
+        {"alpha_lin_search_step": 0.0001},
+    ),
     # "frank-wolfe-mixed-prec-prec-alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.1, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-prec-alpha=0.03162": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.03162, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-prec-alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.01, "alpha_lin_search_step": 0.0001}),
@@ -257,7 +263,6 @@ METHODS = {
     # "frank-wolfe-mixed-prec-prec-alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00001, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-prec-alpha=0.000003162": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000003162, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-prec-alpha=0.000001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000001, "alpha_lin_search_step": 0.0001}),
-
     # "frank-wolfe-mixed-prec-f1-alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.1, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.03162": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.03162, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.01, "alpha_lin_search_step": 0.0001}),
@@ -269,7 +274,6 @@ METHODS = {
     # "frank-wolfe-mixed-prec-f1-alpha=0.00001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00001, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.000003162": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000003162, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.000001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000001, "alpha_lin_search_step": 0.0001}),
-
     # "frank-wolfe-mixed-prec-prec-alpha=0.1-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.1, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-prec-alpha=0.03162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.03162, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-prec-alpha=0.01-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.01, "alpha_lin_search_step": 0.0001}),
@@ -281,7 +285,6 @@ METHODS = {
     # "frank-wolfe-mixed-prec-prec-alpha=0.00001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00001, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-prec-alpha=0.000003162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000003162, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-prec-alpha=0.000001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000001, "alpha_lin_search_step": 0.0001}),
-
     # "frank-wolfe-mixed-prec-f1-alpha=0.1-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.1, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.03162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.03162, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.01-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.01, "alpha_lin_search_step": 0.0001}),
@@ -293,31 +296,82 @@ METHODS = {
     # "frank-wolfe-mixed-prec-f1-alpha=0.00001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00001, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.000003162-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000003162, "alpha_lin_search_step": 0.0001}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.000001-step=0.0001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000001, "alpha_lin_search_step": 0.0001}),
-
-    "frank-wolfe-mixed-prec-prec-alpha=0.1-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.1, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-prec-alpha=0.03162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.03162, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-prec-alpha=0.01-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.01, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-prec-alpha=0.003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.003162, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-prec-alpha=0.001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.001, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-prec-alpha=0.0003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.0003162, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-prec-alpha=0.0001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.0001, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-prec-alpha=0.00003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00003162, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-prec-alpha=0.00001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.00001, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-prec-alpha=0.1-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": 0.1, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-prec-alpha=0.03162-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": 0.03162, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-prec-alpha=0.01-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": 0.01, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-prec-alpha=0.003162-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": 0.003162, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-prec-alpha=0.001-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": 0.001, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-prec-alpha=0.0003162-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": 0.0003162, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-prec-alpha=0.0001-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": 0.0001, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-prec-alpha=0.00003162-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": 0.00003162, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-prec-alpha=0.00001-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": 0.00001, "alpha_lin_search_step": 0.001},
+    ),
     # "frank-wolfe-mixed-prec-prec-alpha=0.000003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000003162, "alpha_lin_search_step": 0.001}),
     # "frank-wolfe-mixed-prec-prec-alpha=0.000001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_prec, {"alpha": 0.000001, "alpha_lin_search_step": 0.001}),
-
-    "frank-wolfe-mixed-prec-f1-alpha=0.1-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.1, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-f1-alpha=0.03162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.03162, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-f1-alpha=0.01-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.01, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-f1-alpha=0.003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.003162, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-f1-alpha=0.001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.001, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-f1-alpha=0.0003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0003162, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-f1-alpha=0.0001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.0001, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-f1-alpha=0.00003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00003162, "alpha_lin_search_step": 0.001}),
-    "frank-wolfe-mixed-prec-f1-alpha=0.00001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00001, "alpha_lin_search_step": 0.001}),
+    "frank-wolfe-mixed-prec-f1-alpha=0.1-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": 0.1, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-f1-alpha=0.03162-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": 0.03162, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-f1-alpha=0.01-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": 0.01, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-f1-alpha=0.003162-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": 0.003162, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-f1-alpha=0.001-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": 0.001, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-f1-alpha=0.0003162-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": 0.0003162, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-f1-alpha=0.0001-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": 0.0001, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-f1-alpha=0.00003162-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": 0.00003162, "alpha_lin_search_step": 0.001},
+    ),
+    "frank-wolfe-mixed-prec-f1-alpha=0.00001-step=0.001": (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": 0.00001, "alpha_lin_search_step": 0.001},
+    ),
     # "frank-wolfe-mixed-prec-f1-alpha=0.000003162-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000003162, "alpha_lin_search_step": 0.001}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.000001-step=0.001": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000001, "alpha_lin_search_step": 0.001}),
-
     # "frank-wolfe-mixed-prec-f1-alpha=0.1-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.1, "alpha_lin_search_step": 0.01}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.03162-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.03162, "alpha_lin_search_step": 0.01}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.01-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.01, "alpha_lin_search_step": 0.01}),
@@ -329,7 +383,6 @@ METHODS = {
     # "frank-wolfe-mixed-prec-f1-alpha=0.00001-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.00001, "alpha_lin_search_step": 0.01}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.000003162-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000003162, "alpha_lin_search_step": 0.01}),
     # "frank-wolfe-mixed-prec-f1-alpha=0.000001-step=0.01": (frank_wolfe_mixed_instance_prec_macro_f1, {"alpha": 0.000001, "alpha_lin_search_step": 0.01}),
-
     # "frank-wolfe-mixed-instance-prec-macro-prec-rnd-alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.1}),
     # "frank-wolfe-mixed-instance-prec-macro-f1-rnd-alpha=0.1": (frank_wolfe_mixed_instance_prec_macro_f1, {"init": "random", "alpha": 0.1}),
     # "frank-wolfe-mixed-instance-prec-macro-prec-rnd-alpha=0.01": (frank_wolfe_mixed_instance_prec_macro_prec, {"init": "random", "alpha": 0.01}),
@@ -442,7 +495,9 @@ torch.set_float32_matmul_precision("medium")
 
 
 class PytorchModel(ModelWrapper):
-    def __init__(self, model_path, seed, loss="bce", hidden_units=()): # 512 for mediamill, 1024 for flicker, 2048 for rcv1x
+    def __init__(
+        self, model_path, seed, loss="bce", hidden_units=()
+    ):  # 512 for mediamill, 1024 for flicker, 2048 for rcv1x
         super().__init__(model_path, seed)
 
         self.loss = None
@@ -472,7 +527,7 @@ class PytorchModel(ModelWrapper):
         )
 
     def fit(self, X, Y, X_val, Y_val):
-        #self.model.fit(X, Y, X_val=X_val, Y_val=Y_val)
+        # self.model.fit(X, Y, X_val=X_val, Y_val=Y_val)
         self.model.fit(X, Y)
 
     def predict_proba(self, X, top_k):
@@ -714,7 +769,7 @@ def main(experiment, k, seed, method, testsplit, reg):
     print(f"marginals: type={type(marginals)}, shape={marginals.shape}")
     print(f"inv. propensities: type={type(inv_ps)}, shape={inv_ps.shape}")
 
-    print("  Spliting to train and validation ...")
+    print("  Splitting to train and validation ...")
     if testsplit != 0:
         X_train, X_val, Y_train, Y_val = train_test_split(
             X_train, Y_train, test_size=testsplit, random_state=seed
@@ -727,7 +782,7 @@ def main(experiment, k, seed, method, testsplit, reg):
     print(f"Y_val: type={type(Y_val)}, shape={Y_val.shape}")
     print(f"Y_test: type={type(Y_test)}, shape={Y_test.shape}")
 
-    print("Training model on splited train data ...")
+    print("Training model on a new train data ...")
     model_path = (
         f"models_and_predictions/{experiment}_seed={seed}_split={1 - testsplit}_model"
     )
@@ -837,7 +892,7 @@ def main(experiment, k, seed, method, testsplit, reg):
                 # save_npz_wrapper(val_pred_path, pred_val)
                 save_pickle(val_pred_path, pred_val)
         else:
-            #pred_val = load_npz_wrapper(val_pred_path)
+            # pred_val = load_npz_wrapper(val_pred_path)
             pred_val = load_pickle(val_pred_path)
         print("  Done")
 
@@ -850,7 +905,7 @@ def main(experiment, k, seed, method, testsplit, reg):
                 # save_npz_wrapper(test_pred_path, pred_test)
                 save_pickle(test_pred_path, pred_test)
         else:
-            #pred_test = load_npz_wrapper(test_pred_path)
+            # pred_test = load_npz_wrapper(test_pred_path)
             pred_test = load_pickle(test_pred_path)
         print("  Done")
         del model

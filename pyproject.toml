@@ -6,18 +6,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "columns"
-description = "A small library for Consistent Optimization of Label-wise Utilites in Multi-label clasifficatioN"
+description = "A small library for Consistent Optimization of Label-wise Utilities in Multi-label clasifficatioN"
 readme = "README.md"
 requires-python = ">= 3.8"
 authors = [{ name = "Marek Wydmuch, Erik Schultheis, Wojciech Kotłowski, Rohit Babbar, Krzysztof Dembczyński", email = "mwydmuch@cs.put.poznan.pl" }]
 license = { text = "MIT License" }
 keywords = [
-    "machine learning", 
-    "multi-label classification", 
+    "machine learning",
+    "multi-label classification",
     "performance metrics",
-    "label-wise utilities", 
-    "classification metrics", 
-    "macro-measures", 
+    "label-wise utilities",
+    "classification metrics",
+    "macro-measures",
     "optimization"
 ]
 classifiers = [
@@ -44,13 +44,13 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/mwydmuch/luo"
-Repository = "https://github.com/mwydmuch/luo"
-Documentation = "https://github.com/mwydmuch/luo"
-"Bug Report" = "https://github.com/mwydmuch/luo/issues"
+Homepage = "https://github.com/mwydmuch/columns"
+Repository = "https://github.com/mwydmuch/columns"
+Documentation = "https://github.com/mwydmuch/columns"
+"Bug Report" = "https://github.com/mwydmuch/columns/issues"
 
 [tool.setuptools.packages.find]
-include = ["luo", "luo.*"]
+include = ["columns", "columns.*"]
 
 
 # Linters and Test tools #######################################################
@@ -61,15 +61,15 @@ safe = true
 [tool.isort]
 atomic = true
 profile = "black"
-src_paths = ["gymnasium", "tests", "docs/_scripts"]
+src_paths = ["columns", "tests"]
 extra_standard_library = ["typing_extensions"]
 indent = 4
 lines_after_imports = 2
 multi_line_output = 3
 
 [tool.pyright]
-include = ["luo/**", "tests/**"]
-exclude = ["**/__pycache__"]
+include = ["columns/**", "tests/**"]
+exclude = ["**/__pycache__", "**/experiments"]
 strict = []
 
 typeCheckingMode = "basic"

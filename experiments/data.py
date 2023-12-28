@@ -1,20 +1,68 @@
+import json
+import os
+import pickle
+import time
+from math import log, log2
 from pathlib import Path
+from typing import Union
+
 import numpy as np
 from scipy.sparse import csr_matrix, load_npz, save_npz
-import os
-from typing import Union
-from math import log2, log
 from tqdm import tqdm
-import pickle
 
-from utils_sparse import construct_csr_matrix
+from columns.utils import construct_csr_matrix
+
+
+def align_dim1(a, b):
+    if a.shape[1] != b.shape[1]:
+        print("  Fixing shapes ...")
+        new_size = max(a.shape[1], b.shape[1])
+        a.resize((a.shape[0], new_size))
+        b.resize((b.shape[0], new_size))
+
+
+def loprint(array):
+    print(array.shape, array.dtype, array.min(), array.max(), array.mean(), array.std())
+
+
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
+
+def save_json(filepath, data):
+    with open(filepath, "w") as file:
+        json.dump(data, file, cls=NpEncoder, indent=4, sort_keys=True)
+
+
+def load_json(filepath):
+    with open(filepath) as file:
+        return json.load(file)
+
+
+class Timer:
+    def __enter__(self):
+        self.start = time.time()
+        return self
+
+    def get_time(self):
+        return time.time() - self.start
+
+    def __exit__(self, *args):
+        print(f"  Time: {self.get_time():>5.2f}s")
 
 
 def load_dataset(path: Path) -> np.ndarray:
     """
     Loads the label matrix from the XMC repository dataset at `path`
     """
-    with open(path, "r") as fd:
+    with open(path) as fd:
         num_ins, num_ftr, num_lbl = fd.readline().split(" ")
 
         label_matrix = np.zeros((int(num_ins), int(num_lbl)), dtype=np.float32)
@@ -49,7 +97,7 @@ def load_txt_labels(
     """
     Loads the sparse label matrix from the XMC repository dataset or similar text format
     """
-    with open(path, "r") as file:
+    with open(path) as file:
         data = []
         indices = []
         indptr = [0]
@@ -95,7 +143,7 @@ def load_txt_sparse_pred(path: str):
     Loads the sparse prediction matrix from libsvm like format:
     <label>:<value> <label>:<value> ...
     """
-    with open(path, "r") as file:
+    with open(path) as file:
         data = []
         indices = []
         indptr = [0]
