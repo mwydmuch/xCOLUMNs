@@ -4,7 +4,7 @@ import click
 import numpy as np
 import scipy.sparse as sp
 import torch
-from bca_prediction import *
+
 from data import *
 from napkinxc.datasets import load_libsvm_file, to_csr_matrix
 from napkinxc.models import BR, PLT
@@ -16,11 +16,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import normalize
 from skmultilearn.problem_transform import LabelPowerset
 from tqdm import trange
-from utils_misc import *
 
-from find_classifier_frank_wolfe import *
-from metrics import *
-from weighted_prediction import *
+
+from columns.block_coordinate import *
+from columns.find_classifier_frank_wolfe import *
+from columns.metrics import *
+from columns.weighted_prediction import *
 
 
 # TODO: refactor this

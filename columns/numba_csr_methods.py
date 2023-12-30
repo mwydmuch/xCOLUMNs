@@ -29,7 +29,6 @@ def numba_random_at_k_from(
     y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
     y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
     y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
-    labels_range = np.arange(m, dtype=INT_TYPE)
     for i in range(n):
         row_indices = indices[indptr[i] : indptr[i + 1]]
         if row_indices.size >= k:
@@ -38,7 +37,7 @@ def numba_random_at_k_from(
             )
         else:
             y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
-                labels_range, k, replace=False
+                m, k, replace=False
             )
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
 
@@ -56,10 +55,9 @@ def numba_random_at_k(n: int, m: int, k: int, seed: int = None):
     y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
     y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
     y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
-    labels_range = np.arange(m, dtype=INT_TYPE)
     for i in range(n):
         y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
-            labels_range, k, replace=False
+            m, k, replace=False
         )
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
 

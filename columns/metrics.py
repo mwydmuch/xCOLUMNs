@@ -5,7 +5,7 @@ from scipy.sparse import csr_matrix
 
 
 def _predicted_positives(  # q in the paper
-    y_pred: Union[np.ndarray, csr_matrix], axis: int = None, epsilon: float = 1e-5
+    y_pred: Union[np.ndarray, csr_matrix], axis: int = None, epsilon: float = 1e-9
 ):
     """
     Given predicted labels, calculates their number along the given axis.
@@ -14,12 +14,12 @@ def _predicted_positives(  # q in the paper
 
 
 def _positives(  # p in the paper
-    y_true: Union[np.ndarray, csr_matrix], axis: int = None, epsilon: float = 1e-5
+    y_true: Union[np.ndarray, csr_matrix], axis: int = None, epsilon: float = 1e-9
 ):
     """
     Given true labels, calculates their number along the given axis.
     """
-    return np.asarray(y_true.mean(axis=axis)).ravel() + epsilon
+    return np.asarray(np.maximum(y_true.mean(axis=axis), epsilon)).ravel()
 
 
 def _true_positives(  # t in the paper
@@ -42,7 +42,7 @@ def precision(
     y_true: Union[np.ndarray, csr_matrix],
     y_pred: Union[np.ndarray, csr_matrix],
     axis: int,
-    epsilon: float = 1e-5,
+    epsilon: float = 1e-9,
 ):
     """
     Given true and predicted labels, calculates the precision along the given axis.
@@ -56,7 +56,7 @@ def recall(
     y_true: Union[np.ndarray, csr_matrix],
     y_pred: Union[np.ndarray, csr_matrix],
     axis: int,
-    epsilon: float = 1e-5,
+    epsilon: float = 1e-9,
 ):
     """
     Given true and predicted labels, calculates the recall along the given axis.
@@ -71,7 +71,7 @@ def fmeasure(
     y_pred: Union[np.ndarray, csr_matrix],
     axis: int,
     beta: float = 1,
-    epsilon: float = 1e-5,
+    epsilon: float = 1e-9,
 ):
     """
     Given true and predicted labels, calculates the F1 score along the given axis.

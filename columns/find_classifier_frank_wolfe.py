@@ -1,5 +1,6 @@
 from random import randint
 from typing import Union
+from time import time
 
 import numpy as np
 import torch
@@ -205,8 +206,8 @@ def find_classifier_frank_wolfe(
     classifiers[0] = init_G
     classifier_weights[0] = 1
 
-    meta = {"alphas": [], "utilities": []}
-
+    meta = {"alphas": [], "utilities": [], "time": time()}
+    
     for i in range(1, max_iters):
         log(f"  Starting iteration {i} ...")
         utility, G = calculate_utility_with_gradient(utility_func, C)
@@ -224,7 +225,7 @@ def find_classifier_frank_wolfe(
         utility_i = calculate_utility(utility_func, C_i)
 
         if search_for_best_alpha:
-            alpha = find_best_alpha(
+            alpha, _ = find_best_alpha(
                 C,
                 C_i,
                 utility_func,
@@ -260,7 +261,7 @@ def find_classifier_frank_wolfe(
 
     # sampled_utility = sample_utility_from_classfiers(y_proba, classifiers, classifier_weights, utility_func, y_true, C_shape, k=k)
     # print(f"  Final sampled utility: {sampled_utility* 100}")
-
+    meta["time"] = time() - meta["time"]
     return classifiers, classifier_weights, meta
 
 

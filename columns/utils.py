@@ -134,9 +134,8 @@ def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None):
 
     n, m = shape
     y_pred = np.zeros(shape, dtype=FLOAT_TYPE)
-    labels_range = np.arange(m, dtype=INT_TYPE)
     for i in range(n):
-        y_pred[i, np.random.choice(labels_range, k, replace=False)] = 1.0
+        y_pred[i, np.random.choice(m, k, replace=False)] = 1.0
     return y_pred
 
 
