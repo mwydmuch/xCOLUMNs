@@ -18,10 +18,10 @@ from skmultilearn.problem_transform import LabelPowerset
 from tqdm import trange
 
 
-from columns.block_coordinate import *
-from columns.find_classifier_frank_wolfe import *
-from columns.metrics import *
-from columns.weighted_prediction import *
+from xcolumns.block_coordinate import *
+from xcolumns.find_classifier_frank_wolfe import *
+from xcolumns.metrics import *
+from xcolumns.weighted_prediction import *
 
 
 # TODO: refactor this

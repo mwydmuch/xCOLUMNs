@@ -10,7 +10,7 @@ import numpy as np
 from scipy.sparse import csr_matrix, load_npz, save_npz
 from tqdm import tqdm
 
-from columns.utils import construct_csr_matrix
+from xcolumns.utils import construct_csr_matrix
 
 
 def align_dim1(a, b):

@@ -5,7 +5,7 @@ requires = ["setuptools >= 61.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "columns"
+name = "xcolumns"
 description = "A small library for Consistent Optimization of Label-wise Utilities in Multi-label clasifficatioN"
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -44,13 +44,13 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/mwydmuch/columns"
-Repository = "https://github.com/mwydmuch/columns"
-Documentation = "https://github.com/mwydmuch/columns"
-"Bug Report" = "https://github.com/mwydmuch/columns/issues"
+Homepage = "https://github.com/mwydmuch/xcolumns"
+Repository = "https://github.com/mwydmuch/xcolumns"
+Documentation = "https://github.com/mwydmuch/xcolumns"
+"Bug Report" = "https://github.com/mwydmuch/xcolumns/issues"
 
 [tool.setuptools.packages.find]
-include = ["columns", "columns.*"]
+include = ["xcolumns", "xcolumns.*"]
 
 
 # Linters and Test tools #######################################################
@@ -61,14 +61,14 @@ safe = true
 [tool.isort]
 atomic = true
 profile = "black"
-src_paths = ["columns", "tests"]
+src_paths = ["xcolumns", "tests"]
 extra_standard_library = ["typing_extensions"]
 indent = 4
 lines_after_imports = 2
 multi_line_output = 3
 
 [tool.pyright]
-include = ["columns/**", "tests/**"]
+include = ["xcolumns/**", "tests/**"]
 exclude = ["**/__pycache__", "**/experiments"]
 strict = []
 

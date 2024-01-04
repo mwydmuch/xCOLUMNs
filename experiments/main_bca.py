@@ -4,11 +4,11 @@ import click
 import numpy as np
 from data import *
 
-from columns.block_coordinate import *
-from columns.metrics import *
-from columns.online_block_coordinate import *
-from columns.weighted_prediction import *
-from columns.find_classifier_frank_wolfe import *
+from xcolumns.block_coordinate import *
+from xcolumns.metrics import *
+from xcolumns.online_block_coordinate import *
+from xcolumns.weighted_prediction import *
+from xcolumns.find_classifier_frank_wolfe import *
 
 
 # TODO: refactor this

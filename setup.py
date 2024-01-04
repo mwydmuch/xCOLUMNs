@@ -6,7 +6,7 @@ from setuptools import setup
 
 
 repo_root = pathlib.Path(__file__).absolute().parent
-package_name = "columns"
+package_name = "xcolumns"
 
 
 def get_version():
