@@ -20,5 +20,3 @@ TODO
 ## LightXML predictions
 
 TODO
-
-

@@ -74,7 +74,7 @@ def output_results(
                                         v = [x * 100 for x in v]
                                 method_results[r].append(v)
 
-                #print(method_results)
+                # print(method_results)
 
                 _method_results = {}
                 for r, v in method_results.items():
@@ -243,7 +243,18 @@ main_methods = {
     "/block-coord-cov-tol=1e-7": "\\infbccov",
 }
 
-output_results("results_txt/lightxml_main_str", FORMAT, experiments, main_methods, COLUMNS, K, SEEDS, SELECT_BEST, ADD_STD, PRECISION)
+output_results(
+    "results_txt/lightxml_main_str",
+    FORMAT,
+    experiments,
+    main_methods,
+    COLUMNS,
+    K,
+    SEEDS,
+    SELECT_BEST,
+    ADD_STD,
+    PRECISION,
+)
 
 extended_methods = {
     "/optimal-instance-prec": "\\inftopk",
@@ -263,7 +274,18 @@ extended_methods = {
     "/block-coord-cov-tol=1e-7": "\\infbccov",
 }
 
-output_results("results_txt/lightxml_extended_str", FORMAT, experiments, extended_methods, COLUMNS, K, SEEDS, SELECT_BEST, ADD_STD, PRECISION)
+output_results(
+    "results_txt/lightxml_extended_str",
+    FORMAT,
+    experiments,
+    extended_methods,
+    COLUMNS,
+    K,
+    SEEDS,
+    SELECT_BEST,
+    ADD_STD,
+    PRECISION,
+)
 
 K = (3, 5)
 experiments = [
@@ -291,7 +313,18 @@ methods = {
     "/block-coord-cov-tol=1e-7": "\\infbccov$,\\epsilon=10^{-7}$",
 }
 
-output_results("results_txt/lightxml_params_str", FORMAT, experiments, methods, COLUMNS, K, SEEDS, SELECT_BEST, ADD_STD, PRECISION)
+output_results(
+    "results_txt/lightxml_params_str",
+    FORMAT,
+    experiments,
+    methods,
+    COLUMNS,
+    K,
+    SEEDS,
+    SELECT_BEST,
+    ADD_STD,
+    PRECISION,
+)
 
 
 # PU+FW paper

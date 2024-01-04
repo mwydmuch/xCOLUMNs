@@ -2,18 +2,14 @@ import sys
 
 import click
 import numpy as np
-from data import *
 
+from utils import *
 from xcolumns.block_coordinate import *
+from xcolumns.find_classifier_frank_wolfe import *
 from xcolumns.metrics import *
 from xcolumns.online_block_coordinate import *
 from xcolumns.weighted_prediction import *
-from xcolumns.find_classifier_frank_wolfe import *
 
-
-# TODO: refactor this
-RECALCULATE_RESUTLS = False
-RECALCULATE_PREDICTION = False
 
 METRICS = {
     "mC": macro_abandonment,
@@ -26,138 +22,103 @@ METRICS = {
     "iF": instance_f1,
 }
 
-def frank_wolfe_wrapper(
-    y_proba,
-    utility_func,
-    k: int = 5,
-    seed: int = 0,
-    reg=0,
-    pred_repeat=10,
-    average=False,
-    use_last=False,
-    y_true_valid=None, y_proba_valid=None,
-    **kwargs,
-):
-    classifiers, classifier_weights, meta = find_classifier_frank_wolfe(
-        y_true_valid, y_proba_valid, utility_func, max_iters=20, k=k, reg=reg, **kwargs
-    )
-    print(f"  classifiers weights: {classifier_weights}")
-    y_preds = []
-    if use_last:
-        print("  using last classifier")
-        y_pred = predict_top_k_for_classfiers(
-            y_proba, classifiers[-1:], np.array([1]), k=k, seed=seed
-        )
-        y_preds.append(y_pred)
-    elif not average:
-        print("  predicting with randomized classfier")
-        for i in range(pred_repeat):
-            y_pred = predict_top_k_for_classfiers(
-                y_proba, classifiers, classifier_weights, k=k, seed=seed + i
-            )
-            y_preds.append(y_pred)
-    else:
-        print("  averaging classifiers weights")
-        avg_classifier_weights = np.zeros((classifiers.shape[1], classifiers.shape[2]))
-        for i in range(classifier_weights.shape[0]):
-            avg_classifier_weights += classifier_weights[i] * classifiers[i]
-        avg_classifier_weights /= classifier_weights.shape[0]
-        y_pred = predict_top_k(y_proba, avg_classifier_weights, k)
-        y_preds.append(y_pred)
-    
-    return y_preds[0], meta
-
-
-def fw_macro_f1(
-    y_proba, k: int = 5, seed: int = 0, y_true_valid=None, y_preds_valid=None, **kwargs
-):
-    return frank_wolfe_wrapper(
-        y_proba, macro_f1_C, y_true_valid=y_true_valid, y_preds_valid=y_preds_valid, k=k, seed=seed, **kwargs
-    )
-
-
 METHODS = {
-    "online-block-coord-macro-f1": (online_bc_macro_f1, {}),
-    "online-greedy-block-coord-macro-f1": (online_bc_macro_f1, {"greedy": True, "num_valid_sets": 1, "valid_set_size": 1}),
-    "frank-wolfe-macro-f1": (fw_macro_f1, {}),
-    "frank-wolfe-average-macro-f1": (fw_macro_f1, {"average": True}),
-    "frank-wolfe-last-macro-f1": (fw_macro_f1, {"use_last": True}),
-
     # Instance-wise measures / baselines
-    # "random": (predict_random_at_k,{}),
     "optimal-instance-prec": (predict_for_optimal_instance_precision, {}),
-    "block-coord-instance-prec": (bc_instance_precision_at_k, {}),
+    # "block-coord-instance-prec": (bc_instance_precision_at_k, {}),
     "optimal-instance-ps-prec": (inv_propensity_weighted_instance, {}),
-    # "power-law-with-beta=0.875": (power_law_weighted_instance, {"beta": 0.875}),
     "power-law-with-beta=0.75": (power_law_weighted_instance, {"beta": 0.75}),
     "power-law-with-beta=0.5": (power_law_weighted_instance, {"beta": 0.5}),
     "power-law-with-beta=0.25": (power_law_weighted_instance, {"beta": 0.25}),
-    # "power-law-with-beta=0.125": (power_law_weighted_instance, {"beta": 0.125}),
     "log": (predict_log_weighted_per_instance, {}),
     "optimal-macro-recall": (predict_for_optimal_macro_recall, {}),
-
     # Block coordinate with default parameters - commented out because it better to use variatns with specific tolerance to stopping condition
     # "block-coord-macro-prec": (bc_macro_precision, {}),
     # "block-coord-macro-recall": (bc_macro_recall, {}),
     # "block-coord-macro-f1": (bc_macro_f1, {}),
     # "block-coord-cov": (bc_coverage, {}),
-    
-    # Greedy / 1 iter variants
-    # "greedy-macro-prec": (bc_macro_precision, {"init_y_pred": "greedy", "max_iter": 1}),
-    # "greedy-macro-recall": (bc_macro_precision, {"init_y_pred": "greedy", "max_iter": 1}),
-    "greedy-macro-f1": (bc_macro_f1, {"init_y_pred": "greedy", "max_iter": 1}),
-    # "greedy-cov": (bc_coverage, {"init_y_pred": "greedy", "max_iter": 1}),
-    # "block-coord-macro-prec-iter=1": (bc_macro_precision, {"max_iter": 1}),
-    # "block-coord-macro-recall-iter=1": (bc_macro_precision, {"max_iter": 1}),
-    "block-coord-macro-f1-iter=1": (bc_macro_f1, {"max_iter": 1}),
-    # "block-coord-cov-iter=1": (bc_coverage, {"max_iter": 1}),
-    # "greedy-start-block-coord-macro-prec": (bc_macro_precision, {"init_y_pred": "greedy"}),
-    # "greedy-start-block-coord-macro-recall": (bc_macro_f1, {"init_y_pred": "greedy"}),
-    # "greedy-start-block-coord-macro-f1": (bc_macro_f1, {"init_y_pred": "greedy"}),
-    # "greedy-start-block-coord-cov": (bc_coverage, {"init_y_pred": "greedy"}),
-
     # Tolerance on stopping condiction experiments
-    #"block-coord-macro-prec-tol=1e-3": (bc_macro_precision, {"tolerance": 1e-3}),
-    #"block-coord-macro-prec-tol=1e-4": (bc_macro_precision, {"tolerance": 1e-4}),
+    "block-coord-macro-prec-tol=1e-3": (bc_macro_precision, {"tolerance": 1e-3}),
+    "block-coord-macro-prec-tol=1e-4": (bc_macro_precision, {"tolerance": 1e-4}),
     "block-coord-macro-prec-tol=1e-5": (bc_macro_precision, {"tolerance": 1e-5}),
     "block-coord-macro-prec-tol=1e-6": (bc_macro_precision, {"tolerance": 1e-6}),
     "block-coord-macro-prec-tol=1e-7": (bc_macro_precision, {"tolerance": 1e-7}),
-
     # For recall all should be the same
-    #"block-coord-macro-recall-tol=1e-3": (bc_macro_recall, {"tolerance": 1e-3}),
-    #"block-coord-macro-recall-tol=1e-4": (bc_macro_recall, {"tolerance": 1e-4}),
+    "block-coord-macro-recall-tol=1e-3": (bc_macro_recall, {"tolerance": 1e-3}),
+    "block-coord-macro-recall-tol=1e-4": (bc_macro_recall, {"tolerance": 1e-4}),
     "block-coord-macro-recall-tol=1e-5": (bc_macro_recall, {"tolerance": 1e-5}),
     "block-coord-macro-recall-tol=1e-6": (bc_macro_recall, {"tolerance": 1e-6}),
     "block-coord-macro-recall-tol=1e-7": (bc_macro_recall, {"tolerance": 1e-7}),
-
-    #"block-coord-macro-f1-tol=1e-3": (bc_macro_f1, {"tolerance": 1e-3}),
-    #"block-coord-macro-f1-tol=1e-4": (bc_macro_f1, {"tolerance": 1e-4}),
+    "block-coord-macro-f1-tol=1e-3": (bc_macro_f1, {"tolerance": 1e-3}),
+    "block-coord-macro-f1-tol=1e-4": (bc_macro_f1, {"tolerance": 1e-4}),
     "block-coord-macro-f1-tol=1e-5": (bc_macro_f1, {"tolerance": 1e-5}),
     "block-coord-macro-f1-tol=1e-6": (bc_macro_f1, {"tolerance": 1e-6}),
     "block-coord-macro-f1-tol=1e-7": (bc_macro_f1, {"tolerance": 1e-7}),
-    
-    #"block-coord-cov-tol=1e-3": (bc_coverage, {"tolerance": 1e-3}),
-    #"block-coord-cov-tol=1e-4": (bc_coverage, {"tolerance": 1e-4}),
+    "block-coord-cov-tol=1e-3": (bc_coverage, {"tolerance": 1e-3}),
+    "block-coord-cov-tol=1e-4": (bc_coverage, {"tolerance": 1e-4}),
     "block-coord-cov-tol=1e-5": (bc_coverage, {"tolerance": 1e-5}),
     "block-coord-cov-tol=1e-6": (bc_coverage, {"tolerance": 1e-6}),
     "block-coord-cov-tol=1e-7": (bc_coverage, {"tolerance": 1e-7}),
+    # Greedy / 1 iter variants
+    "greedy-macro-prec": (bc_macro_precision, {"init_y_pred": "greedy", "max_iter": 1}),
+    "greedy-macro-recall": (
+        bc_macro_precision,
+        {"init_y_pred": "greedy", "max_iter": 1},
+    ),
+    "greedy-macro-f1": (bc_macro_f1, {"init_y_pred": "greedy", "max_iter": 1}),
+    "greedy-cov": (bc_coverage, {"init_y_pred": "greedy", "max_iter": 1}),
+    "block-coord-macro-prec-iter=1": (bc_macro_precision, {"max_iter": 1}),
+    "block-coord-macro-recall-iter=1": (bc_macro_precision, {"max_iter": 1}),
+    "block-coord-macro-f1-iter=1": (bc_macro_f1, {"max_iter": 1}),
+    "block-coord-cov-iter=1": (bc_coverage, {"max_iter": 1}),
+    "greedy-start-block-coord-macro-prec": (
+        bc_macro_precision,
+        {"init_y_pred": "greedy"},
+    ),
+    "greedy-start-block-coord-macro-recall": (bc_macro_f1, {"init_y_pred": "greedy"}),
+    "greedy-start-block-coord-macro-f1": (bc_macro_f1, {"init_y_pred": "greedy"}),
+    "greedy-start-block-coord-cov": (bc_coverage, {"init_y_pred": "greedy"}),
 }
 
 # Add variants with different alpha for mixed utilities
-# alphas = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 0.995, 0.999]
-# alphas = [0.1, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 0.995, 0.999]
-# for alpha in alphas:
-#     METHODS[f"block-coord-mixed-prec-f1-alpha={alpha}-tol=1e-6"] = (bc_mixed_instance_prec_macro_f1, {"alpha": alpha, "tolerance": 1e-6})
-#     METHODS[f"block-coord-mixed-prec-prec-alpha={alpha}-tol=1e-6"] = (bc_mixed_instance_prec_macro_prec, {"alpha": alpha, "tolerance": 1e-6})
-#     METHODS[f"block-coord-mixed-prec-cov-alpha={alpha}-tol=1e-6"] = (bc_coverage, {"alpha": alpha, "tolerance": 1e-6})
-#     METHODS[f"block-coord-mixed-prec-f1-alpha={alpha}-tol=1e-7"] = (bc_mixed_instance_prec_macro_f1, {"alpha": alpha, "tolerance": 1e-7})
-#     METHODS[f"block-coord-mixed-prec-prec-alpha={alpha}-tol=1e-7"] = (bc_mixed_instance_prec_macro_prec, {"alpha": alpha, "tolerance": 1e-7})
-#     METHODS[f"block-coord-mixed-prec-cov-alpha={alpha}-tol=1e-7"] = (bc_coverage, {"alpha": alpha, "tolerance": 1e-7})
+alphas = [
+    0.01,
+    0.05,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.7,
+    0.8,
+    0.9,
+    0.95,
+    0.99,
+    0.995,
+    0.999,
+]
+for alpha in alphas:
+    METHODS[f"block-coord-mixed-prec-f1-alpha={alpha}-tol=1e-6"] = (
+        bc_mixed_instance_prec_macro_f1,
+        {"alpha": alpha, "tolerance": 1e-6},
+    )
+    METHODS[f"block-coord-mixed-prec-prec-alpha={alpha}-tol=1e-6"] = (
+        bc_mixed_instance_prec_macro_prec,
+        {"alpha": alpha, "tolerance": 1e-6},
+    )
+    METHODS[f"block-coord-mixed-prec-cov-alpha={alpha}-tol=1e-6"] = (
+        bc_coverage,
+        {"alpha": alpha, "tolerance": 1e-6},
+    )
+    METHODS[f"power-law-with-beta=={alpha}"] = (
+        power_law_weighted_instance,
+        {"beta": alpha},
+    )
 
 
 def calculate_and_report_metrics(y_true, y_pred, k, metrics):
     results = {}
-    print(y_true.shape, y_pred.shape)
     for metric, func in metrics.items():
         value = func(y_true, y_pred)
         results[f"{metric}@{k}"] = value
@@ -173,8 +134,24 @@ def calculate_and_report_metrics(y_true, y_pred, k, metrics):
 @click.option("-m", "--method", type=str, required=False, default=None)
 @click.option("-p", "--probabilities_path", type=str, required=False, default=None)
 @click.option("-l", "--labels_path", type=str, required=False, default=None)
-@click.option("-r", "--results_dir", type=str, required=False, default="results_bca")
-def main(experiment, k, seed, method, probabilities_path, labels_path, results_dir):
+@click.option("-r", "--results_dir", type=str, required=False, default="results_bc")
+@click.option(
+    "--recalculate_predictions", flag=True, type=bool, required=False, default=False
+)
+@click.option(
+    "--recalculate_results", flag=True, type=bool, required=False, default=False
+)
+def main(
+    experiment,
+    k,
+    seed,
+    method,
+    probabilities_path,
+    labels_path,
+    results_dir,
+    recalculate_predictions,
+    recalculate_results,
+):
     print(experiment)
 
     if method is None:
@@ -202,12 +179,17 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
 
     train_y_true_path = None
     train_y_proba_path = None
-    valid_y_true_path = None
-    valid_y_proba_path = None
     train_y_true = None
     train_y_proba = None
-    valid_y_true = None
-    valid_y_proba = None
+
+    y_proba_path = {
+        "path": probabilities_path,
+        "load_func": load_txt_sparse_pred,
+    }
+    y_true_path = {
+        "path": labels_path,
+        "load_func": load_txt_labels,
+    }
 
     # Predefined experiments
     if "yeast_plt" in experiment:
@@ -317,25 +299,6 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
             "load_func": load_txt_labels,
         }
 
-    elif "eurlex2_plt" in experiment:
-        # Eurlex - PLT + XMLC repo data
-        y_proba_path = {
-            "path": f"predictions/eurlex2_top_100_{plt_loss}",
-            "load_func": load_txt_sparse_pred,
-        }
-        y_true_path = {
-            "path": "datasets/eurlex/eurlex_test.txt",
-            "load_func": load_txt_labels,
-        }
-        train_y_true_path = {
-            "path": "datasets/eurlex/eurlex_train.txt",
-            "load_func": load_txt_labels,
-        }
-        train_y_proba_path = {
-            "path": f"predictions/eurlex2_train_top_100_{plt_loss}",
-            "load_func": load_txt_sparse_pred,
-        }
-
     elif "amazoncat_plt" in experiment:
         # AmazonCat - PLT + XMLC repo data
         y_proba_path = {
@@ -364,25 +327,6 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
         train_y_true_path = {
             "path": "datasets/wiki10/wiki10_train.txt",
             "load_func": load_txt_labels,
-        }
-
-    elif "wiki102_plt" in experiment:
-        # Wiki10 - PLT + XMLC repo data
-        y_proba_path = {
-            "path": f"predictions/wiki102_top_100_{plt_loss}",
-            "load_func": load_txt_sparse_pred,
-        }
-        y_true_path = {
-            "path": "datasets/wiki10/wiki10_test.txt",
-            "load_func": load_txt_labels,
-        }
-        train_y_true_path = {
-            "path": "datasets/wiki10/wiki10_train.txt",
-            "load_func": load_txt_labels,
-        }
-        train_y_proba_path = {
-            "path": f"predictions/wiki102_train_top_100_{plt_loss}",
-            "load_func": load_txt_sparse_pred,
         }
 
     elif "amazon_plt" in experiment:
@@ -541,14 +485,6 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
         with Timer():
             train_y_proba = load_cache_npz_file(**train_y_proba_path)
 
-    if valid_y_true_path is not None:
-        with Timer():
-            valid_y_true = load_cache_npz_file(**valid_y_true_path)
-
-    if valid_y_proba_path is not None:
-        with Timer():
-            valid_y_proba = load_cache_npz_file(**valid_y_proba_path)
-
     # For some sparse format this resize might be necessary
     if y_true.shape != y_proba.shape:
         if y_true.shape[0] != y_proba.shape[0]:
@@ -584,23 +520,20 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
     # y_proba = y_proba.toarray()
     # train_y_true = train_y_true.toarray()
 
-    output_path_prefix = f"results_bca4/{experiment}/"
+    output_path_prefix = f"{results_dir}/{experiment}/"
     os.makedirs(output_path_prefix, exist_ok=True)
     for method, func in methods.items():
-        print(f"{experiment} - {method} @ {k}: ")
+        print(f"{experiment} - {method} @ {k} (seed {seed}): ")
 
         output_path = f"{output_path_prefix}{method}_k={k}_s={seed}"
         results_path = f"{output_path}_results.json"
         pred_path = f"{output_path}_pred.npz"
 
         func[1]["return_meta"] = True  # Include meta data in results
-        func[1]["y_true_train"] = train_y_true
-        func[1]["y_proba_train"] = train_y_proba
-        func[1]["y_true_valid"] = train_y_true
-        func[1]["y_proba_valid"] = train_y_proba
-        if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
+        # func[1]["verbose"] = True
+        if not os.path.exists(results_path) or recalculate_results:
             results = {}
-            if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
+            if not os.path.exists(pred_path) or recalculate_predictions:
                 y_pred, meta = func[0](
                     y_proba,
                     k,
@@ -612,10 +545,10 @@ def main(experiment, k, seed, method, probabilities_path, labels_path, results_d
                 results.update(meta)
                 print(f"  Iters: {meta['iters']}")
                 print(f"  Time: {meta['time']:>5.2f} s")
-                #save_npz_wrapper(pred_path, y_pred)
+                save_npz_wrapper(pred_path, y_pred)
                 save_json(results_path, results)
             else:
-                #y_pred = load_npz_wrapper(pred_path)
+                y_pred = load_npz_wrapper(pred_path)
                 results = load_json(results_path)
 
             print("  Metrics (%):")

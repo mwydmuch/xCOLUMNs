@@ -4,7 +4,6 @@ import click
 import numpy as np
 import scipy.sparse as sp
 import torch
-
 from data import *
 from napkinxc.datasets import load_libsvm_file, to_csr_matrix
 from napkinxc.models import BR, PLT
@@ -16,7 +15,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import normalize
 from skmultilearn.problem_transform import LabelPowerset
 from tqdm import trange
-
 
 from xcolumns.block_coordinate import *
 from xcolumns.find_classifier_frank_wolfe import *
