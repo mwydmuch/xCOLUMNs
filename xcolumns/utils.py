@@ -129,13 +129,13 @@ def random_at_k_csr(shape: Tuple[int, int], k: int, seed: int = None):
 
 
 def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None):
-    if seed is not None:
-        np.random.seed(seed)
-
     n, m = shape
     y_pred = np.zeros(shape, dtype=FLOAT_TYPE)
+    
+    rng = np.random.default_rng(seed)
+    labels_range = np.arange(m)
     for i in range(n):
-        y_pred[i, np.random.choice(m, k, replace=False)] = 1.0
+        y_pred[i, rng.choice(labels_range, k, replace=False, shuffle=False)] = 1.0
     return y_pred
 
 

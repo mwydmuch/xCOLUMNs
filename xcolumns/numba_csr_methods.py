@@ -1,6 +1,7 @@
 import numpy as np
 from numba import njit
 from scipy.sparse import csr_matrix
+import random
 
 from .default_types import FLOAT_TYPE, INT_TYPE
 
@@ -10,8 +11,9 @@ def numba_first_k(n: int, k: int):
     y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
     y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
     y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
+    first_k = np.arange(k, dtype=INT_TYPE)
     for i in range(n):
-        y_pred_indices[(i * k) : ((i + 1) * k)] = np.arange(0, k, 1, FLOAT_TYPE)
+        y_pred_indices[i * k : (i + 1) * k] = first_k
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
     return y_pred_data, y_pred_indices, y_pred_indptr
 
@@ -23,25 +25,44 @@ def numba_random_at_k_from(
     """
     Selects k random labels for each instance.
     """
+    #rng = np.random.default_rng(seed) # Numba cannot use new random generator
     if seed is not None:
         np.random.seed(seed)
 
     y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
     y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
     y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
+    labels_range = np.arange(m, dtype=INT_TYPE)
     for i in range(n):
         row_indices = indices[indptr[i] : indptr[i + 1]]
         if row_indices.size >= k:
-            y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
-                row_indices, k, replace=False
-            )
+            # y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
+            #     row_indices, k, replace=False
+            # )
+            y_pred_indices[i * k : (i + 1) * k] = numba_fast_random_choice(row_indices, k)
         else:
-            y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
-                m, k, replace=False
-            )
+            # y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
+            #     labels_range, k, replace=False
+            # )
+            y_pred_indices[i * k : (i + 1) * k] = numba_fast_random_choice(labels_range, k)
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
 
     return y_pred_data, y_pred_indices, y_pred_indptr
+
+
+@njit
+def numba_fast_random_choice(array, k=-1):
+    """
+    Selects k random elements from array.
+    """
+    n = array.size
+    if k < 0:
+        k = array.size
+    index = np.arange(n, dtype=INT_TYPE)
+    for i in range(k):
+        j = random.randint(i, n - 1)
+        index[i], index[j] = index[j], index[i]
+    return array[index[:k]]
 
 
 @njit
@@ -49,16 +70,20 @@ def numba_random_at_k(n: int, m: int, k: int, seed: int = None):
     """
     Selects k random labels for each instance.
     """
+    #rng = np.random.default_rng(seed) # Numba cannot use new random generator
     if seed is not None:
-        np.random.seed(seed)
+        #np.random.seed(seed) np.random.choice seems to be quite slow here
+        random.seed(seed)
 
     y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
     y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
     y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
+    labels_range = np.arange(m, dtype=INT_TYPE)
     for i in range(n):
-        y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
-            m, k, replace=False
-        )
+        # y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
+        #     labels_range, k, replace=False
+        # )
+        y_pred_indices[i * k : (i + 1) * k] = numba_fast_random_choice(labels_range, k)
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
 
     return y_pred_data, y_pred_indices, y_pred_indptr

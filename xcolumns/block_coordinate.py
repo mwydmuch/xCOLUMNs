@@ -89,6 +89,7 @@ def bc_with_0approx_np_step(
     greedy=False,
     maximize=True,
     only_pred=False,
+    skip_tn=False,
 ):
     n, m = y_proba.shape
     y_proba_i = y_proba[i, :]
@@ -99,13 +100,17 @@ def bc_with_0approx_np_step(
         Etp -= y_pred_i * y_proba_i
         Efp -= y_pred_i * (1 - y_proba_i)
         Efn -= (1 - y_pred_i) * y_proba_i
-        Etn -= (1 - y_pred_i) * (1 - y_proba_i)
+
+        if not skip_tn:
+            Etn -= (1 - y_pred_i) * (1 - y_proba_i)
 
     # Calculate gain and selection
     Etpp = Etp + y_proba_i
     Efpp = Efp + (1 - y_proba_i)
     Efnn = Efn + y_proba_i
-    Etnn = Etn + (1 - y_proba_i)
+
+    if not skip_tn:
+        Etnn = Etn + (1 - y_proba_i)
 
     gains = _calculate_binary_utilities(
         bin_utility_func,
@@ -133,7 +138,9 @@ def bc_with_0approx_np_step(
         Etp += y_pred_i * y_proba_i
         Efp += y_pred_i * (1 - y_proba_i)
         Efn += (1 - y_pred_i) * y_proba_i
-        Etn += (1 - y_pred_i) * (1 - y_proba_i)
+
+        if not skip_tn:
+            Etn += (1 - y_pred_i) * (1 - y_proba_i)
 
 
 def bc_with_0approx_csr_step(
@@ -149,6 +156,7 @@ def bc_with_0approx_csr_step(
     greedy=False,
     maximize=True,
     only_pred=False,
+    skip_tn=False,
 ):
     n, m = y_proba.shape
     r_start, r_end = y_pred.indptr[i], y_pred.indptr[i + 1]
@@ -162,42 +170,44 @@ def bc_with_0approx_csr_step(
 
     # Adjust local confusion matrix
     if not greedy and not only_pred:
-        Etn -= 1
-        data, indices = numba_sparse_vec_mul_vec(r_data, r_indices, p_data, p_indices)
-        Etp[indices] -= data
-        Etn[indices] += data
-        data, indices = numba_sparse_vec_mul_ones_minus_vec(
+        tp_data, tp_indices = numba_sparse_vec_mul_vec(r_data, r_indices, p_data, p_indices)
+        Etp[tp_indices] -= tp_data
+        fp_data, fp_indices = numba_sparse_vec_mul_ones_minus_vec(
             r_data, r_indices, p_data, p_indices
         )
-        Efp[indices] -= data
-        Etn[indices] += data
-        data, indices = numba_sparse_vec_mul_ones_minus_vec(
+        Efp[fp_indices] -= fp_data
+        fn_data, fn_indices = numba_sparse_vec_mul_ones_minus_vec(
             p_data, p_indices, r_data, r_indices
         )
-        Efn[indices] -= data
-        Etn[indices] += data
+        Efn[fn_indices] -= fn_data
+
+        if not skip_tn:
+            Etn -= 1
+            Etn[tp_indices] += tp_data
+            Etn[fp_indices] += fp_data
+            Etn[fn_indices] += fn_data
 
     n_Etp = Etp[p_indices]
     n_Efp = Efp[p_indices]
     p_Efn = Efn[p_indices]
-    p_Etn = Etn[p_indices]
+    
+    p_Etpp = (n_Etp + p_data) / n
+    p_Efpp = (n_Efp + (1 - p_data)) / n
+    n_Efnn = (p_Efn + p_data) / n
 
-    p_Etpp = Etp[p_indices] + p_data
-    p_Efpp = Efp[p_indices] + (1 - p_data)
-    n_Efnn = Efn[p_indices] + p_data
-    n_Etnn = Etn[p_indices] + (1 - p_data)
+    n_Etp /= n
+    n_Efp /= n
+    p_Efn /= n
+
+    p_Etn = Etn[p_indices]
+    n_Etnn = p_Etn
+    if not skip_tn:
+        n_Etnn = (p_Etn + (1 - p_data)) / n
+        p_Etn /= n
 
     # Calculate gain and selection
     gains = _calculate_binary_utilities(
-        bin_utility_func,
-        p_Etpp / n,
-        p_Efpp / n,
-        p_Efn / n,
-        p_Etn / n,
-        n_Etp / n,
-        n_Efp / n,
-        n_Efnn / n,
-        n_Etnn / n,
+        bin_utility_func, p_Etpp, p_Efpp, p_Efn, p_Etn, n_Etp, n_Efp, n_Efnn, n_Etnn
     )
     gains = np.asarray(gains).ravel()
 
@@ -215,20 +225,22 @@ def bc_with_0approx_csr_step(
 
     # Update local confusion matrix
     if not only_pred:
-        Etn += 1
-        data, indices = numba_sparse_vec_mul_vec(r_data, r_indices, p_data, p_indices)
-        Etp[indices] += data
-        Etn[indices] -= data
-        data, indices = numba_sparse_vec_mul_ones_minus_vec(
+        tp_data, tp_indices = numba_sparse_vec_mul_vec(r_data, r_indices, p_data, p_indices)
+        Etp[tp_indices] += tp_data
+        fp_data, fp_indices = numba_sparse_vec_mul_ones_minus_vec(
             r_data, r_indices, p_data, p_indices
         )
-        Efp[indices] += data
-        Etn[indices] -= data
-        data, indices = numba_sparse_vec_mul_ones_minus_vec(
+        Efp[fp_indices] += fp_data
+        fn_data, fn_indices = numba_sparse_vec_mul_ones_minus_vec(
             p_data, p_indices, r_data, r_indices
         )
-        Efn[indices] += data
-        Etn[indices] -= data
+        Efn[fn_indices] += fn_data
+        
+        if not skip_tn:
+            Etn += 1
+            Etn[tp_indices] -= tp_data
+            Etn[fp_indices] -= fp_data
+            Etn[fn_indices] -= fn_data
 
 
 def bc_with_0approx(
@@ -241,6 +253,7 @@ def bc_with_0approx(
     max_iter: int = 100,
     shuffle_order: bool = True,
     maximize=True,
+    skip_tn=False,
     seed: int = None,
     verbose: bool = False,
     return_meta: bool = False,
@@ -256,9 +269,8 @@ def bc_with_0approx(
 
     n, m = y_proba.shape
 
-    # Set seed
-    if seed is not None:
-        np.random.seed(seed)
+    # Initialize the meta data dictionary
+    meta = {"utilities": [], "iters": 0, "time": time()}
 
     # Get specialized functions
     if isinstance(y_proba, np.ndarray):
@@ -274,16 +286,18 @@ def bc_with_0approx(
     utility_aggregation_func = _get_utility_aggregation_func(utility_aggregation)
 
     # Initialize the prediction matrix
+    print(f"  Initializing starting prediction ...")
     greedy = init_y_pred == "greedy"
     y_pred = _get_initial_y_pred(y_proba, init_y_pred, k, random_at_k_func)
 
-    # Initialize the meta data dictionary
-    meta = {"utilities": [], "iters": 0, "time": time()}
-
+    # Initialize the instance order and set seed for shuffling
+    rng = np.random.default_rng(seed)
     order = np.arange(n)
     for j in range(1, max_iter + 1):
+        print(f"  Starting iteration {j} ...")
+
         if shuffle_order:
-            np.random.shuffle(order)
+            rng.shuffle(order)
 
         # Recalculate expected conf matrices to prevent numerical errors from accumulating too much
         # In this variant they will be all np.matrix with shape (1, m)
@@ -293,6 +307,7 @@ def bc_with_0approx(
             Efn = np.zeros(m, dtype=FLOAT_TYPE)
             Etn = np.zeros(m, dtype=FLOAT_TYPE)
         else:
+            print("  Calculating expected confusion matrix ...")
             Etp, Efp, Efn, Etn = calculate_confusion_matrix(
                 y_proba, y_pred, normalize=False
             )
@@ -306,7 +321,7 @@ def bc_with_0approx(
             utility_aggregation_func,
         )
 
-        for i in tqdm(order, disable=verbose):
+        for i in tqdm(order, disable=(not verbose)):
             bc_with_0approx_step_func(
                 y_proba,
                 y_pred,
@@ -319,6 +334,7 @@ def bc_with_0approx(
                 bin_utility_func,
                 greedy=greedy,
                 maximize=maximize,
+                skip_tn=skip_tn,
             )
 
         new_utility = _calculate_utility(
@@ -329,16 +345,16 @@ def bc_with_0approx(
             bin_utility_func,
             utility_aggregation_func,
         )
-
+        
+        greedy = False
+        meta["iters"] = j
         meta["utilities"].append(new_utility)
+
         print(
             f"  Iteration {j} finished, expected score: {old_utility} -> {new_utility}"
         )
         if new_utility <= old_utility + tolerance:
             break
-
-        greedy = False
-        meta["iters"] = j
 
     if return_meta:
         meta["time"] = time() - meta["time"]
@@ -437,6 +453,9 @@ def bc_coverage(
     """
     n, m = y_proba.shape
 
+    # Initialize the meta data dictionary
+    meta = {"utilities": [], "iters": 0, "time": time()}
+
     # Set seed
     if seed is not None:
         np.random.seed(seed)
@@ -452,18 +471,20 @@ def bc_coverage(
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
 
     # Initialize the prediction matrix
+    print(f"  Initializing starting prediction ...")
     greedy = init_y_pred == "greedy"
     y_pred = _get_initial_y_pred(y_proba, init_y_pred, k, random_at_k_func)
 
-    # Initialize the meta data dictionary
-    meta = {"utilities": [], "iters": 0, "time": time()}
+    #y_proba.data = np.minimum(y_proba.data, 1 - 1e-9)
 
-    y_proba.data = np.minimum(y_proba.data, 1 - 1e-9)  # TODO: Improve
-
+    # Initialize the instance order and set seed for shuffling
+    rng = np.random.default_rng(seed)
     order = np.arange(n)
     for j in range(1, max_iter + 1):
+        print(f"  Starting iteration {j} ...")
+
         if shuffle_order:
-            np.random.shuffle(order)
+            rng.shuffle(order)
 
         if greedy:
             Ef = np.ones(m, dtype=FLOAT_TYPE)
@@ -477,18 +498,18 @@ def bc_coverage(
 
         old_cov = _calculate_coverage_utility(y_proba, y_pred, Ef, k, alpha)
 
-        for i in tqdm(order, disable=verbose):
+        for i in tqdm(order, disable=(not verbose)):
             bc_coverage_step_func(y_proba, y_pred, i, Ef, k, alpha, greedy=greedy)
 
         new_cov = _calculate_coverage_utility(y_proba, y_pred, Ef, k, alpha)
 
+        greedy = False
+        meta["iters"] = j
         meta["utilities"].append(new_cov)
+
         print(f"  Iteration {j} finished, expected coverage: {old_cov} -> {new_cov}")
         if new_cov <= old_cov + tolerance:
             break
-
-        greedy = False
-        meta["iters"] = j
 
     if return_meta:
         meta["time"] = time() - meta["time"]
@@ -498,6 +519,7 @@ def bc_coverage(
 
 
 # Implementations of binary utilities defined on the confusion matrix
+# TODO: Replace them with general implementations of utilities defined on the confusion matrix
 
 
 def instance_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k):
@@ -526,8 +548,16 @@ def macro_fmeasure_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=1e-9):
 # Implementations of functions for optimizing specific measures
 
 
-def bc_instance_precision_at_k(
-    y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs
+def bc_instance_precision_at_k(    
+    y_proba: Union[np.ndarray, csr_matrix],
+    k: int,
+    tolerance: float = 1e-6,
+    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
+    max_iter: int = 100,
+    shuffle_order: bool = True,
+    verbose: bool = False,
+    return_meta: bool = False,
+    **kwargs
 ):
     def instance_precision_with_k_fn(tp, fp, fn, tn):
         return instance_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k)
@@ -537,34 +567,73 @@ def bc_instance_precision_at_k(
         k=k,
         bin_utility_func=instance_precision_with_k_fn,
         utility_aggregation="sum",
-        **kwargs,
+        tolerance=tolerance, init_y_pred=init_y_pred, max_iter=max_iter, shuffle_order=shuffle_order, verbose=verbose, return_meta=return_meta, **kwargs
     )
 
 
-def bc_macro_precision(y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
+def bc_macro_precision(    
+    y_proba: Union[np.ndarray, csr_matrix],
+    k: int,
+    tolerance: float = 1e-6,
+    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
+    max_iter: int = 100,
+    shuffle_order: bool = True,
+    verbose: bool = False,
+    return_meta: bool = False,
+    **kwargs
+):
     return bc_with_0approx(
-        y_proba, k=k, bin_utility_func=macro_precision_on_conf_matrix, **kwargs
+        y_proba, k=k, bin_utility_func=macro_precision_on_conf_matrix, skip_tn=True, tolerance=tolerance, init_y_pred=init_y_pred, max_iter=max_iter, shuffle_order=shuffle_order, verbose=verbose, return_meta=return_meta, **kwargs
     )
 
 
-def bc_macro_recall(y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
+def bc_macro_recall(    
+    y_proba: Union[np.ndarray, csr_matrix],
+    k: int,
+    tolerance: float = 1e-6,
+    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
+    max_iter: int = 100,
+    shuffle_order: bool = True,
+    verbose: bool = False,
+    return_meta: bool = False,
+    **kwargs
+):
     return bc_with_0approx(
-        y_proba, k=k, bin_utility_func=macro_recall_on_conf_matrix, **kwargs
+        y_proba, k=k, bin_utility_func=macro_recall_on_conf_matrix, skip_tn=True, tolerance=tolerance, init_y_pred=init_y_pred, max_iter=max_iter, shuffle_order=shuffle_order, verbose=verbose, return_meta=return_meta, **kwargs
     )
 
 
-def bc_macro_f1(y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
+def bc_macro_f1(    
+    y_proba: Union[np.ndarray, csr_matrix],
+    k: int,
+    tolerance: float = 1e-6,
+    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
+    max_iter: int = 100,
+    shuffle_order: bool = True,
+    verbose: bool = False,
+    return_meta: bool = False,
+    **kwargs
+):
     return bc_with_0approx(
-        y_proba, k=k, bin_utility_func=macro_fmeasure_on_conf_matrix, **kwargs
+        y_proba, k=k, bin_utility_func=macro_fmeasure_on_conf_matrix, skip_tn=True, tolerance=tolerance, init_y_pred=init_y_pred, max_iter=max_iter, shuffle_order=shuffle_order, verbose=verbose, return_meta=return_meta, **kwargs
     )
 
 
 def bc_mixed_instance_prec_macro_prec(
-    y_proba: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 1, **kwargs
+    y_proba: Union[np.ndarray, csr_matrix],
+    k: int,
+    alpha: float = 1,
+    tolerance: float = 1e-6,
+    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
+    max_iter: int = 100,
+    shuffle_order: bool = True,
+    verbose: bool = False,
+    return_meta: bool = False,
+    **kwargs,
 ):
     n, m = y_proba.shape
 
-    def mixed_precision_alpha_fn(tp, fp, fn, tn):
+    def mixed_utility_fn(tp, fp, fn, tn):
         return (1 - alpha) * instance_precision_at_k_on_conf_matrix(
             tp, fp, fn, tn, k
         ) + alpha * macro_precision_on_conf_matrix(tp, fp, fn, tn) / m
@@ -572,14 +641,30 @@ def bc_mixed_instance_prec_macro_prec(
     return bc_with_0approx(
         y_proba,
         k=k,
-        bin_utility_func=mixed_precision_alpha_fn,
+        bin_utility_func=mixed_utility_fn,
         utility_aggregation="sum",
+        skip_tn=True,
+        tolerance=tolerance,
+        init_y_pred=init_y_pred,
+        max_iter=max_iter,
+        shuffle_order=shuffle_order,
+        verbose=verbose,
+        return_meta=return_meta,
         **kwargs,
     )
 
 
 def bc_mixed_instance_prec_macro_f1(
-    y_proba: Union[np.ndarray, csr_matrix], k: int = 5, alpha: float = 1, **kwargs
+    y_proba: Union[np.ndarray, csr_matrix],
+    k: int,
+    alpha: float = 1,
+    tolerance: float = 1e-6,
+    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
+    max_iter: int = 100,
+    shuffle_order: bool = True,
+    verbose: bool = False,
+    return_meta: bool = False,
+    **kwargs,
 ):
     n, m = y_proba.shape
 
@@ -593,15 +678,21 @@ def bc_mixed_instance_prec_macro_f1(
         k=k,
         bin_utility_func=mixed_utility_fn,
         utility_aggregation="sum",
+        skip_tn=True,
+        tolerance=tolerance,
+        init_y_pred=init_y_pred,
+        max_iter=max_iter,
+        shuffle_order=shuffle_order,
+        verbose=verbose,
+        return_meta=return_meta,
         **kwargs,
     )
 
 
 def bc_mixed_instance_prec_macro_recall(
     y_proba: Union[np.ndarray, csr_matrix],
-    k: int = 5,
+    k: int,
     alpha: float = 1,
-    greedy_start=False,
     tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
     max_iter: int = 100,
@@ -623,7 +714,7 @@ def bc_mixed_instance_prec_macro_recall(
         k=k,
         bin_utility_func=mixed_utility_fn,
         utility_aggregation="sum",
-        greedy_start=greedy_start,
+        skip_tn=True,
         tolerance=tolerance,
         init_y_pred=init_y_pred,
         max_iter=max_iter,
