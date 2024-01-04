@@ -1,6 +1,6 @@
 from random import randint
-from typing import Union
 from time import time
+from typing import Union
 
 import numpy as np
 import torch
@@ -207,7 +207,7 @@ def find_classifier_frank_wolfe(
     classifier_weights[0] = 1
 
     meta = {"alphas": [], "utilities": [], "time": time()}
-    
+
     for i in range(1, max_iters):
         log(f"  Starting iteration {i} ...")
         utility, G = calculate_utility_with_gradient(utility_func, C)
@@ -253,7 +253,7 @@ def find_classifier_frank_wolfe(
             classifier_weights = classifier_weights[:i]
             break
 
-    meta["iters"] = i
+        meta["iters"] = i
 
     # Final utility calculation
     final_utility = calculate_utility(utility_func, C)

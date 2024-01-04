@@ -1,6 +1,7 @@
+from typing import Tuple, Union
+
 import numpy as np
 from scipy.sparse import csr_matrix
-from typing import Union, Tuple
 
 from .default_types import *
 from .numba_csr_methods import *
@@ -86,7 +87,11 @@ def calculate_fn_csr(y_true: csr_matrix, y_pred: csr_matrix):
     )
 
 
-def calculate_confusion_matrix(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], normalize: bool =False):
+def calculate_confusion_matrix(
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    normalize: bool = False,
+):
     """
     Calculate confusion matrix for true and prediction.
     """
@@ -131,7 +136,7 @@ def random_at_k_csr(shape: Tuple[int, int], k: int, seed: int = None):
 def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None):
     n, m = shape
     y_pred = np.zeros(shape, dtype=FLOAT_TYPE)
-    
+
     rng = np.random.default_rng(seed)
     labels_range = np.arange(m)
     for i in range(n):
@@ -139,18 +144,18 @@ def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None):
     return y_pred
 
 
-def lin_search(low, high, step, func):
-    best = None
-    best_score = None
-    for i in np.arange(low, high, step):
+def lin_search(low, high, step, func) -> Tuple[float, float]:
+    best = low
+    best_val = func(low)
+    for i in np.arange(low + step, high, step):
         score = func(i)
-        if best_score is None or score > best_score:
+        if score > best_val:
             best = i
-            best_score = score
-    return best, best_score
+            best_val = score
+    return best, best_val
 
 
-def bin_search(low, high, eps, func):
+def bin_search(low, high, eps, func) -> Tuple[float, float]:
     while high - low > eps:
         mid = (low + high) / 2
         mid_next = (mid + high) / 2
@@ -160,10 +165,12 @@ def bin_search(low, high, eps, func):
         else:
             low = mid
 
-    return (low + high) / 2
+    best = (low + high) / 2
+    best_val = func(best)
+    return best, best_val
 
 
-def ternary_search(low, high, eps, func):
+def ternary_search(low, high, eps, func) -> Tuple[float, float]:
     while high - low > eps:
         mid1 = low + (high - low) / 3
         mid2 = high - (high - low) / 3
@@ -173,4 +180,6 @@ def ternary_search(low, high, eps, func):
         else:
             low = mid1
 
-    return (low + high) / 2
+    best = (low + high) / 2
+    best_val = func(best)
+    return best, best_val

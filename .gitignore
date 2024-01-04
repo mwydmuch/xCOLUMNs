@@ -1,6 +1,6 @@
-datasets
-predictions
-results
+experiments/datasets
+experiments/predictions
+experiments/results*
 lightning_logs
 
 __pycache__

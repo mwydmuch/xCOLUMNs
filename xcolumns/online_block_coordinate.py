@@ -1,5 +1,5 @@
-from typing import Union
 import random
+from typing import Union
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -56,9 +56,7 @@ def pu_through_etu(
     return pu_result
 
 
-def online_bc_macro_f1(
-    y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs
-):
+def online_bc_macro_f1(y_proba: Union[np.ndarray, csr_matrix], k: int = 5, **kwargs):
     return online_bc(
         y_proba, k=k, bin_utility_func=macro_fmeasure_on_conf_matrix, **kwargs
     )
@@ -71,8 +69,8 @@ def online_bc(
     tolerance=1e-6,
     seed: int = None,
     greedy: bool = False,
-    num_valid_sets = 10,
-    valid_set_size = 0.9,
+    num_valid_sets=10,
+    valid_set_size=0.9,
     y_proba_valid: Union[np.ndarray, csr_matrix] = None,
     return_meta: bool = False,
     **kwargs,
@@ -85,10 +83,10 @@ def online_bc(
     :param tolerance: Tolerance for the BCA inference
     :param seed: Seed for the BCA inference
     """
-    
+
     # Initialize the meta data dictionary
     meta = {"iters": 1, "valid_iters": num_valid_sets, "time": time()}
-    
+
     n, m = y_proba.shape
     # Get specialized functions
     if isinstance(y_proba, np.ndarray):
@@ -97,20 +95,24 @@ def online_bc(
         bc_with_0approx_step_func = bc_with_0approx_csr_step
     else:
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
-    
+
     random.seed(seed)
 
     y_valid = y_proba_valid
-    
+
     classifiers = []
     for i in range(num_valid_sets):
-        if valid_set_size != 1 and isinstance(y_valid, float): 
-            i_y_valid = y_valid[np.random.choice(y_valid.shape[0], int(y_valid.shape[0] * valid_set_size))]
+        if valid_set_size != 1 and isinstance(y_valid, float):
+            i_y_valid = y_valid[
+                np.random.choice(
+                    y_valid.shape[0], int(y_valid.shape[0] * valid_set_size)
+                )
+            ]
         elif valid_set_size > 1 and isinstance(y_valid, int):
             i_y_valid = y_valid[np.random.choice(y_valid.shape[0], valid_set_size)]
         else:
             i_y_valid = y_valid
-            
+
         print(f"  Running BC for {i} subset of the validation set")
         y_pred = bc_with_0approx(
             i_y_valid,
@@ -118,7 +120,7 @@ def online_bc(
             bin_utility_func=bin_utility_func,
             tolerance=tolerance,
             seed=seed,
-            verbose=True
+            verbose=True,
         )
         tp, fp, fn, tn = calculate_confusion_matrix(i_y_valid, y_pred)
         classifiers.append((tp, fp, fn, tn))
@@ -127,7 +129,19 @@ def online_bc(
     y_pred = predict_top_k(y_proba, k, return_meta=False)
     for i in trange(n):
         tp, fp, fn, tn = random.choice(classifiers)
-        bc_with_0approx_step_func(y_proba, y_pred, i, tp, fp, fn, tn, k, bin_utility_func, only_pred=(not greedy), greedy=greedy)
+        bc_with_0approx_step_func(
+            y_proba,
+            y_pred,
+            i,
+            tp,
+            fp,
+            fn,
+            tn,
+            k,
+            bin_utility_func,
+            only_pred=(not greedy),
+            greedy=greedy,
+        )
 
     if return_meta:
         meta["time"] = time() - meta["time"]

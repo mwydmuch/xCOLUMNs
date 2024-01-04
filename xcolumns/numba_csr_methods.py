@@ -1,7 +1,8 @@
+import random
+
 import numpy as np
 from numba import njit
 from scipy.sparse import csr_matrix
-import random
 
 from .default_types import FLOAT_TYPE, INT_TYPE
 
@@ -25,7 +26,7 @@ def numba_random_at_k_from(
     """
     Selects k random labels for each instance.
     """
-    #rng = np.random.default_rng(seed) # Numba cannot use new random generator
+    # rng = np.random.default_rng(seed) # Numba cannot use new random generator
     if seed is not None:
         np.random.seed(seed)
 
@@ -39,12 +40,16 @@ def numba_random_at_k_from(
             # y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
             #     row_indices, k, replace=False
             # )
-            y_pred_indices[i * k : (i + 1) * k] = numba_fast_random_choice(row_indices, k)
+            y_pred_indices[i * k : (i + 1) * k] = numba_fast_random_choice(
+                row_indices, k
+            )
         else:
             # y_pred_indices[i * k : (i + 1) * k] = np.random.choice(
             #     labels_range, k, replace=False
             # )
-            y_pred_indices[i * k : (i + 1) * k] = numba_fast_random_choice(labels_range, k)
+            y_pred_indices[i * k : (i + 1) * k] = numba_fast_random_choice(
+                labels_range, k
+            )
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
 
     return y_pred_data, y_pred_indices, y_pred_indptr
@@ -70,9 +75,9 @@ def numba_random_at_k(n: int, m: int, k: int, seed: int = None):
     """
     Selects k random labels for each instance.
     """
-    #rng = np.random.default_rng(seed) # Numba cannot use new random generator
+    # rng = np.random.default_rng(seed) # Numba cannot use new random generator
     if seed is not None:
-        #np.random.seed(seed) np.random.choice seems to be quite slow here
+        # np.random.seed(seed) np.random.choice seems to be quite slow here
         random.seed(seed)
 
     y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
