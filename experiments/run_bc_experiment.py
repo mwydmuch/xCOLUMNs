@@ -32,39 +32,36 @@ METHODS = {
     "power-law-with-beta=0.25": (power_law_weighted_instance, {"beta": 0.25}),
     "log": (predict_log_weighted_per_instance, {}),
     "optimal-macro-recall": (predict_for_optimal_macro_recall, {}),
-    
+    #
     # Block coordinate with default parameters - commented out because it better to use variatns with specific tolerance to stopping condition
     # "block-coord-macro-prec": (bc_macro_precision, {}),
     # "block-coord-macro-recall": (bc_macro_recall, {}),
     # "block-coord-macro-f1": (bc_macro_f1, {}),
     # "block-coord-cov": (bc_coverage, {}),
-    
     # Tolerance on stopping condiction experiments
     "block-coord-macro-prec-tol=1e-3": (bc_macro_precision, {"tolerance": 1e-3}),
     "block-coord-macro-prec-tol=1e-4": (bc_macro_precision, {"tolerance": 1e-4}),
     "block-coord-macro-prec-tol=1e-5": (bc_macro_precision, {"tolerance": 1e-5}),
     "block-coord-macro-prec-tol=1e-6": (bc_macro_precision, {"tolerance": 1e-6}),
     "block-coord-macro-prec-tol=1e-7": (bc_macro_precision, {"tolerance": 1e-7}),
-    
+    #
     # For recall all should be the same
     "block-coord-macro-recall-tol=1e-3": (bc_macro_recall, {"tolerance": 1e-3}),
     "block-coord-macro-recall-tol=1e-4": (bc_macro_recall, {"tolerance": 1e-4}),
     "block-coord-macro-recall-tol=1e-5": (bc_macro_recall, {"tolerance": 1e-5}),
     "block-coord-macro-recall-tol=1e-6": (bc_macro_recall, {"tolerance": 1e-6}),
     "block-coord-macro-recall-tol=1e-7": (bc_macro_recall, {"tolerance": 1e-7}),
-    
     "block-coord-macro-f1-tol=1e-3": (bc_macro_f1, {"tolerance": 1e-3}),
     "block-coord-macro-f1-tol=1e-4": (bc_macro_f1, {"tolerance": 1e-4}),
     "block-coord-macro-f1-tol=1e-5": (bc_macro_f1, {"tolerance": 1e-5}),
     "block-coord-macro-f1-tol=1e-6": (bc_macro_f1, {"tolerance": 1e-6}),
     "block-coord-macro-f1-tol=1e-7": (bc_macro_f1, {"tolerance": 1e-7}),
-    
     "block-coord-cov-tol=1e-3": (bc_coverage, {"tolerance": 1e-3}),
     "block-coord-cov-tol=1e-4": (bc_coverage, {"tolerance": 1e-4}),
     "block-coord-cov-tol=1e-5": (bc_coverage, {"tolerance": 1e-5}),
     "block-coord-cov-tol=1e-6": (bc_coverage, {"tolerance": 1e-6}),
     "block-coord-cov-tol=1e-7": (bc_coverage, {"tolerance": 1e-7}),
-    
+    #
     # Greedy / 1 iter variants
     "greedy-macro-prec": (bc_macro_precision, {"init_y_pred": "greedy", "max_iter": 1}),
     "greedy-macro-recall": (

@@ -1,8 +1,9 @@
-from PIL import Image, ImageDraw, ImageColor
-import numpy as np
-from math import pi
-import seaborn as sns
 import random
+from math import pi
+
+import numpy as np
+import seaborn as sns
+from PIL import Image, ImageColor, ImageDraw
 
 
 def create_gradient(width, height, gradient, angle):
@@ -13,7 +14,9 @@ def create_gradient(width, height, gradient, angle):
     for y in range(height):
         for x in range(width):
             # Calculate the normalized position along the gradient line
-            t = (x * np.cos(angle) + y * np.sin(angle)) / (width * np.cos(angle) + height * np.sin(angle))
+            t = (x * np.cos(angle) + y * np.sin(angle)) / (
+                width * np.cos(angle) + height * np.sin(angle)
+            )
             # Clamp the position to the range [0, 1]
             t = max(0, min(1, t))
             # Find the two closest color stops
@@ -24,9 +27,9 @@ def create_gradient(width, height, gradient, angle):
             c1 = gradient[i][1]
             c2 = gradient[i + 1][1]
             if isinstance(c1, str):
-                c1 = ImageColor.getcolor(c1, 'RGBA')
+                c1 = ImageColor.getcolor(c1, "RGBA")
             if isinstance(c2, str):
-                c2 = ImageColor.getcolor(c2, 'RGBA')
+                c2 = ImageColor.getcolor(c2, "RGBA")
             s1 = gradient[i][0]
             s2 = gradient[i + 1][0]
             f = (t - s1) / (s2 - s1)
@@ -48,7 +51,7 @@ def create_logo_image(grid, filled_color, column_gradients, cell_size):
     image_height = len(grid) * cell_size[1]
 
     # Create a new image in RGBA mode
-    img = Image.new('RGBA', (image_width, image_height))
+    img = Image.new("RGBA", (image_width, image_height))
     draw = ImageDraw.Draw(img)
 
     # Create a gradient for each column
@@ -57,10 +60,10 @@ def create_logo_image(grid, filled_color, column_gradients, cell_size):
             cell_size[0],
             image_height,
             column_gradients[i % len(column_gradients)],
-            pi / 2
+            pi / 2,
         )
         img.paste(gradient_image, (i * cell_size[0], 0), gradient_image)
-        
+
     for i, row in enumerate(grid):
         # Define the starting and ending y coordinates for the row
         start_y = i * cell_size[1]
@@ -68,7 +71,7 @@ def create_logo_image(grid, filled_color, column_gradients, cell_size):
 
         for j, cell in enumerate(row):
             # If cell is empty, skip it
-            if cell == 'X':
+            if cell == "X":
                 # Define the starting and ending x coordinates for the cell
                 start_x = j * cell_size[0]
                 end_x = start_x + cell_size[0]
@@ -77,18 +80,20 @@ def create_logo_image(grid, filled_color, column_gradients, cell_size):
     return img
 
 
-def calculate_columns_gradients(grid, left_gradient, right_gradient, seed, add_alpha_gradient=True):
+def calculate_columns_gradients(
+    grid, left_gradient, right_gradient, seed, add_alpha_gradient=True
+):
     random.seed(seed)
 
     def add_stops(gradient):
         return [(i / (len(gradient) - 1), v) for i, v in enumerate(gradient)]
-    
+
     def clip(val, min_val, max_val):
         return min(max(val, min_val), max_val)
-    
+
     def color_mod_val():
         return random.random() * 16 - 8
-    
+
     columns = len(grid[0])
 
     # Create interpolated gradients for each column
@@ -125,7 +130,6 @@ def calculate_columns_gradients(grid, left_gradient, right_gradient, seed, add_a
 
 
 if __name__ == "__main__":
-
     # Initial logo version
     grid = """
 ....................................
@@ -137,8 +141,10 @@ if __name__ == "__main__":
 .X.X.X...X.X.X...X.X.X...X.X..X...X.
 .X.X.XXX.XXX.XXX.XXX.X...X.X..X.XX..
 ....................................
-""".strip().split('\n')
-    
+""".strip().split(
+        "\n"
+    )
+
     # Logo with the same number of filled cells in each row (k=13)
     grid = """
 ....................................
@@ -150,19 +156,23 @@ if __name__ == "__main__":
 .X.X.X...XXX.X...X.X.X...X.X..X.....
 .X.X.XXX.....XXX.XXX.X........X.....
 ....................................
-""".strip().split('\n')
-    
+""".strip().split(
+        "\n"
+    )
+
     # Count the number of filled cells in each row
     # for i, row in enumerate(grid):
     #     print(f"Full cells in row {i}: {row.count('X')}")
 
     cell_size = (20, 20)
     filled_color = (255, 255, 255, 255)  # RGB color for filled cells
-    columns_gradients = calculate_columns_gradients(grid, sns.color_palette("crest"), sns.color_palette("flare"), 1993)
+    columns_gradients = calculate_columns_gradients(
+        grid, sns.color_palette("crest"), sns.color_palette("flare"), 1993
+    )
 
     # Generate the gradient image
     logo_image = create_logo_image(grid, filled_color, columns_gradients, cell_size)
 
     # Save the image or display it
-    logo_image.save('xCOLUMNs_logo.png')  # Save the image as 'xCOLUMNs_logo.png'
+    logo_image.save("xCOLUMNs_logo.png")  # Save the image as 'xCOLUMNs_logo.png'
     logo_image.show()  # Show the image

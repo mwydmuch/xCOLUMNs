@@ -16,7 +16,7 @@ as well as few additional packages listed in `requirements.txt` file. They can b
 pip install -r requirements.txt
 ```
 
-## Strucuture
+## Directory and files
 
 - `datasets/` - the scripts expect to find datasets in this directory
 - `predictions/` - the scripts expect to find probability estimes from different models (e.g. LightXML) in this directory
