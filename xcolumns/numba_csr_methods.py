@@ -3,11 +3,12 @@ import random
 import numpy as np
 from numba import njit
 from scipy.sparse import csr_matrix
+from typing import Optional
 
 from .default_types import FLOAT_TYPE, INT_TYPE
 
 
-@njit
+@njit#(cache=True)
 def numba_first_k(n: int, k: int):
     y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
     y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
@@ -19,7 +20,7 @@ def numba_first_k(n: int, k: int):
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
-@njit
+@njit#(cache=True)
 def numba_random_at_k_from(
     indices: np.ndarray, indptr: np.ndarray, n: int, m: int, k: int, seed: int = None
 ):
@@ -55,7 +56,7 @@ def numba_random_at_k_from(
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
-@njit
+@njit#(cache=True)
 def numba_fast_random_choice(array, k=-1):
     """
     Selects k random elements from array.
@@ -70,7 +71,7 @@ def numba_fast_random_choice(array, k=-1):
     return array[index[:k]]
 
 
-@njit
+@njit#(cache=True)
 def numba_random_at_k(n: int, m: int, k: int, seed: int = None):
     """
     Selects k random labels for each instance.
@@ -94,7 +95,7 @@ def numba_random_at_k(n: int, m: int, k: int, seed: int = None):
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
-@njit
+@njit#(cache=True)
 def numba_sparse_vec_mul_vec(
     a_data: np.ndarray, a_indices: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray
 ):
@@ -122,7 +123,7 @@ def numba_sparse_vec_mul_vec(
     return new_data[:k], new_indices[:k]
 
 
-@njit
+@njit#(cache=True)
 def numba_sparse_vec_mul_ones_minus_vec(
     a_data: np.ndarray, a_indices: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray
 ):
@@ -154,7 +155,7 @@ def numba_sparse_vec_mul_ones_minus_vec(
     return new_data[:k], new_indices[:k]
 
 
-@njit
+@njit#(cache=True)
 def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
     a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, n, m
 ):
@@ -180,7 +181,7 @@ def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
     return y_pred
 
 
-@njit
+@njit#(cache=True)
 def numba_calculate_prod_1_sparse_mat_mul_ones_minus_mat(
     a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, n, m
 ):
@@ -206,7 +207,7 @@ def numba_calculate_prod_1_sparse_mat_mul_ones_minus_mat(
     return y_pred
 
 
-@njit
+@njit#(cache=True)
 def numba_argtopk(data, indices, k):
     """
     Returns the indices of the top k elements
@@ -219,25 +220,44 @@ def numba_argtopk(data, indices, k):
         return indices
 
 
-@njit
-def numba_weighted_per_instance(
+@njit#(cache=True)
+def numba_predict_weighted_per_instance(
     data: np.ndarray,
     indices: np.ndarray,
     indptr: np.ndarray,
-    weights: np.ndarray,
     n: int,
     m: int,
     k: int,
+    a: Optional[np.ndarray] = None,
+    b: Optional[np.ndarray] = None,
 ):
     y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
     y_pred_indices = np.zeros(n * k, dtype=INT_TYPE)
     y_pred_indptr = np.zeros(n + 1, dtype=INT_TYPE)
 
+    # if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
+    #     get_row_gains = lambda row_data, row_indices: row_data * a[row_indices].reshape(-1) + b[row_indices].reshape(-1)
+    # elif isinstance(a, np.ndarray) and b is None:
+    #     get_row_gains = lambda row_data, row_indices: row_data * a[row_indices].reshape(-1)
+    # elif a is None and isinstance(b, np.ndarray):
+    #     get_row_gains = lambda row_data, row_indices: row_data + b[row_indices].reshape(-1)
+    # else:
+    #     get_row_gains = lambda row_data, row_indices: row_data
+
     # This can be done in parallel, but Numba parallelism seems to not work well here
     for i in range(n):
         row_data = data[indptr[i] : indptr[i + 1]]
         row_indices = indices[indptr[i] : indptr[i + 1]]
-        row_weights = weights[row_indices].reshape(-1) * row_data
+        
+        #row_weights = a[row_indices].reshape(-1) * row_data + b[row_indices].reshape(-1)
+        #row_weights = get_row_gains(row_data, row_indices)
+        
+        row_weights = row_data
+        if a is not None:
+            row_weights *= a[row_indices].reshape(-1)
+        if b is not None:
+            row_weights += b[row_indices].reshape(-1)
+
         top_k = numba_argtopk(row_weights, row_indices, k)
         y_pred_indices[i * k : i * k + len(top_k)] = top_k
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
@@ -245,15 +265,15 @@ def numba_weighted_per_instance(
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
-@njit
-def numba_macro_balanced_accuracy(
+@njit#(cache=True)
+def numba_predict_macro_balanced_accuracy(
     data: np.ndarray,
     indices: np.ndarray,
     indptr: np.ndarray,
-    marginals: np.ndarray,
     n: int,
     m: int,
     k: int,
+    marginals: np.ndarray,
 ):
     """
     Predicts k labels for each instance according to the optimal strategy for macro-balanced accuracy.

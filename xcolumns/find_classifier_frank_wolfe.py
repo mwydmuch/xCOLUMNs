@@ -247,13 +247,13 @@ def find_classifier_frank_wolfe(
         # log(f"  C_i matrix : {C_i}")
         # log(f"  new C matrix : {C}")
 
+        meta["iters"] = i
+
         if alpha < alpha_eps:
             log(f"    alpha is < {alpha_eps}, stopping")
             classifiers = classifiers[:i]
             classifier_weights = classifier_weights[:i]
             break
-
-        meta["iters"] = i
 
     # Final utility calculation
     final_utility = calculate_utility(utility_func, C)
@@ -262,6 +262,7 @@ def find_classifier_frank_wolfe(
     # sampled_utility = sample_utility_from_classfiers(y_proba, classifiers, classifier_weights, utility_func, y_true, C_shape, k=k)
     # print(f"  Final sampled utility: {sampled_utility* 100}")
     meta["time"] = time() - meta["time"]
+    meta["C"] = C
     return classifiers, classifier_weights, meta
 
 

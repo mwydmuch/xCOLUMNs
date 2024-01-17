@@ -586,15 +586,15 @@ def instance_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k):
     return np.asarray(tp / k).ravel()
 
 
-def macro_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=1e-9):
+def macro_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=1e-6):
     return np.asarray(tp / (tp + fp + epsilon)).ravel()
 
 
-def macro_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=1e-9):
+def macro_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=1e-6):
     return np.asarray(tp / (tp + fn + epsilon)).ravel()
 
 
-def macro_fmeasure_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=1e-9):
+def macro_fmeasure_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=1e-6):
     precision = macro_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
     recall = macro_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
     return (
@@ -652,6 +652,7 @@ def bc_macro_precision(
         y_proba,
         k=k,
         bin_utility_func=macro_precision_on_conf_matrix,
+        utility_aggregation="mean",
         skip_tn=True,
         tolerance=tolerance,
         init_y_pred=init_y_pred,
@@ -678,6 +679,7 @@ def bc_macro_recall(
         y_proba,
         k=k,
         bin_utility_func=macro_recall_on_conf_matrix,
+        utility_aggregation="mean",
         skip_tn=True,
         tolerance=tolerance,
         init_y_pred=init_y_pred,
@@ -704,6 +706,7 @@ def bc_macro_f1(
         y_proba,
         k=k,
         bin_utility_func=macro_fmeasure_on_conf_matrix,
+        utility_aggregation="mean",
         skip_tn=True,
         tolerance=tolerance,
         init_y_pred=init_y_pred,
