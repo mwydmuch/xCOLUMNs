@@ -7,7 +7,8 @@ import numpy as np
 from scipy.sparse import csr_matrix, load_npz, save_npz
 from tqdm import tqdm, trange
 
-from .default_types import FLOAT_TYPE, INT_TYPE
+from .default_types import *
+from .metrics_on_conf_matrix import *
 from .numba_csr_methods import *
 from .utils import *
 from .weighted_prediction import predict_top_k
@@ -36,16 +37,16 @@ def _get_initial_y_pred(
         y_pred = random_at_k_func((n, m), k)
     elif init_y_pred == "topk":
         y_pred = predict_top_k(y_proba, k, return_meta=False)
-    else:
+    elif isinstance(init_y_pred, (np.ndarray, csr_matrix)):
+        if init_y_pred.shape != (n, m):
+            raise ValueError(
+                f"init_y_pred must have shape (n, m) = ({n}, {m}), but has shape {init_y_pred.shape}"
+            )
         y_pred = init_y_pred
-        if y_pred.shape != (n, m):
-            raise ValueError(
-                f"init_y_pred must have shape (n, m) = ({n}, {m}), but has shape {y_pred.shape}"
-            )
-        if not isinstance(y_pred, type(y_proba)):
-            raise ValueError(
-                f"init_y_pred must have type {type(y_proba)}, but has type {type(y_pred)}"
-            )
+    else:
+        raise ValueError(
+            f"init_y_pred must be ndarray, csr_matrix or str in ['random', 'greedy', 'topk'], but has type {type(init_y_pred)}"
+        )
     return y_pred
 
 
@@ -58,14 +59,26 @@ def _calculate_utility(
     Etn: np.ndarray,
 ):
     if callable(bin_utility_func):
-        return utility_aggregation_func(bin_utility_func(Etp, Efp, Efn, Etn))
+        bin_utilities = bin_utility_func(Etp, Efp, Efn, Etn)
     else:
-        return utility_aggregation_func(
+        bin_utilities = np.array(
             [f(Etp[i], Efp[i], Efn[i], Etn[i]) for i, f in enumerate(bin_utility_func)]
         )
 
+    # Validate bin utilities here to omit unnecessary calculations later in _calculate_binary_gains
+    if not isinstance(bin_utilities, np.ndarray):
+        raise ValueError(
+            f"bin_utility_func must return np.ndarray, but returned {type(bin_utilities)}"
+        )
+    
+    if bin_utilities.shape != (Etp.shape[0],):
+        raise ValueError(
+            f"bin_utility_func must return np.ndarray of shape {Etp.shape[0]}, but returned {bin_utilities.shape}"
+        )
 
-def _calculate_binary_utilities(
+    return utility_aggregation_func(bin_utilities)
+
+def _calculate_binary_gains(
     bin_utility_func,
     p_Etp: np.ndarray,
     p_Efp: np.ndarray,
@@ -133,7 +146,7 @@ def bc_with_0approx_np_step(
     if not skip_tn:
         Etnn = Etn + (1 - y_proba_i)
 
-    gains = _calculate_binary_utilities(
+    gains = _calculate_binary_gains(
         bin_utility_func,
         Etpp / n,
         Efpp / n,
@@ -229,7 +242,7 @@ def bc_with_0approx_csr_step(
         p_Etn /= n
 
     # Calculate gain and selection
-    gains = _calculate_binary_utilities(
+    gains = _calculate_binary_gains(
         bin_utility_func, p_Etpp, p_Efpp, p_Efn, p_Etn, n_Etp, n_Efp, n_Efnn, n_Etnn
     )
     gains = np.asarray(gains).ravel()
@@ -270,8 +283,8 @@ def bc_with_0approx_csr_step(
 
 def bc_with_0approx(
     y_proba: Union[np.ndarray, csr_matrix],
-    k: int,
     bin_utility_func: Union[Callable, list[Callable]],
+    k: int,
     utility_aggregation: str = "mean",  # "mean" or "sum"
     tolerance: float = 1e-6,
     init_y_pred: Union[
@@ -294,8 +307,6 @@ def bc_with_0approx(
     However both algorithms are equivalent.
     """
 
-    n, m = y_proba.shape
-
     # Initialize the meta data dictionary
     meta = {"utilities": [], "iters": 0, "time": time()}
 
@@ -308,6 +319,9 @@ def bc_with_0approx(
         random_at_k_func = random_at_k_csr
     else:
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
+
+    # y_proba is ndarray or csr_matrix
+    n, m = y_proba.shape
 
     # Get aggregation function
     utility_aggregation_func = _get_utility_aggregation_func(utility_aggregation)
@@ -336,7 +350,7 @@ def bc_with_0approx(
         else:
             print("  Calculating expected confusion matrix ...")
             Etp, Efp, Efn, Etn = calculate_confusion_matrix(
-                y_proba, y_pred, normalize=False
+                y_proba, y_pred, normalize=False, skip_tn=skip_tn
             )
 
         old_utility = _calculate_utility(
@@ -378,9 +392,10 @@ def bc_with_0approx(
         meta["utilities"].append(new_utility)
 
         print(
-            f"  Iteration {j} finished, expected score: {old_utility} -> {new_utility}"
+            f"  Iteration {j} finished, expected utility: {old_utility} -> {new_utility}"
         )
-        if new_utility <= old_utility + tolerance:
+        if abs(new_utility - old_utility) < tolerance:
+            print(f"  Stopping because improvement of expected utility is smaller than {tolerance}")
             break
 
     if return_meta:
@@ -578,36 +593,6 @@ def bc_coverage(
         return y_pred
 
 
-# Implementations of binary utilities defined on the confusion matrix
-# TODO: Replace them with general implementations of utilities defined on the confusion matrix
-
-
-def instance_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k):
-    return np.asarray(tp / k).ravel()
-
-
-def macro_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=1e-6):
-    return np.asarray(tp / (tp + fp + epsilon)).ravel()
-
-
-def macro_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=1e-6):
-    return np.asarray(tp / (tp + fn + epsilon)).ravel()
-
-
-def macro_fmeasure_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=1e-6):
-    precision = macro_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
-    recall = macro_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
-    return (
-        (1 + beta**2)
-        * precision
-        * recall
-        / (beta**2 * precision + recall + epsilon)
-    )
-
-
-# Implementations of functions for optimizing specific measures
-
-
 def bc_instance_precision_at_k(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
@@ -619,13 +604,13 @@ def bc_instance_precision_at_k(
     return_meta: bool = False,
     **kwargs,
 ):
-    def instance_precision_with_k_fn(tp, fp, fn, tn):
-        return instance_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k)
+    def instance_precision_with_specific_k(tp, fp, fn, tn):
+        return bin_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k)
 
     return bc_with_0approx(
         y_proba,
+        bin_utility_func=instance_precision_with_specific_k,
         k=k,
-        bin_utility_func=instance_precision_with_k_fn,
         utility_aggregation="sum",
         tolerance=tolerance,
         init_y_pred=init_y_pred,
@@ -650,8 +635,8 @@ def bc_macro_precision(
 ):
     return bc_with_0approx(
         y_proba,
+        bin_utility_func=bin_precision_on_conf_matrix,
         k=k,
-        bin_utility_func=macro_precision_on_conf_matrix,
         utility_aggregation="mean",
         skip_tn=True,
         tolerance=tolerance,
@@ -677,8 +662,8 @@ def bc_macro_recall(
 ):
     return bc_with_0approx(
         y_proba,
+        bin_utility_func=bin_recall_on_conf_matrix,
         k=k,
-        bin_utility_func=macro_recall_on_conf_matrix,
         utility_aggregation="mean",
         skip_tn=True,
         tolerance=tolerance,
@@ -704,8 +689,8 @@ def bc_macro_f1(
 ):
     return bc_with_0approx(
         y_proba,
+        bin_utility_func=bin_fmeasure_on_conf_matrix,
         k=k,
-        bin_utility_func=macro_fmeasure_on_conf_matrix,
         utility_aggregation="mean",
         skip_tn=True,
         tolerance=tolerance,
@@ -733,14 +718,14 @@ def bc_mixed_instance_prec_macro_prec(
     n, m = y_proba.shape
 
     def mixed_utility_fn(tp, fp, fn, tn):
-        return (1 - alpha) * instance_precision_at_k_on_conf_matrix(
+        return (1 - alpha) * bin_precision_at_k_on_conf_matrix(
             tp, fp, fn, tn, k
-        ) + alpha * macro_precision_on_conf_matrix(tp, fp, fn, tn) / m
+        ) + alpha * bin_precision_on_conf_matrix(tp, fp, fn, tn) / m
 
     return bc_with_0approx(
         y_proba,
-        k=k,
         bin_utility_func=mixed_utility_fn,
+        k=k,
         utility_aggregation="sum",
         skip_tn=True,
         tolerance=tolerance,
@@ -768,9 +753,9 @@ def bc_mixed_instance_prec_macro_f1(
     n, m = y_proba.shape
 
     def mixed_utility_fn(tp, fp, fn, tn):
-        return (1 - alpha) * instance_precision_at_k_on_conf_matrix(
+        return (1 - alpha) * bin_precision_at_k_on_conf_matrix(
             tp, fp, fn, tn, k
-        ) + alpha * macro_fmeasure_on_conf_matrix(tp, fp, fn, tn) / m
+        ) + alpha * bin_fmeasure_on_conf_matrix(tp, fp, fn, tn) / m
 
     return bc_with_0approx(
         y_proba,
@@ -803,14 +788,14 @@ def bc_mixed_instance_prec_macro_recall(
     n, m = y_proba.shape
 
     def mixed_utility_fn(tp, fp, fn, tn):
-        return (1 - alpha) * instance_precision_at_k_on_conf_matrix(
+        return (1 - alpha) * bin_precision_at_k_on_conf_matrix(
             tp, fp, fn, tn, k
-        ) + alpha * macro_recall_on_conf_matrix(tp, fp, fn, tn) / m
+        ) + alpha * bin_recall_on_conf_matrix(tp, fp, fn, tn) / m
 
     return bc_with_0approx(
         y_proba,
-        k=k,
         bin_utility_func=mixed_utility_fn,
+        k=k,
         utility_aggregation="sum",
         skip_tn=True,
         tolerance=tolerance,

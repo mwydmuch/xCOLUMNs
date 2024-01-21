@@ -8,7 +8,7 @@ from .numba_csr_methods import *
 
 
 def unpack_csr_matrix(matrix: csr_matrix):
-    return matrix.data, matrix.indices, matrix.indptr
+    return matrix.data, matrix.indices, matrix.indptr#, matrix.shape
 
 
 def unpack_csr_matrices(*matrices):
@@ -91,11 +91,14 @@ def calculate_confusion_matrix(
     y_true: Union[np.ndarray, csr_matrix],
     y_pred: Union[np.ndarray, csr_matrix],
     normalize: bool = False,
+    skip_tn: bool = False,
 ):
     """
     Calculate confusion matrix for true and prediction.
     """
-    assert y_true.shape == y_pred.shape
+    if y_true.shape != y_pred.shape:
+        raise ValueError("y_true and y_pred must have the same shape")
+    
     n, m = y_true.shape
 
     if isinstance(y_true, np.ndarray) and isinstance(y_pred, np.ndarray):
@@ -111,7 +114,11 @@ def calculate_confusion_matrix(
     else:
         raise ValueError("y_true and y_pred must be both dense or both sparse")
 
-    tn = np.full(m, n, dtype=FLOAT_TYPE) - tp - fp - fn
+    if skip_tn:
+        tn = np.zeros(m, dtype=FLOAT_TYPE)
+    else:
+        tn = np.full(m, n, dtype=FLOAT_TYPE) - tp - fp - fn
+    
     if normalize:
         tp /= n
         fp /= n
