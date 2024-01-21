@@ -7,7 +7,7 @@ from tqdm import trange
 
 from .block_coordinate import *
 from .weighted_prediction import *
-from .find_classifier_frank_wolfe import find_classifier_frank_wolfe, macro_f1_C
+from .frank_wolfe import find_classifier_frank_wolfe, macro_f1_C
 
 
 def pu_through_etu(
