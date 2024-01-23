@@ -25,28 +25,32 @@ def _predict_weighted_per_instance_np_fast(y_proba: np.ndarray, k: int, a: Optio
     return y_pred
 
 
-def _predict_weighted_per_instance_np(y_proba: np.ndarray, k: int, a: Optional[np.ndarray] = None, b: Optional[np.ndarray] = None):
+def _predict_weighted_per_instance_np(y_proba: np.ndarray, k: int, t: float =0.0, a: Optional[np.ndarray] = None, b: Optional[np.ndarray] = None):
     n, m = y_proba.shape
     y_pred = np.zeros((n, m), dtype=FLOAT_TYPE)
 
     for i in range(n):
         gains = y_proba[i, :]
         if a is not None:
-            gains *= a
+            gains = gains * a
         if b is not None:
-            gains += b
-        top_k = np.argpartition(-gains, k)[:k]
-        y_pred[i, top_k] = 1.0
+            gains = gains + b
+
+        if k > 0:
+            top_k = np.argpartition(-gains, k)[:k]
+            y_pred[i, top_k] = 1.0
+        else:
+            y_pred[i, gains >= t] = 1.0
 
     return y_pred
 
 
 def _predict_weighted_per_instance_csr(
-    y_proba: csr_matrix, k: int, a: Optional[np.ndarray] = None, b: Optional[np.ndarray] = None,
+    y_proba: csr_matrix, k: int, t: float =0.0, a: Optional[np.ndarray] = None, b: Optional[np.ndarray] = None,
 ):  
     n, m = y_proba.shape
     y_pred_data, y_pred_indices, y_pred_indptr = numba_predict_weighted_per_instance(
-        *unpack_csr_matrix(y_proba), n, m, k, a, b  
+        *unpack_csr_matrix(y_proba), n, m, k, t, a, b  
     )
     return csr_matrix((y_pred_data, y_pred_indices, y_pred_indptr), shape=(n, m))
 
@@ -54,6 +58,7 @@ def _predict_weighted_per_instance_csr(
 def predict_weighted_per_instance(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
+    t: float = 0,
     weights: Optional[np.ndarray] = None,
     bases: Optional[np.ndarray] = None,
     a: Optional[np.ndarray] = None,
@@ -92,9 +97,9 @@ def predict_weighted_per_instance(
 
     # Invoke the specialized implementation
     if isinstance(y_proba, np.ndarray):
-        y_pred = _predict_weighted_per_instance_np(y_proba, k, a=a, b=b)
+        y_pred = _predict_weighted_per_instance_np(y_proba, k, t=t, a=a, b=b)
     elif isinstance(y_proba, csr_matrix):
-        y_pred = _predict_weighted_per_instance_csr(y_proba, k, a=a, b=b)
+        y_pred = _predict_weighted_per_instance_csr(y_proba, k, t=t, a=a, b=b)
 
     if return_meta:
         meta["time"] = time() - meta["time"]

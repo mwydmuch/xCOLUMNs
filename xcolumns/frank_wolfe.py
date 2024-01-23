@@ -6,6 +6,7 @@ import torch
 from scipy.sparse import csr_matrix
 
 from .default_types import *
+from .metrics_on_conf_matrix import *
 from .utils import *
 from .weighted_prediction import predict_weighted_per_instance
 
@@ -17,7 +18,7 @@ def _get_grad_as_numpy(t):
         return np.zeros(t.shape, dtype=FLOAT_TYPE)
 
 
-def _utility_func_with_gradient(utility_func, tp, fp, fn, tn):
+def utility_func_with_gradient(utility_func, tp, fp, fn, tn):
     tp = torch.tensor(tp, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
     fp = torch.tensor(fp, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
     fn = torch.tensor(fn, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
@@ -58,8 +59,8 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     init_classifier: Union[str, Tuple[np.ndarray, np.ndarray]] = "topk", # or "random"
     search_for_best_alpha: bool = True,
     alpha_search_algo: str = "lin",
-    alpha_eps: float = 0.001,
-    alpha_lin_search_step: float = 0.001,
+    alpha_eps: float = 0.00001,
+    alpha_lin_search_step: float = 0.00001,
     skip_tn=False,
     verbose: bool = True,
     return_meta: bool = False,
@@ -84,9 +85,10 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     log(f"  Initializing initial {init_classifier} classifier ...")
     if init_classifier == "topk":
         classifiers_a[0] = np.ones(m, dtype=FLOAT_TYPE)
+        classifiers_b[0] = np.full(m, -0.5, dtype=FLOAT_TYPE)
     elif init_classifier == "random":
-        classifiers_a[0] = np.random.rand(m, dtype=FLOAT_TYPE)
-        classifiers_b[0] = np.random.rand(m, dtype=FLOAT_TYPE)
+        classifiers_a[0] = np.random.rand(m)
+        classifiers_b[0] = np.random.rand(m)
     else:
         raise ValueError(f"Unsuported type of init_classifier: {init_classifier}")
     y_pred_i = predict_weighted_per_instance(y_proba, k, a=classifiers_a[0], b=classifiers_b[0])
@@ -107,11 +109,11 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     
     for i in range(1, max_iters):
         log(f"  Starting iteration {i} ...")
-        old_utility, Gtp, Gfp, Gfn, Gtn = _utility_func_with_gradient(utility_func, tp, fp, fn, tn)
+        old_utility, Gtp, Gfp, Gfn, Gtn = utility_func_with_gradient(utility_func, tp, fp, fn, tn)
         
         classifiers_a[i] = Gtp - Gfp - Gfn + Gtn
         classifiers_b[i] = Gfp - Gtn
-        y_pred_i = predict_weighted_per_instance(y_proba, k, a=classifiers_a[i], b=classifiers_b[i])
+        y_pred_i = predict_weighted_per_instance(y_proba, k, t=0.0, a=classifiers_a[i], b=classifiers_b[i])
         tp_i, fp_i, fn_i, tn_i = calculate_confusion_matrix(
             y_true, y_pred_i, normalize=True, skip_tn=skip_tn
         )
@@ -144,7 +146,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
             meta["utilities"].append(new_utility)
             meta["iters"] = i
 
-        log(f"   Iteration {i} finished, utility: (1 - {alpha}) * {old_utility} + {alpha} * {utility_i} -> {new_utility}")
+        log(f"   Iteration {i} finished, alpha: {alpha}, utility: {old_utility} -> {new_utility}")
 
         if alpha < alpha_eps:
             print(f"  Stopping because alpha is smaller than {alpha_eps}")
@@ -179,8 +181,12 @@ def _predict_using_randomized_classifier_np(
     for i in range(n):
         c_i = np.random.choice(classifiers_range, p=classifiers_proba)
         gains = y_proba[i] * classifiers_a[c_i] + classifiers_b[c_i]
-        top_k = np.argpartition(-gains, k)[:k]
-        result[i, top_k] = 1.0
+
+        if k > 0:
+            top_k = np.argpartition(-gains, k)[:k]
+            result[i, top_k] = 1.0
+        else:
+            result[i, gains > 0] = 1.0
 
     return result
 

@@ -4,7 +4,7 @@ from time import time
 from typing import Callable
 
 import numpy as np
-from scipy.sparse import csr_matrix, load_npz, save_npz
+from scipy.sparse import csr_matrix
 from tqdm import tqdm, trange
 
 from .default_types import *
@@ -77,6 +77,7 @@ def _calculate_utility(
         )
 
     return utility_aggregation_func(bin_utilities)
+
 
 def _calculate_binary_gains(
     bin_utility_func,
@@ -161,11 +162,14 @@ def bc_with_0approx_np_step(
     if maximize:
         gains = -gains
 
-    top_k = np.argpartition(gains, k)[:k]
-
     # Update prediction
     y_pred_i[:] = 0.0
-    y_pred_i[top_k] = 1.0
+
+    if k > 0:
+        top_k = np.argpartition(gains, k)[:k]
+        y_pred_i[top_k] = 1.0
+    else: 
+        y_pred_i[gains <= 0] = 1.0
 
     # Update local confusion matrix
     if not only_pred:
@@ -496,13 +500,13 @@ def _calculate_coverage_utility(
 
     cov_utility = 1 - np.mean(Ef)
     if alpha < 1:
-        precision_at_k = 0
-        if isinstance(y_proba, np.ndarray):
-            precision_at_k = (np.sum(y_pred * y_proba, axis=0) / n / k).sum()
-        elif isinstance(y_proba, csr_matrix):
-            precision_at_k = (
-                np.asarray(calculate_tp_csr(y_proba, y_pred) / n / k).ravel().sum()
-            )
+        precision_at_k = (calculate_tp(y_proba, y_pred) / n / k).sum()
+        # if isinstance(y_proba, np.ndarray):
+        #     precision_at_k = (np.sum(y_pred * y_proba, axis=0) / n / k).sum()
+        # elif isinstance(y_proba, csr_matrix):
+        #     precision_at_k = (
+        #         np.asarray(calculate_tp_csr(y_proba, y_pred) / n / k).ravel().sum()
+        #     )
         cov_utility = alpha * cov_utility + (1 - alpha) * precision_at_k
 
     return cov_utility
@@ -567,7 +571,7 @@ def bc_coverage(
             if isinstance(y_proba, np.ndarray):
                 Ef = np.product(1 - y_pred * y_proba, axis=0)
             elif isinstance(y_proba, csr_matrix):
-                Ef = numba_calculate_prod_1_sparse_mat_mul_ones_minus_mat(
+                Ef = numba_calculate_prod_0_sparse_mat_mul_ones_minus_mat(
                     *unpack_csr_matrices(y_pred, y_proba), n, m
                 )
 

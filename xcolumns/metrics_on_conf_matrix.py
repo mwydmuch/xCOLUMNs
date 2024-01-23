@@ -1,6 +1,132 @@
-import numpy as np
-from typing import Union
 from numbers import Number
+from typing import Tuple, Union, Callable
+
+import numpy as np
+from scipy.sparse import csr_matrix
+
+from .default_types import *
+from .numba_csr_methods import *
+from .utils import *
+
+
+def _calculate_tp_np(y_true: np.ndarray, y_pred: np.ndarray):
+    return np.sum(y_true * y_pred, axis=0)
+
+
+# Alternative version, performance is similar
+# def _calculate_tp_csr(y_true: csr_matrix, y_pred: csr_matrix):
+#     return (y_pred.multiply(y_true)).sum(axis=0)
+
+
+def _calculate_tp_csr(y_true: csr_matrix, y_pred: csr_matrix):
+    n, m = y_true.shape
+    return numba_calculate_sum_0_sparse_mat_mul_mat(
+        *unpack_csr_matrices(y_pred, y_true), n, m
+    )
+
+
+def _calculate_fp_np(y_true: np.ndarray, y_pred: np.ndarray):
+    return np.sum((1 - y_true) * y_pred, axis=0)
+
+
+def _calculate_fp_csr_slow(y_true: csr_matrix, y_pred: csr_matrix):
+    n, m = y_true.shape
+    fp = np.zeros(m, dtype=FLOAT_TYPE)
+    dense_ones = np.ones(m, dtype=FLOAT_TYPE)
+    for i in range(n):
+        fp += y_pred[i].multiply(dense_ones - y_true[i])
+    return fp
+
+
+def _calculate_fn_np(y_true: np.ndarray, y_pred: np.ndarray):
+    return np.sum(y_true * (1 - y_pred), axis=0)
+
+
+def _calculate_fp_csr(y_true: csr_matrix, y_pred: csr_matrix):
+    n, m = y_true.shape
+    return numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
+        *unpack_csr_matrices(y_pred, y_true), n, m
+    )
+
+
+def _calculate_fn_csr_slow(y_true: csr_matrix, y_pred: csr_matrix):
+    n, m = y_true.shape
+    fn = np.zeros(m, dtype=FLOAT_TYPE)
+    dense_ones = np.ones(m, dtype=FLOAT_TYPE)
+    for i in range(n):
+        fn += y_true[i].multiply(dense_ones - y_pred[i])
+
+    return fn
+
+
+def _calculate_fn_csr(y_true: csr_matrix, y_pred: csr_matrix):
+    n, m = y_true.shape
+    return numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
+        *unpack_csr_matrices(y_true, y_pred), n, m
+    )
+
+
+def _calculate_tn_np(y_true: np.ndarray, y_pred: np.ndarray):
+    return np.sum((1 - y_true) * (1 - y_pred), axis=0)
+
+
+def _calculate_conf_mat_entry(
+        y_true: Union[np.ndarray, csr_matrix], 
+        y_pred: Union[np.ndarray, csr_matrix], 
+        func_for_np: Callable,
+        func_for_csr: Callable,
+        normalize: bool = False):
+    
+    if y_true.shape != y_pred.shape:
+        raise ValueError("y_true and y_pred must have the same shape")
+
+    if isinstance(y_true, np.ndarray) and isinstance(y_pred, np.ndarray):
+        val = func_for_np(y_true, y_pred)
+    elif isinstance(y_true, csr_matrix) and isinstance(y_pred, csr_matrix):
+        val = func_for_csr(y_true, y_pred)
+    else:
+        raise ValueError("y_true and y_pred must be both dense or both sparse")
+    
+    if normalize:
+        val /= y_true.shape[0]
+    
+    return val
+
+
+def calculate_tp(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], normalize: bool = False):
+    return _calculate_conf_mat_entry(y_true, y_pred, _calculate_tp_np, _calculate_tp_csr, normalize=normalize)
+    
+
+def calculate_fp(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], normalize: bool = False):
+    return _calculate_conf_mat_entry(y_true, y_pred, _calculate_fp_np, _calculate_fp_csr, normalize=normalize)
+    
+
+def calculate_fn(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], normalize: bool = False):
+    return _calculate_conf_mat_entry(y_true, y_pred, _calculate_fn_np, _calculate_fn_csr, normalize=normalize)
+
+
+def calculate_confusion_matrix(
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    normalize: bool = False,
+    skip_tn: bool = False,
+):
+    """
+    Calculate confusion matrix for true and prediction.
+    """
+
+    tp = calculate_tp(y_true, y_pred, normalize=normalize)
+    fp = calculate_fp(y_true, y_pred, normalize=normalize)
+    fn = calculate_fn(y_true, y_pred, normalize=normalize)
+
+    n, m = y_true.shape
+
+    if skip_tn:
+        tn = np.zeros(m, dtype=FLOAT_TYPE)
+    else:
+        tn = np.full(m, 1 if normalize else n, dtype=FLOAT_TYPE) - tp - fp - fn
+
+    return tp, fp, fn, tn
 
 
 def bin_precision_at_k_on_conf_matrix(tp: Union[Number, np.ndarray], fp: Union[Number, np.ndarray], fn: Union[Number, np.ndarray], tn: Union[Number, np.ndarray], k: int):

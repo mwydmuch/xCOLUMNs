@@ -101,7 +101,7 @@ def numba_sparse_vec_mul_vec(
 ):
     """
     Performs a fast multiplication of sparse vectors a and b.
-    Gives the same y_pred as a.multiply(b) where a and b are sparse vectors.
+    Gives the same result as a.multiply(b) where a and b are sparse vectors.
     Requires a and b to have sorted indices (in ascending order).
     """
     i = j = k = 0
@@ -124,13 +124,39 @@ def numba_sparse_vec_mul_vec(
 
 
 @njit(cache=True)
+def numba_calculate_sum_0_sparse_mat_mul_mat(
+    a_data: np.ndarray, a_indices: np.ndarray, a_indptr: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray, b_indptr: np.ndarray, n: int, m: int
+):
+    """
+    Performs a fast multiplication of sparse matricies a and b.
+    Gives the same result as a.multiply(b).sum(axis=0) where a and b are sparse vectors.
+    Requires a and b to have sorted indices (in ascending order).
+    """
+    result = np.zeros(m, dtype=FLOAT_TYPE)
+    for i in range(n):
+        a_start, a_end = a_indptr[i], a_indptr[i + 1]
+        b_start, b_end = b_indptr[i], b_indptr[i + 1]
+
+        data, indices = numba_sparse_vec_mul_vec(
+            a_data[a_start:a_end],
+            a_indices[a_start:a_end],
+            b_data[b_start:b_end],
+            b_indices[b_start:b_end],
+        )
+        result[indices] += data
+
+    return result
+
+
+
+@njit(cache=True)
 def numba_sparse_vec_mul_ones_minus_vec(
     a_data: np.ndarray, a_indices: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray
 ):
     """
     Performs a fast multiplication of a sparse vector a
     with a dense vector of ones minus other sparse vector b.
-    Gives the same y_pred as a.multiply(ones - b) where a and b are sparse vectors.
+    Gives the same result as a.multiply(ones - b) where a and b are sparse vectors but makes it more efficient.
     Requires a and b to have sorted indices (in ascending order).
     """
     i = j = k = 0
@@ -157,15 +183,15 @@ def numba_sparse_vec_mul_ones_minus_vec(
 
 @njit(cache=True)
 def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
-    a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, n, m
+    a_data: np.ndarray, a_indices: np.ndarray, a_indptr: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray, b_indptr: np.ndarray, n: int, m: int
 ):
     """
     Performs a fast multiplication of a sparse matrix a
     with a dense matrix of ones minus other sparse matrix b and then sums the rows (axis=0).
-    Gives the same y_pred as a.multiply(ones - b) where a and b are sparse matrices.
+    Gives the same result as a.multiply(ones - b).sum(axis=0) where a and b are sparse matrices but makes it more efficient.
     Requires a and b to have sorted indices (in ascending order).
     """
-    y_pred = np.zeros(m, dtype=FLOAT_TYPE)
+    result = np.zeros(m, dtype=FLOAT_TYPE)
     for i in range(n):
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
@@ -176,22 +202,23 @@ def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
             b_data[b_start:b_end],
             b_indices[b_start:b_end],
         )
-        y_pred[indices] += data
+        result[indices] += data
 
-    return y_pred
+    return result
 
 
+# TODO: fix docstirng
 @njit(cache=True)
-def numba_calculate_prod_1_sparse_mat_mul_ones_minus_mat(
+def numba_calculate_prod_0_sparse_mat_mul_ones_minus_mat(
     a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, n, m
 ):
     """
     Performs a fast multiplication of a sparse matrix a
     with a dense matrix of ones minus other sparse matrix b and then sums the rows (axis=0).
-    Gives the same y_pred as a.multiply(ones - b) where a and b are sparse matrices.
+    Gives the same result as a.multiply(ones - b).prod(axis=0) where a and b are sparse matrices but makes it more efficient.
     Requires a and b to have sorted indices (in ascending order).
     """
-    y_pred = np.ones(m, dtype=FLOAT_TYPE)
+    result = np.ones(m, dtype=FLOAT_TYPE)
     for i in range(n):
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
@@ -202,9 +229,9 @@ def numba_calculate_prod_1_sparse_mat_mul_ones_minus_mat(
             b_data[b_start:b_end],
             b_indices[b_start:b_end],
         )
-        y_pred[indices] *= data
+        result[indices] *= data
 
-    return y_pred
+    return result
 
 
 @njit(cache=True)
@@ -218,6 +245,47 @@ def numba_argtopk(data, indices, k):
         return top_k
     else:
         return indices
+    
+
+@njit(cache=True)
+def numba_resize(arr, new_size):
+    new_arr = np.zeros(new_size, arr.dtype)
+    new_arr[:arr.size] = arr
+    return new_arr
+
+
+# @njit(cache=True)
+# def numba_predict_weighted_per_instance(
+#     data: np.ndarray,
+#     indices: np.ndarray,
+#     indptr: np.ndarray,
+#     #shape: Tuple[int, int],
+#     n: int,
+#     m: int,
+#     k: int,
+#     a: Optional[np.ndarray] = None,
+#     b: Optional[np.ndarray] = None,
+# ):
+#     y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
+#     y_pred_indices = np.zeros(n * k, dtype=IND_TYPE)
+#     y_pred_indptr = np.zeros(n + 1, dtype=IND_TYPE)
+
+#     # This can be done in parallel, but Numba parallelism seems to not work well here
+#     for i in range(n):
+#         row_data = data[indptr[i] : indptr[i + 1]]
+#         row_indices = indices[indptr[i] : indptr[i + 1]]
+        
+#         row_gains = row_data
+#         if a is not None:
+#             row_gains = row_gains * a[row_indices].reshape(-1)
+#         if b is not None:
+#             row_gains = row_gains + b[row_indices].reshape(-1)
+
+#         top_k = numba_argtopk(row_gains, row_indices, k)
+#         y_pred_indices[i * k : i * k + len(top_k)] = top_k
+#         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
+
+#     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
 @njit(cache=True)
@@ -228,15 +296,16 @@ def numba_predict_weighted_per_instance(
     #shape: Tuple[int, int],
     n: int,
     m: int,
-    k: int,
+    k: int = 0,
+    t: float = 0,
     a: Optional[np.ndarray] = None,
     b: Optional[np.ndarray] = None,
 ):
-    y_pred_data = np.ones(n * k, dtype=FLOAT_TYPE)
-    y_pred_indices = np.zeros(n * k, dtype=IND_TYPE)
+    # This can be done in parallel, but Numba parallelism seems to not work well here
+    y_pred_data = np.ones(n * max(1, k), dtype=FLOAT_TYPE)
+    y_pred_indices = np.zeros(n * max(1, k), dtype=IND_TYPE)
     y_pred_indptr = np.zeros(n + 1, dtype=IND_TYPE)
 
-    # This can be done in parallel, but Numba parallelism seems to not work well here
     for i in range(n):
         row_data = data[indptr[i] : indptr[i + 1]]
         row_indices = indices[indptr[i] : indptr[i + 1]]
@@ -247,9 +316,19 @@ def numba_predict_weighted_per_instance(
         if b is not None:
             row_gains = row_gains + b[row_indices].reshape(-1)
 
-        top_k = numba_argtopk(row_gains, row_indices, k)
-        y_pred_indices[i * k : i * k + len(top_k)] = top_k
-        y_pred_indptr[i + 1] = y_pred_indptr[i] + k
+        if k > 0:
+            top_k = numba_argtopk(row_gains, row_indices, k)
+            y_pred_indices[i * k : i * k + len(top_k)] = top_k
+            y_pred_indptr[i + 1] = y_pred_indptr[i] + k
+        else:
+            selected_indices = row_indices[row_gains >= t]
+
+            if y_pred_indptr[i] + len(selected_indices) >= len(y_pred_indices):
+                y_pred_data = numba_resize(y_pred_data, len(y_pred_data) * 2)
+                y_pred_indices = numba_resize(y_pred_indices, len(y_pred_indices) * 2)
+
+            y_pred_indices[y_pred_indptr[i] : y_pred_indptr[i] + len(selected_indices)] = selected_indices
+            y_pred_indptr[i + 1] = y_pred_indptr[i] + k
 
     return y_pred_data, y_pred_indices, y_pred_indptr
 
