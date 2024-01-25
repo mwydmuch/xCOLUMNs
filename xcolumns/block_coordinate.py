@@ -70,7 +70,7 @@ def _calculate_utility(
         raise ValueError(
             f"bin_utility_func must return np.ndarray, but returned {type(bin_utilities)}"
         )
-    
+
     if bin_utilities.shape != (Etp.shape[0],):
         raise ValueError(
             f"bin_utility_func must return np.ndarray of shape {Etp.shape[0]}, but returned {bin_utilities.shape}"
@@ -168,7 +168,7 @@ def bc_with_0approx_np_step(
     if k > 0:
         top_k = np.argpartition(gains, k)[:k]
         y_pred_i[top_k] = 1.0
-    else: 
+    else:
         y_pred_i[gains <= 0] = 1.0
 
     # Update local confusion matrix
@@ -399,7 +399,9 @@ def bc_with_0approx(
             f"  Iteration {j} finished, expected utility: {old_utility} -> {new_utility}"
         )
         if abs(new_utility - old_utility) < tolerance:
-            print(f"  Stopping because improvement of expected utility is smaller than {tolerance}")
+            print(
+                f"  Stopping because improvement of expected utility is smaller than {tolerance}"
+            )
             break
 
     if return_meta:

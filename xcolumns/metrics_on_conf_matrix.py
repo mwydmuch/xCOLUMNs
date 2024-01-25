@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Tuple, Union, Callable
+from typing import Callable, Tuple, Union
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -71,12 +71,12 @@ def _calculate_tn_np(y_true: np.ndarray, y_pred: np.ndarray):
 
 
 def _calculate_conf_mat_entry(
-        y_true: Union[np.ndarray, csr_matrix], 
-        y_pred: Union[np.ndarray, csr_matrix], 
-        func_for_np: Callable,
-        func_for_csr: Callable,
-        normalize: bool = False):
-    
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    func_for_np: Callable,
+    func_for_csr: Callable,
+    normalize: bool = False,
+):
     if y_true.shape != y_pred.shape:
         raise ValueError("y_true and y_pred must have the same shape")
 
@@ -86,23 +86,41 @@ def _calculate_conf_mat_entry(
         val = func_for_csr(y_true, y_pred)
     else:
         raise ValueError("y_true and y_pred must be both dense or both sparse")
-    
+
     if normalize:
         val /= y_true.shape[0]
-    
+
     return val
 
 
-def calculate_tp(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], normalize: bool = False):
-    return _calculate_conf_mat_entry(y_true, y_pred, _calculate_tp_np, _calculate_tp_csr, normalize=normalize)
-    
+def calculate_tp(
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    normalize: bool = False,
+):
+    return _calculate_conf_mat_entry(
+        y_true, y_pred, _calculate_tp_np, _calculate_tp_csr, normalize=normalize
+    )
 
-def calculate_fp(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], normalize: bool = False):
-    return _calculate_conf_mat_entry(y_true, y_pred, _calculate_fp_np, _calculate_fp_csr, normalize=normalize)
-    
 
-def calculate_fn(y_true: Union[np.ndarray, csr_matrix], y_pred: Union[np.ndarray, csr_matrix], normalize: bool = False):
-    return _calculate_conf_mat_entry(y_true, y_pred, _calculate_fn_np, _calculate_fn_csr, normalize=normalize)
+def calculate_fp(
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    normalize: bool = False,
+):
+    return _calculate_conf_mat_entry(
+        y_true, y_pred, _calculate_fp_np, _calculate_fp_csr, normalize=normalize
+    )
+
+
+def calculate_fn(
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    normalize: bool = False,
+):
+    return _calculate_conf_mat_entry(
+        y_true, y_pred, _calculate_fn_np, _calculate_fn_csr, normalize=normalize
+    )
 
 
 def calculate_confusion_matrix(
@@ -129,20 +147,46 @@ def calculate_confusion_matrix(
     return tp, fp, fn, tn
 
 
-def bin_precision_at_k_on_conf_matrix(tp: Union[Number, np.ndarray], fp: Union[Number, np.ndarray], fn: Union[Number, np.ndarray], tn: Union[Number, np.ndarray], k: int):
+def bin_precision_at_k_on_conf_matrix(
+    tp: Union[Number, np.ndarray],
+    fp: Union[Number, np.ndarray],
+    fn: Union[Number, np.ndarray],
+    tn: Union[Number, np.ndarray],
+    k: int,
+):
     return tp / k
 
 
-def bin_precision_on_conf_matrix(tp: Union[Number, np.ndarray], fp: Union[Number, np.ndarray], fn: Union[Number, np.ndarray, None], tn: Union[Number, np.ndarray, None], epsilon: float =1e-6):
+def bin_precision_on_conf_matrix(
+    tp: Union[Number, np.ndarray],
+    fp: Union[Number, np.ndarray],
+    fn: Union[Number, np.ndarray, None],
+    tn: Union[Number, np.ndarray, None],
+    epsilon: float = 1e-6,
+):
     return tp / (tp + fp + epsilon)
 
 
-def bin_recall_on_conf_matrix(tp: Union[Number, np.ndarray], fp: Union[Number, np.ndarray, None], fn: Union[Number, np.ndarray], tn: Union[Number, np.ndarray, None], epsilon: float =1e-6):
+def bin_recall_on_conf_matrix(
+    tp: Union[Number, np.ndarray],
+    fp: Union[Number, np.ndarray, None],
+    fn: Union[Number, np.ndarray],
+    tn: Union[Number, np.ndarray, None],
+    epsilon: float = 1e-6,
+):
     return tp / (tp + fn + epsilon)
 
 
-def bin_fmeasure_on_conf_matrix(tp: Union[Number, np.ndarray], fp: Union[Number, np.ndarray], fn: Union[Number, np.ndarray], tn: Union[Number, np.ndarray, None], beta: float =1.0, epsilon: float =1e-6):
+def bin_fmeasure_on_conf_matrix(
+    tp: Union[Number, np.ndarray],
+    fp: Union[Number, np.ndarray],
+    fn: Union[Number, np.ndarray],
+    tn: Union[Number, np.ndarray, None],
+    beta: float = 1.0,
+    epsilon: float = 1e-6,
+):
     return (1 + beta**2) * tp / ((beta**2 * (tp + fp)) + tp + fn + epsilon)
+
 
 # Alternative definition of F-measure used in some old experiments
 # def bin_fmeasure_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=1e-6):
@@ -156,17 +200,40 @@ def bin_fmeasure_on_conf_matrix(tp: Union[Number, np.ndarray], fp: Union[Number,
 #     )
 
 
-def macro_precision_on_conf_matrix(tp: np.ndarray, fp: np.ndarray, fn: Union[np.ndarray, None], tn: Union[np.ndarray, None], epsilon: float=1e-6):
+def macro_precision_on_conf_matrix(
+    tp: np.ndarray,
+    fp: np.ndarray,
+    fn: Union[np.ndarray, None],
+    tn: Union[np.ndarray, None],
+    epsilon: float = 1e-6,
+):
     return bin_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon).mean()
 
 
-def macro_recall_on_conf_matrix(tp: np.ndarray, fp: Union[np.ndarray, None], fn: np.ndarray, tn: Union[np.ndarray, None], epsilon: float=1e-6):
+def macro_recall_on_conf_matrix(
+    tp: np.ndarray,
+    fp: Union[np.ndarray, None],
+    fn: np.ndarray,
+    tn: Union[np.ndarray, None],
+    epsilon: float = 1e-6,
+):
     return bin_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon).mean()
 
 
-def macro_fmeasure_on_conf_matrix(tp: np.ndarray, fp: np.ndarray, fn: np.ndarray, tn: Union[np.ndarray, None], beta: float =1.0, epsilon: float =1e-6):
-    return bin_fmeasure_on_conf_matrix(tp, fp, fn, tn, beta=beta, epsilon=epsilon).mean()
+def macro_fmeasure_on_conf_matrix(
+    tp: np.ndarray,
+    fp: np.ndarray,
+    fn: np.ndarray,
+    tn: Union[np.ndarray, None],
+    beta: float = 1.0,
+    epsilon: float = 1e-6,
+):
+    return bin_fmeasure_on_conf_matrix(
+        tp, fp, fn, tn, beta=beta, epsilon=epsilon
+    ).mean()
 
 
-def coverage_on_conf_matrix(tp: np.ndarray, fp: np.ndarray, fn: np.ndarray, tn: Union[np.ndarray, None]):
+def coverage_on_conf_matrix(
+    tp: np.ndarray, fp: np.ndarray, fn: np.ndarray, tn: Union[np.ndarray, None]
+):
     pass

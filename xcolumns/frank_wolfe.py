@@ -1,5 +1,5 @@
 from time import time
-from typing import Union, Callable
+from typing import Callable, Union
 
 import numpy as np
 import torch
@@ -25,20 +25,34 @@ def utility_func_with_gradient(utility_func, tp, fp, fn, tn):
     tn = torch.tensor(tn, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
     utility = utility_func(tp, fp, fn, tn)
     utility.backward()
-    return float(utility), _get_grad_as_numpy(tp), _get_grad_as_numpy(fp), _get_grad_as_numpy(fn), _get_grad_as_numpy(tn)
+    return (
+        float(utility),
+        _get_grad_as_numpy(tp),
+        _get_grad_as_numpy(fp),
+        _get_grad_as_numpy(fn),
+        _get_grad_as_numpy(tn),
+    )
 
 
 def _find_best_alpha(
-        utility_func,
-        tp, fp, fn, tn,
-        tp_i, fp_i, fn_i, tn_i,
-        search_algo="lin", eps=0.001, lin_search_step=0.001
+    utility_func,
+    tp,
+    fp,
+    fn,
+    tn,
+    tp_i,
+    fp_i,
+    fn_i,
+    tn_i,
+    search_algo="lin",
+    eps=0.001,
+    lin_search_step=0.001,
 ):
     conf_mat_comb = lambda alpha: utility_func(
-        (1 - alpha) * tp + alpha * tp_i, 
-        (1 - alpha) * fp + alpha * fp_i, 
-        (1 - alpha) * fn + alpha * fn_i, 
-        (1 - alpha) * tn + alpha * tn_i
+        (1 - alpha) * tp + alpha * tp_i,
+        (1 - alpha) * fp + alpha * fp_i,
+        (1 - alpha) * fn + alpha * fn_i,
+        (1 - alpha) * tn + alpha * tn_i,
     )
     if search_algo == "lin":
         return lin_search(0, 1, lin_search_step, conf_mat_comb)
@@ -56,7 +70,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     utility_func: Callable,
     k: int,
     max_iters: int = 100,
-    init_classifier: Union[str, Tuple[np.ndarray, np.ndarray]] = "topk", # or "random"
+    init_classifier: Union[str, Tuple[np.ndarray, np.ndarray]] = "topk",  # or "random"
     search_for_best_alpha: bool = True,
     alpha_search_algo: str = "lin",
     alpha_eps: float = 0.00001,
@@ -91,8 +105,10 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
         classifiers_b[0] = np.random.rand(m)
     else:
         raise ValueError(f"Unsuported type of init_classifier: {init_classifier}")
-    y_pred_i = predict_weighted_per_instance(y_proba, k, a=classifiers_a[0], b=classifiers_b[0])
-    
+    y_pred_i = predict_weighted_per_instance(
+        y_proba, k, a=classifiers_a[0], b=classifiers_b[0]
+    )
+
     log(
         f"    y_true: {y_true.shape}, y_pred: {y_pred_i.shape}, y_proba: {y_proba.shape}"
     )
@@ -103,17 +119,26 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     utility_i = utility_func(tp, fp, fn, tn)
 
     if return_meta:
-        meta = {"alphas": [], "classifiers_utilities": [], "utilities": [], "time": time()}
+        meta = {
+            "alphas": [],
+            "classifiers_utilities": [],
+            "utilities": [],
+            "time": time(),
+        }
         meta["utilities"].append(utility_i)
         meta["classifiers_utilities"].append(utility_i)
-    
+
     for i in range(1, max_iters):
         log(f"  Starting iteration {i} ...")
-        old_utility, Gtp, Gfp, Gfn, Gtn = utility_func_with_gradient(utility_func, tp, fp, fn, tn)
-        
+        old_utility, Gtp, Gfp, Gfn, Gtn = utility_func_with_gradient(
+            utility_func, tp, fp, fn, tn
+        )
+
         classifiers_a[i] = Gtp - Gfp - Gfn + Gtn
         classifiers_b[i] = Gfp - Gtn
-        y_pred_i = predict_weighted_per_instance(y_proba, k, t=0.0, a=classifiers_a[i], b=classifiers_b[i])
+        y_pred_i = predict_weighted_per_instance(
+            y_proba, k, t=0.0, a=classifiers_a[i], b=classifiers_b[i]
+        )
         tp_i, fp_i, fn_i, tn_i = calculate_confusion_matrix(
             y_true, y_pred_i, normalize=True, skip_tn=skip_tn
         )
@@ -122,8 +147,14 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
         if search_for_best_alpha:
             alpha, _ = _find_best_alpha(
                 utility_func,
-                tp, fp, fn, tn,
-                tp_i, fp_i, fn_i, tn_i,
+                tp,
+                fp,
+                fn,
+                tn,
+                tp_i,
+                fp_i,
+                fn_i,
+                tn_i,
                 search_algo=alpha_search_algo,
                 eps=alpha_eps,
                 lin_search_step=alpha_lin_search_step,
@@ -146,7 +177,9 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
             meta["utilities"].append(new_utility)
             meta["iters"] = i
 
-        log(f"   Iteration {i} finished, alpha: {alpha}, utility: {old_utility} -> {new_utility}")
+        log(
+            f"   Iteration {i} finished, alpha: {alpha}, utility: {old_utility} -> {new_utility}"
+        )
 
         if alpha < alpha_eps:
             print(f"  Stopping because alpha is smaller than {alpha_eps}")
@@ -208,29 +241,45 @@ def _predict_using_randomized_classifier_csr(
     for i in range(n):
         c_i = np.random.choice(classifiers_range, p=classifiers_proba)
         y_proba_i = y_proba[i]
-        gains = y_proba_i.data * classifiers_a[c_i][y_proba_i.indices] + classifiers_b[c_i][y_proba_i.indices]
+        gains = (
+            y_proba_i.data * classifiers_a[c_i][y_proba_i.indices]
+            + classifiers_b[c_i][y_proba_i.indices]
+        )
         top_k = np.argpartition(-gains, k)[:k]
         result_indices[i * k : (i + 1) * k] = sorted(y_proba_i.indices[top_k])
         result_indptr[i + 1] = result_indptr[i] + k
 
-    return csr_matrix(
-        (result_data, result_indices, result_indptr), shape=(n, m)
-    )
+    return csr_matrix((result_data, result_indices, result_indptr), shape=(n, m))
 
 
-def predict_using_randomized_classifier(y_proba, classifiers_a, classifiers_b, classifiers_proba, k, seed=None):
+def predict_using_randomized_classifier(
+    y_proba, classifiers_a, classifiers_b, classifiers_proba, k, seed=None
+):
     if not isinstance(y_proba, (np.ndarray, csr_matrix)):
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
 
-    if not isinstance(classifiers_a, np.ndarray) or not isinstance(classifiers_b, np.ndarray) or not isinstance(classifiers_proba, np.ndarray):
-        raise ValueError("classifiers_a, classifier_b, and classifiers_proba must be ndarray")
+    if (
+        not isinstance(classifiers_a, np.ndarray)
+        or not isinstance(classifiers_b, np.ndarray)
+        or not isinstance(classifiers_proba, np.ndarray)
+    ):
+        raise ValueError(
+            "classifiers_a, classifier_b, and classifiers_proba must be ndarray"
+        )
 
     n, m = y_proba.shape
     if classifiers_a.shape[1] != m or classifiers_b.shape[1] != m:
-        raise ValueError("classifiers_a, classifier_b, and classifiers_proba must have the same number of columns as y_proba")
-    
-    if classifiers_a.shape[0] != classifiers_b.shape[0] or classifiers_a.shape[0] != classifiers_proba.shape[0]:
-        raise ValueError("classifiers_a, classifier_b, and classifiers_proba must have the same number of rows")
+        raise ValueError(
+            "classifiers_a, classifier_b, and classifiers_proba must have the same number of columns as y_proba"
+        )
+
+    if (
+        classifiers_a.shape[0] != classifiers_b.shape[0]
+        or classifiers_a.shape[0] != classifiers_proba.shape[0]
+    ):
+        raise ValueError(
+            "classifiers_a, classifier_b, and classifiers_proba must have the same number of rows"
+        )
 
     if isinstance(y_proba, np.ndarray):
         return _predict_using_randomized_classifier_np(

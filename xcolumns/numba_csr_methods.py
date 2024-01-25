@@ -1,9 +1,9 @@
 import random
+from typing import Optional, Tuple
 
 import numpy as np
 from numba import njit
 from scipy.sparse import csr_matrix
-from typing import Optional, Tuple
 
 from .default_types import *
 
@@ -125,7 +125,14 @@ def numba_sparse_vec_mul_vec(
 
 @njit(cache=True)
 def numba_calculate_sum_0_sparse_mat_mul_mat(
-    a_data: np.ndarray, a_indices: np.ndarray, a_indptr: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray, b_indptr: np.ndarray, n: int, m: int
+    a_data: np.ndarray,
+    a_indices: np.ndarray,
+    a_indptr: np.ndarray,
+    b_data: np.ndarray,
+    b_indices: np.ndarray,
+    b_indptr: np.ndarray,
+    n: int,
+    m: int,
 ):
     """
     Performs a fast multiplication of sparse matricies a and b.
@@ -146,7 +153,6 @@ def numba_calculate_sum_0_sparse_mat_mul_mat(
         result[indices] += data
 
     return result
-
 
 
 @njit(cache=True)
@@ -183,7 +189,14 @@ def numba_sparse_vec_mul_ones_minus_vec(
 
 @njit(cache=True)
 def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
-    a_data: np.ndarray, a_indices: np.ndarray, a_indptr: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray, b_indptr: np.ndarray, n: int, m: int
+    a_data: np.ndarray,
+    a_indices: np.ndarray,
+    a_indptr: np.ndarray,
+    b_data: np.ndarray,
+    b_indices: np.ndarray,
+    b_indptr: np.ndarray,
+    n: int,
+    m: int,
 ):
     """
     Performs a fast multiplication of a sparse matrix a
@@ -245,12 +258,12 @@ def numba_argtopk(data, indices, k):
         return top_k
     else:
         return indices
-    
+
 
 @njit(cache=True)
 def numba_resize(arr, new_size):
     new_arr = np.zeros(new_size, arr.dtype)
-    new_arr[:arr.size] = arr
+    new_arr[: arr.size] = arr
     return new_arr
 
 
@@ -274,7 +287,7 @@ def numba_resize(arr, new_size):
 #     for i in range(n):
 #         row_data = data[indptr[i] : indptr[i + 1]]
 #         row_indices = indices[indptr[i] : indptr[i + 1]]
-        
+
 #         row_gains = row_data
 #         if a is not None:
 #             row_gains = row_gains * a[row_indices].reshape(-1)
@@ -293,7 +306,7 @@ def numba_predict_weighted_per_instance(
     data: np.ndarray,
     indices: np.ndarray,
     indptr: np.ndarray,
-    #shape: Tuple[int, int],
+    # shape: Tuple[int, int],
     n: int,
     m: int,
     k: int = 0,
@@ -309,7 +322,7 @@ def numba_predict_weighted_per_instance(
     for i in range(n):
         row_data = data[indptr[i] : indptr[i + 1]]
         row_indices = indices[indptr[i] : indptr[i + 1]]
-        
+
         row_gains = row_data
         if a is not None:
             row_gains = row_gains * a[row_indices].reshape(-1)
@@ -327,7 +340,9 @@ def numba_predict_weighted_per_instance(
                 y_pred_data = numba_resize(y_pred_data, len(y_pred_data) * 2)
                 y_pred_indices = numba_resize(y_pred_indices, len(y_pred_indices) * 2)
 
-            y_pred_indices[y_pred_indptr[i] : y_pred_indptr[i] + len(selected_indices)] = selected_indices
+            y_pred_indices[
+                y_pred_indptr[i] : y_pred_indptr[i] + len(selected_indices)
+            ] = selected_indices
             y_pred_indptr[i + 1] = y_pred_indptr[i] + k
 
     return y_pred_data, y_pred_indices, y_pred_indptr

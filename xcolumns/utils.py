@@ -1,4 +1,4 @@
-from typing import Tuple, Union, Callable
+from typing import Callable, Tuple, Union
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -8,7 +8,7 @@ from .numba_csr_methods import *
 
 
 def unpack_csr_matrix(matrix: csr_matrix):
-    return matrix.data, matrix.indices, matrix.indptr#, matrix.shape
+    return matrix.data, matrix.indices, matrix.indptr  # , matrix.shape
 
 
 def unpack_csr_matrices(*matrices):
