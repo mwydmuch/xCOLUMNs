@@ -37,6 +37,21 @@ def _true_positives(  # t in the paper
     return np.asarray(y_true_x_pred.mean(axis=axis)).ravel()
 
 
+def _true_negatives(  # t in the paper
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    axis: int = None,
+):
+    """
+    Given true and predicted labels, calculates the true positives along the given axis.
+    """
+    if isinstance(y_true, csr_matrix):
+        y_true_x_pred = y_true.multiply(y_pred)
+    else:
+        tn = (1 - y_true) * (1 - y_pred)
+    return np.asarray(y_true_x_pred.mean(axis=axis)).ravel()
+
+
 def precision(
     *,
     y_true: Union[np.ndarray, csr_matrix],

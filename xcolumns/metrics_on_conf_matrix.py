@@ -20,7 +20,7 @@ def _calculate_tp_np(y_true: np.ndarray, y_pred: np.ndarray):
 
 def _calculate_tp_csr(y_true: csr_matrix, y_pred: csr_matrix):
     n, m = y_true.shape
-    return numba_calculate_sum_0_sparse_mat_mul_mat(
+    return numba_calculate_sum_0_csr_mat_mul_mat(
         *unpack_csr_matrices(y_pred, y_true), n, m
     )
 
@@ -44,7 +44,7 @@ def _calculate_fn_np(y_true: np.ndarray, y_pred: np.ndarray):
 
 def _calculate_fp_csr(y_true: csr_matrix, y_pred: csr_matrix):
     n, m = y_true.shape
-    return numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
+    return numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
         *unpack_csr_matrices(y_pred, y_true), n, m
     )
 
@@ -61,7 +61,7 @@ def _calculate_fn_csr_slow(y_true: csr_matrix, y_pred: csr_matrix):
 
 def _calculate_fn_csr(y_true: csr_matrix, y_pred: csr_matrix):
     n, m = y_true.shape
-    return numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
+    return numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
         *unpack_csr_matrices(y_true, y_pred), n, m
     )
 
@@ -147,11 +147,37 @@ def calculate_confusion_matrix(
     return tp, fp, fn, tn
 
 
+def update_unnormalized_confusion_matrix(tp, fp, fn, tn, y_true, y_pred, skip_tn=False):
+    if y_true.shape != y_pred.shape:
+        raise ValueError("y_true and y_pred must have the same shape")
+
+    if isinstance(y_true, np.ndarray) and isinstance(y_pred, np.ndarray):
+        tp += np.sum(y_true * y_pred, axis=0)
+        fp += np.sum((1 - y_true) * y_pred, axis=0)
+        fn += np.sum(y_true * (1 - y_pred), axis=0)
+        if not skip_tn:
+            tn += np.sum((1 - y_true) * (1 - y_pred), axis=0)
+    elif isinstance(y_true, csr_matrix) and isinstance(y_pred, csr_matrix):
+        numba_add_to_unnormalized_confusion_matrix_csr(
+            tp,
+            fp,
+            fn,
+            tn,
+            y_true.data,
+            y_true.indices,
+            y_pred.data,
+            y_pred.indices,
+            skip_tn=skip_tn,
+        )
+    else:
+        raise ValueError("y_true and y_pred must be both dense or both sparse")
+
+
 def bin_precision_at_k_on_conf_matrix(
     tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray],
-    fn: Union[Number, np.ndarray],
-    tn: Union[Number, np.ndarray],
+    fp: Union[Number, np.ndarray, None],
+    fn: Union[Number, np.ndarray, None],
+    tn: Union[Number, np.ndarray, None],
     k: int,
 ):
     return tp / k
@@ -234,6 +260,57 @@ def macro_fmeasure_on_conf_matrix(
 
 
 def coverage_on_conf_matrix(
-    tp: np.ndarray, fp: np.ndarray, fn: np.ndarray, tn: Union[np.ndarray, None]
+    tp: np.ndarray,
+    fp: Union[np.ndarray, None],
+    fn: Union[np.ndarray, None],
+    tn: Union[np.ndarray, None],
 ):
-    pass
+    return (tp > 0).mean()
+
+
+def hamming_score_on_conf_matrix(
+    tp: np.ndarray,
+    fp: np.ndarray,
+    fn: np.ndarray,
+    tn: np.ndarray,
+    normalize: bool = True,
+):
+    score = tp + tn
+    if normalize:
+        score /= tp + fp + fn + tn
+    return score.mean()
+
+
+def hamming_loss_on_conf_matrix(
+    tp: np.ndarray,
+    fp: np.ndarray,
+    fn: np.ndarray,
+    tn: np.ndarray,
+    normalize: bool = True,
+):
+    loss = tp + tn
+    if normalize:
+        loss /= tp + fp + fn + tn
+    return loss.mean()
+
+
+def hamming_score(
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    normalize: bool = True,
+):
+    return hamming_score_on_conf_matrix(
+        *calculate_confusion_matrix(y_true, y_pred, normalize=False),
+        normalize=normalize,
+    )
+
+
+def hamming_loss(
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    normalize: bool = True,
+):
+    return hamming_loss_on_conf_matrix(
+        *calculate_confusion_matrix(y_true, y_pred, normalize=False),
+        normalize=normalize,
+    )

@@ -91,6 +91,11 @@ def predict_weighted_per_instance(
     if not isinstance(y_proba, (np.ndarray, csr_matrix)):
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
 
+    if len(y_proba.shape) == 1:
+        y_proba = y_proba.reshape(1, -1)
+    elif len(y_proba.shape) > 2:
+        raise ValueError("y_proba must be 1d or 2d")
+
     n, m = y_proba.shape
     if a is not None:
         if not isinstance(a, np.ndarray):

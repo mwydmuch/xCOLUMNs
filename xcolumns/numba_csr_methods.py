@@ -96,7 +96,7 @@ def numba_random_at_k(n: int, m: int, k: int, seed: int = None):
 
 
 @njit(cache=True)
-def numba_sparse_vec_mul_vec(
+def numba_csr_vec_mul_vec(
     a_data: np.ndarray, a_indices: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray
 ):
     """
@@ -124,7 +124,7 @@ def numba_sparse_vec_mul_vec(
 
 
 @njit(cache=True)
-def numba_calculate_sum_0_sparse_mat_mul_mat(
+def numba_calculate_sum_0_csr_mat_mul_mat(
     a_data: np.ndarray,
     a_indices: np.ndarray,
     a_indptr: np.ndarray,
@@ -144,7 +144,7 @@ def numba_calculate_sum_0_sparse_mat_mul_mat(
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
 
-        data, indices = numba_sparse_vec_mul_vec(
+        data, indices = numba_csr_vec_mul_vec(
             a_data[a_start:a_end],
             a_indices[a_start:a_end],
             b_data[b_start:b_end],
@@ -156,7 +156,7 @@ def numba_calculate_sum_0_sparse_mat_mul_mat(
 
 
 @njit(cache=True)
-def numba_sparse_vec_mul_ones_minus_vec(
+def numba_csr_vec_mul_ones_minus_vec(
     a_data: np.ndarray, a_indices: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray
 ):
     """
@@ -188,7 +188,7 @@ def numba_sparse_vec_mul_ones_minus_vec(
 
 
 @njit(cache=True)
-def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
+def numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
     a_data: np.ndarray,
     a_indices: np.ndarray,
     a_indptr: np.ndarray,
@@ -209,7 +209,7 @@ def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
 
-        data, indices = numba_sparse_vec_mul_ones_minus_vec(
+        data, indices = numba_csr_vec_mul_ones_minus_vec(
             a_data[a_start:a_end],
             a_indices[a_start:a_end],
             b_data[b_start:b_end],
@@ -222,7 +222,7 @@ def numba_calculate_sum_0_sparse_mat_mul_ones_minus_mat(
 
 # TODO: fix docstirng
 @njit(cache=True)
-def numba_calculate_prod_0_sparse_mat_mul_ones_minus_mat(
+def numba_calculate_prod_0_csr_mat_mul_ones_minus_mat(
     a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, n, m
 ):
     """
@@ -236,7 +236,7 @@ def numba_calculate_prod_0_sparse_mat_mul_ones_minus_mat(
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
 
-        data, indices = numba_sparse_vec_mul_ones_minus_vec(
+        data, indices = numba_csr_vec_mul_ones_minus_vec(
             a_data[a_start:a_end],
             a_indices[a_start:a_end],
             b_data[b_start:b_end],
@@ -245,6 +245,70 @@ def numba_calculate_prod_0_sparse_mat_mul_ones_minus_mat(
         result[indices] *= data
 
     return result
+
+
+@njit(cache=True)
+def numba_sub_from_unnormalized_confusion_matrix_csr(
+    tp: np.ndarray,
+    fp: np.ndarray,
+    fn: np.ndarray,
+    tn: np.ndarray,
+    true_data: np.ndarray,
+    true_indices: np.ndarray,
+    pred_data: np.ndarray,
+    pred_indices: np.ndarray,
+    skip_tn=False,
+):
+    tp_data, tp_indices = numba_csr_vec_mul_vec(
+        pred_data, pred_indices, true_data, true_indices
+    )
+    tp[tp_indices] -= tp_data
+    ft_data, ft_indices = numba_csr_vec_mul_ones_minus_vec(
+        pred_data, pred_indices, true_data, true_indices
+    )
+    fp[ft_indices] -= ft_data
+    fn_data, fn_indices = numba_csr_vec_mul_ones_minus_vec(
+        true_data, true_indices, pred_data, pred_indices
+    )
+    fn[fn_indices] -= fn_data
+
+    if not skip_tn:
+        tn -= 1
+        tn[tp_indices] += tp_data
+        tn[ft_indices] += ft_data
+        tn[fn_indices] += fn_data
+
+
+@njit(cache=True)
+def numba_add_to_unnormalized_confusion_matrix_csr(
+    tp: np.ndarray,
+    fp: np.ndarray,
+    fn: np.ndarray,
+    tn: np.ndarray,
+    true_data: np.ndarray,
+    true_indices: np.ndarray,
+    pred_data: np.ndarray,
+    pred_indices: np.ndarray,
+    skip_tn=False,
+):
+    tp_data, tp_indices = numba_csr_vec_mul_vec(
+        pred_data, pred_indices, true_data, true_indices
+    )
+    tp[tp_indices] += tp_data
+    ft_data, ft_indices = numba_csr_vec_mul_ones_minus_vec(
+        pred_data, pred_indices, true_data, true_indices
+    )
+    fp[ft_indices] += ft_data
+    fn_data, fn_indices = numba_csr_vec_mul_ones_minus_vec(
+        true_data, true_indices, pred_data, pred_indices
+    )
+    fn[fn_indices] += fn_data
+
+    if not skip_tn:
+        tn += 1
+        tn[tp_indices] -= tp_data
+        tn[ft_indices] -= ft_data
+        tn[fn_indices] -= fn_data
 
 
 @njit(cache=True)

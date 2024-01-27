@@ -70,11 +70,13 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     utility_func: Callable,
     k: int,
     max_iters: int = 100,
-    init_classifier: Union[str, Tuple[np.ndarray, np.ndarray]] = "topk",  # or "random"
+    init_classifier: Union[
+        str, Tuple[np.ndarray, np.ndarray]
+    ] = "random",  # or "random"
     search_for_best_alpha: bool = True,
     alpha_search_algo: str = "lin",
-    alpha_eps: float = 0.00001,
-    alpha_lin_search_step: float = 0.00001,
+    alpha_eps: float = 0.0001,
+    alpha_lin_search_step: float = 0.0001,
     skip_tn=False,
     verbose: bool = True,
     return_meta: bool = False,
@@ -97,14 +99,14 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     classifiers_proba = np.ones(max_iters, dtype=FLOAT_TYPE)
 
     log(f"  Initializing initial {init_classifier} classifier ...")
-    if init_classifier == "topk":
+    if init_classifier in ["default", "topk"]:
         classifiers_a[0] = np.ones(m, dtype=FLOAT_TYPE)
         classifiers_b[0] = np.full(m, -0.5, dtype=FLOAT_TYPE)
     elif init_classifier == "random":
         classifiers_a[0] = np.random.rand(m)
         classifiers_b[0] = np.random.rand(m)
     else:
-        raise ValueError(f"Unsuported type of init_classifier: {init_classifier}")
+        raise ValueError(f"Unsupported type of init_classifier: {init_classifier}")
     y_pred_i = predict_weighted_per_instance(
         y_proba, k, a=classifiers_a[0], b=classifiers_b[0]
     )
@@ -116,7 +118,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     tp, fp, fn, tn = calculate_confusion_matrix(
         y_true, y_pred_i, normalize=True, skip_tn=skip_tn
     )
-    utility_i = utility_func(tp, fp, fn, tn)
+    utility_i = float(utility_func(tp, fp, fn, tn))
 
     if return_meta:
         meta = {
@@ -142,7 +144,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
         tp_i, fp_i, fn_i, tn_i = calculate_confusion_matrix(
             y_true, y_pred_i, normalize=True, skip_tn=skip_tn
         )
-        utility_i = utility_func(tp_i, fp_i, fn_i, tn_i)
+        utility_i = float(utility_func(tp_i, fp_i, fn_i, tn_i))
 
         if search_for_best_alpha:
             alpha, _ = _find_best_alpha(
@@ -178,11 +180,11 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
             meta["iters"] = i
 
         log(
-            f"   Iteration {i} finished, alpha: {alpha}, utility: {old_utility} -> {new_utility}"
+            f"    Iteration {i} finished, alpha: {alpha}, utility: {old_utility} -> {new_utility}"
         )
 
         if alpha < alpha_eps:
-            print(f"  Stopping because alpha is smaller than {alpha_eps}")
+            print(f"    Stopping because alpha is smaller than {alpha_eps}")
             # Truncate unused classifiers
             classifiers_a = classifiers_a[:i]
             classifiers_b = classifiers_b[:i]
@@ -190,11 +192,6 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
             break
 
     if return_meta:
-        meta["tp"] = tp
-        meta["fp"] = fp
-        meta["fn"] = fn
-        if not skip_tn:
-            meta["tn"] = tn
         meta["time"] = time() - meta["time"]
         return classifiers_a, classifiers_b, classifiers_proba, meta
     else:
@@ -266,6 +263,11 @@ def predict_using_randomized_classifier(
         raise ValueError(
             "classifiers_a, classifier_b, and classifiers_proba must be ndarray"
         )
+
+    if len(y_proba.shape) == 1:
+        y_proba = y_proba.reshape(1, -1)
+    elif len(y_proba.shape) > 2:
+        raise ValueError("y_proba must be 1d or 2d")
 
     n, m = y_proba.shape
     if classifiers_a.shape[1] != m or classifiers_b.shape[1] != m:

@@ -197,52 +197,37 @@ def bc_with_0approx_csr_step(
     skip_tn: bool = False,
 ):
     n, m = y_proba.shape
-    r_start, r_end = y_pred.indptr[i], y_pred.indptr[i + 1]
-    p_start, p_end = y_proba.indptr[i], y_proba.indptr[i + 1]
+    p_start, p_end = y_pred.indptr[i], y_pred.indptr[i + 1]
+    t_start, t_end = y_proba.indptr[i], y_proba.indptr[i + 1]
 
-    r_data = y_pred.data[r_start:r_end]
-    r_indices = y_pred.indices[r_start:r_end]
+    p_data = y_pred.data[p_start:p_end]
+    p_indices = y_pred.indices[p_start:p_end]
 
-    p_data = y_proba.data[p_start:p_end]
-    p_indices = y_proba.indices[p_start:p_end]
+    t_data = y_proba.data[t_start:t_end]
+    t_indices = y_proba.indices[t_start:t_end]
 
     # Adjust local confusion matrix
     if not greedy and not only_pred:
-        tp_data, tp_indices = numba_sparse_vec_mul_vec(
-            r_data, r_indices, p_data, p_indices
+        numba_sub_from_unnormalized_confusion_matrix_csr(
+            Etp, Efp, Efn, Etn, t_data, t_indices, p_data, p_indices, skip_tn=skip_tn
         )
-        Etp[tp_indices] -= tp_data
-        fp_data, fp_indices = numba_sparse_vec_mul_ones_minus_vec(
-            r_data, r_indices, p_data, p_indices
-        )
-        Efp[fp_indices] -= fp_data
-        fn_data, fn_indices = numba_sparse_vec_mul_ones_minus_vec(
-            p_data, p_indices, r_data, r_indices
-        )
-        Efn[fn_indices] -= fn_data
 
-        if not skip_tn:
-            Etn -= 1
-            Etn[tp_indices] += tp_data
-            Etn[fp_indices] += fp_data
-            Etn[fn_indices] += fn_data
+    n_Etp = Etp[t_indices]
+    n_Efp = Efp[t_indices]
+    p_Efn = Efn[t_indices]
 
-    n_Etp = Etp[p_indices]
-    n_Efp = Efp[p_indices]
-    p_Efn = Efn[p_indices]
-
-    p_Etpp = (n_Etp + p_data) / n
-    p_Efpp = (n_Efp + (1 - p_data)) / n
-    n_Efnn = (p_Efn + p_data) / n
+    p_Etpp = (n_Etp + t_data) / n
+    p_Efpp = (n_Efp + (1 - t_data)) / n
+    n_Efnn = (p_Efn + t_data) / n
 
     n_Etp /= n
     n_Efp /= n
     p_Efn /= n
 
-    p_Etn = Etn[p_indices]
+    p_Etn = Etn[t_indices]
     n_Etnn = p_Etn
     if not skip_tn:
-        n_Etnn = (p_Etn + (1 - p_data)) / n
+        n_Etnn = (p_Etn + (1 - t_data)) / n
         p_Etn /= n
 
     # Calculate gain and selection
@@ -257,32 +242,17 @@ def bc_with_0approx_csr_step(
     # Update select labels with the best gain and update prediction
     if gains.size > k:
         top_k = np.argpartition(gains, k)[:k]
-        y_pred.indices[r_start:r_end] = sorted(p_indices[top_k])
+        y_pred.indices[p_start:p_end] = sorted(t_indices[top_k])
     else:
-        p_indices = np.resize(p_indices, k)
-        p_indices[gains.size :] = 0
-        y_pred.indices[r_start:r_end] = sorted(p_indices)
+        t_indices = np.resize(t_indices, k)
+        t_indices[gains.size :] = 0
+        y_pred.indices[p_start:p_end] = sorted(t_indices)
 
     # Update local confusion matrix
     if not only_pred:
-        tp_data, tp_indices = numba_sparse_vec_mul_vec(
-            r_data, r_indices, p_data, p_indices
+        numba_add_to_unnormalized_confusion_matrix_csr(
+            Etp, Efp, Efn, Etn, t_data, t_indices, p_data, p_indices, skip_tn=skip_tn
         )
-        Etp[tp_indices] += tp_data
-        fp_data, fp_indices = numba_sparse_vec_mul_ones_minus_vec(
-            r_data, r_indices, p_data, p_indices
-        )
-        Efp[fp_indices] += fp_data
-        fn_data, fn_indices = numba_sparse_vec_mul_ones_minus_vec(
-            p_data, p_indices, r_data, r_indices
-        )
-        Efn[fn_indices] += fn_data
-
-        if not skip_tn:
-            Etn += 1
-            Etn[tp_indices] -= tp_data
-            Etn[fp_indices] -= fp_data
-            Etn[fn_indices] -= fn_data
 
 
 def bc_with_0approx(
@@ -456,37 +426,37 @@ def bc_coverage_csr_step(
     Perform a single step of block coordinate for coverage
     on a single instance i using probability estimates and predictions in sparse format.
     """
-    r_start, r_end = y_pred.indptr[i], y_pred.indptr[i + 1]
-    p_start, p_end = y_proba.indptr[i], y_proba.indptr[i + 1]
+    p_start, p_end = y_pred.indptr[i], y_pred.indptr[i + 1]
+    t_start, t_end = y_proba.indptr[i], y_proba.indptr[i + 1]
 
-    r_data = y_pred.data[r_start:r_end]
-    r_indices = y_pred.indices[r_start:r_end]
+    p_data = y_pred.data[p_start:p_end]
+    p_indices = y_pred.indices[p_start:p_end]
 
-    p_data = y_proba.data[p_start:p_end]
-    p_indices = y_proba.indices[p_start:p_end]
+    t_data = y_proba.data[t_start:t_end]
+    t_indices = y_proba.indices[t_start:t_end]
 
     # Adjust estimates of failure probability (not covering the label)
     if not greedy:
-        data, indices = numba_sparse_vec_mul_ones_minus_vec(
-            r_data, r_indices, p_data, p_indices
+        data, indices = numba_csr_vec_mul_ones_minus_vec(
+            p_data, p_indices, t_data, t_indices
         )
         Ef[indices] /= data
 
     # Calculate gain and selection
-    gains = Ef[p_indices] * p_data
+    gains = Ef[t_indices] * t_data
     if alpha < 1:
-        gains = alpha * gains + (1 - alpha) * p_data / k
+        gains = alpha * gains + (1 - alpha) * t_data / k
     if gains.size > k:
         top_k = np.argpartition(-gains, k)[:k]
-        y_pred.indices[r_start:r_end] = sorted(p_indices[top_k])
+        y_pred.indices[p_start:p_end] = sorted(t_indices[top_k])
     else:
-        p_indices = np.resize(p_indices, k)
-        p_indices[gains.size :] = 0
-        y_pred.indices[r_start:r_end] = sorted(p_indices)
+        t_indices = np.resize(t_indices, k)
+        t_indices[gains.size :] = 0
+        y_pred.indices[p_start:p_end] = sorted(t_indices)
 
     # Update estimates of failure probability
-    data, indices = numba_sparse_vec_mul_ones_minus_vec(
-        r_data, r_indices, p_data, p_indices
+    data, indices = numba_csr_vec_mul_ones_minus_vec(
+        p_data, p_indices, t_data, t_indices
     )
     Ef[indices] *= data
 
@@ -573,7 +543,7 @@ def bc_coverage(
             if isinstance(y_proba, np.ndarray):
                 Ef = np.product(1 - y_pred * y_proba, axis=0)
             elif isinstance(y_proba, csr_matrix):
-                Ef = numba_calculate_prod_0_sparse_mat_mul_ones_minus_mat(
+                Ef = numba_calculate_prod_0_csr_mat_mul_ones_minus_mat(
                     *unpack_csr_matrices(y_pred, y_proba), n, m
                 )
 
