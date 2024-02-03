@@ -32,7 +32,7 @@ def _get_initial_y_pred(
     random_at_k_func: Callable,
 ):
     n, m = y_proba.shape
-
+    
     if init_y_pred in ["random", "greedy"]:
         y_pred = random_at_k_func((n, m), k)
     elif init_y_pred == "topk":
@@ -81,33 +81,33 @@ def _calculate_utility(
 
 def _calculate_binary_gains(
     bin_utility_func,
-    p_Etp: np.ndarray,
-    p_Efp: np.ndarray,
-    p_Efn: np.ndarray,
-    p_Etn: np.ndarray,
-    n_Etp: np.ndarray,
-    n_Efp: np.ndarray,
-    n_Efn: np.ndarray,
-    n_Etn: np.ndarray,
+    pos_Etp: np.ndarray,
+    pos_Efp: np.ndarray,
+    pos_Efn: np.ndarray,
+    pos_Etn: np.ndarray,
+    neg_Etp: np.ndarray,
+    neg_Efp: np.ndarray,
+    neg_Efn: np.ndarray,
+    neg_Etn: np.ndarray,
 ):
     if callable(bin_utility_func):
-        p_utility = bin_utility_func(p_Etp, p_Efp, p_Efn, p_Etn)
-        n_utility = bin_utility_func(n_Etp, n_Efp, n_Efn, n_Etn)
+        pos_utility = bin_utility_func(pos_Etp, pos_Efp, pos_Efn, pos_Etn)
+        neg_utility = bin_utility_func(neg_Etp, neg_Efp, neg_Efn, neg_Etn)
     else:
-        p_utility = np.array(
+        pos_utility = np.array(
             [
-                f(p_Etp[i], p_Efp[i], p_Efn[i], p_Etn[i])
+                f(pos_Etp[i], pos_Efp[i], pos_Efn[i], pos_Etn[i])
                 for i, f in enumerate(bin_utility_func)
             ]
         )
-        n_utility = np.array(
+        neg_utility = np.array(
             [
-                f(n_Etp[i], n_Efp[i], n_Efn[i], n_Etn[i])
+                f(neg_Etp[i], neg_Efp[i], neg_Efn[i], neg_Etn[i])
                 for i, f in enumerate(bin_utility_func)
             ]
         )
 
-    return p_utility - n_utility
+    return pos_utility - neg_utility
 
 
 def bc_with_0approx_np_step(
@@ -139,24 +139,24 @@ def bc_with_0approx_np_step(
             Etn -= (1 - y_pred_i) * (1 - y_proba_i)
 
     # Calculate gain and selection
-    Etpp = Etp + y_proba_i
-    Efpp = Efp + (1 - y_proba_i)
-    Efnn = Efn + y_proba_i
-    Etnn = Etn
+    pos_Etp = Etp + y_proba_i
+    pos_Efp = Efp + (1 - y_proba_i)
+    neg_Efn = Efn + y_proba_i
+    neg_Etn = Etn
 
     if not skip_tn:
-        Etnn = Etn + (1 - y_proba_i)
+        neg_Etn = Etn + (1 - y_proba_i)
 
     gains = _calculate_binary_gains(
         bin_utility_func,
-        Etpp / n,
-        Efpp / n,
+        pos_Etp / n,
+        pos_Efp / n,
         Efn / n,
         Etn / n,
         Etp / n,
         Efp / n,
-        Efnn / n,
-        Etnn / n,
+        neg_Efn / n,
+        neg_Etn / n,
     )
 
     if maximize:
@@ -212,27 +212,27 @@ def bc_with_0approx_csr_step(
             Etp, Efp, Efn, Etn, t_data, t_indices, p_data, p_indices, skip_tn=skip_tn
         )
 
-    n_Etp = Etp[t_indices]
-    n_Efp = Efp[t_indices]
-    p_Efn = Efn[t_indices]
+    neg_Etp = Etp[t_indices]
+    neg_Efp = Efp[t_indices]
+    pos_Efn = Efn[t_indices]
 
-    p_Etpp = (n_Etp + t_data) / n
-    p_Efpp = (n_Efp + (1 - t_data)) / n
-    n_Efnn = (p_Efn + t_data) / n
+    pos_Etpp = (neg_Etp + t_data) / n
+    pos_Efpp = (neg_Efp + (1 - t_data)) / n
+    neg_Efnn = (pos_Efn + t_data) / n
 
-    n_Etp /= n
-    n_Efp /= n
-    p_Efn /= n
+    neg_Etp /= n
+    neg_Efp /= n
+    pos_Efn /= n
 
-    p_Etn = Etn[t_indices]
-    n_Etnn = p_Etn
+    pos_Etn = Etn[t_indices]
+    neg_Etnn = pos_Etn
     if not skip_tn:
-        n_Etnn = (p_Etn + (1 - t_data)) / n
-        p_Etn /= n
+        neg_Etnn = (pos_Etn + (1 - t_data)) / n
+        pos_Etn /= n
 
     # Calculate gain and selection
     gains = _calculate_binary_gains(
-        bin_utility_func, p_Etpp, p_Efpp, p_Efn, p_Etn, n_Etp, n_Efp, n_Efnn, n_Etnn
+        bin_utility_func, pos_Etpp, pos_Efpp, pos_Efn, pos_Etn, neg_Etp, neg_Efp, neg_Efnn, neg_Etnn
     )
     gains = np.asarray(gains).ravel()
 
@@ -240,13 +240,15 @@ def bc_with_0approx_csr_step(
         gains = -gains
 
     # Update select labels with the best gain and update prediction
-    if gains.size > k:
-        top_k = np.argpartition(gains, k)[:k]
-        y_pred.indices[p_start:p_end] = sorted(t_indices[top_k])
-    else:
-        t_indices = np.resize(t_indices, k)
-        t_indices[gains.size :] = 0
-        y_pred.indices[p_start:p_end] = sorted(t_indices)
+    y_pred.indices, y_pred.indptr = numba_set_gains_csr(y_pred.indices, y_pred.indptr, gains, t_indices, i, k, 0.0)
+
+    # if gains.size > k:
+    #     top_k = np.argpartition(gains, k)[:k]
+    #     y_pred.indices[p_start:p_end] = sorted(t_indices[top_k])
+    # else:
+    #     t_indices = np.resize(t_indices, k)
+    #     t_indices[gains.size :] = 0
+    #     y_pred.indices[p_start:p_end] = sorted(t_indices)
 
     # Update local confusion matrix
     if not only_pred:

@@ -75,9 +75,10 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     ] = "random",  # or "random"
     search_for_best_alpha: bool = True,
     alpha_search_algo: str = "lin",
-    alpha_eps: float = 0.0001,
-    alpha_lin_search_step: float = 0.0001,
+    alpha_eps: float = 0.001,
+    alpha_lin_search_step: float = 0.001,
     skip_tn=False,
+    seed = None,
     verbose: bool = True,
     return_meta: bool = False,
     **kwargs,
@@ -94,6 +95,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     log("Starting Frank-Wolfe algorithm")
     n, m = y_proba.shape
 
+    rng = np.random.default_rng(seed)
     classifiers_a = np.zeros((max_iters, m), dtype=FLOAT_TYPE)
     classifiers_b = np.zeros((max_iters, m), dtype=FLOAT_TYPE)
     classifiers_proba = np.ones(max_iters, dtype=FLOAT_TYPE)
@@ -103,12 +105,12 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
         classifiers_a[0] = np.ones(m, dtype=FLOAT_TYPE)
         classifiers_b[0] = np.full(m, -0.5, dtype=FLOAT_TYPE)
     elif init_classifier == "random":
-        classifiers_a[0] = np.random.rand(m)
-        classifiers_b[0] = np.random.rand(m)
+        classifiers_a[0] = rng.random(m)
+        classifiers_b[0] = rng.random(m) - 0.5
     else:
         raise ValueError(f"Unsupported type of init_classifier: {init_classifier}")
     y_pred_i = predict_weighted_per_instance(
-        y_proba, k, a=classifiers_a[0], b=classifiers_b[0]
+        y_proba, k, th=0.0, a=classifiers_a[0], b=classifiers_b[0]
     )
 
     log(
@@ -139,7 +141,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
         classifiers_a[i] = Gtp - Gfp - Gfn + Gtn
         classifiers_b[i] = Gfp - Gtn
         y_pred_i = predict_weighted_per_instance(
-            y_proba, k, t=0.0, a=classifiers_a[i], b=classifiers_b[i]
+            y_proba, k, th=0.0, a=classifiers_a[i], b=classifiers_b[i]
         )
         tp_i, fp_i, fn_i, tn_i = calculate_confusion_matrix(
             y_true, y_pred_i, normalize=True, skip_tn=skip_tn
@@ -171,7 +173,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
         fn = (1 - alpha) * fn + alpha * fn_i
         tn = (1 - alpha) * tn + alpha * tn_i
 
-        new_utility = utility_func(tp, fp, fn, tn)
+        new_utility = float(utility_func(tp, fp, fn, tn))
 
         if return_meta:
             meta["alphas"].append(alpha)
@@ -229,24 +231,22 @@ def _predict_using_randomized_classifier_csr(
 
     n, m = y_proba.shape
     c = classifiers_proba.shape[0]
-    result_data = np.ones(n * k, dtype=FLOAT_TYPE)
-    result_indices = np.zeros(n * k, dtype=IND_TYPE)
-    result_indptr = np.zeros(n + 1, dtype=IND_TYPE)
+    y_pred_indices = np.zeros(n * max(1, k), dtype=IND_TYPE)
+    y_pred_indptr = np.zeros(n + 1, dtype=IND_TYPE)
     classifiers_range = np.arange(c)
 
-    # TODO: Can be numba optimized
+    # TODO: Can be futher optimized in numba
     for i in range(n):
         c_i = np.random.choice(classifiers_range, p=classifiers_proba)
-        y_proba_i = y_proba[i]
-        gains = (
-            y_proba_i.data * classifiers_a[c_i][y_proba_i.indices]
-            + classifiers_b[c_i][y_proba_i.indices]
+        y_pred_indices, y_pred_indptr = numba_predict_weighted_per_instance_csr_step(
+            y_pred_indices, y_pred_indptr, 
+            y_proba.data, y_proba.indices, y_proba.indptr, 
+            i, k, 0.0, classifiers_a[c_i], classifiers_b[c_i]
         )
-        top_k = np.argpartition(-gains, k)[:k]
-        result_indices[i * k : (i + 1) * k] = sorted(y_proba_i.indices[top_k])
-        result_indptr[i + 1] = result_indptr[i] + k
 
-    return csr_matrix((result_data, result_indices, result_indptr), shape=(n, m))
+    y_pred_data = np.ones(y_pred_indices.size, dtype=FLOAT_TYPE)
+
+    return csr_matrix((y_pred_data, y_pred_indices, y_pred_indptr), shape=(n, m))
 
 
 def predict_using_randomized_classifier(
@@ -291,3 +291,21 @@ def predict_using_randomized_classifier(
         return _predict_using_randomized_classifier_csr(
             y_proba, classifiers_a, classifiers_b, classifiers_proba, k, seed=seed
         )
+
+
+class RandomizedWeightedClassifier(object):
+    def __init__(self, a, b, p):
+        self.a = a
+        self.b = b
+        self.p = p
+
+
+    def fit(self, y_true, y_proba, utility_func, k, max_iters=100, init_classifier="random", search_for_best_alpha=True, alpha_search_algo="lin", alpha_eps=0.001, alpha_lin_search_step=0.001, skip_tn=False, seed=None, verbose=True, return_meta=False, **kwargs):
+        self.a, self.b, self.p = find_optimal_randomized_classifier_using_frank_wolfe(
+            y_true, y_proba, utility_func, k, max_iters, init_classifier, search_for_best_alpha, alpha_search_algo, alpha_eps, alpha_lin_search_step, skip_tn, seed, verbose, return_meta, **kwargs
+        )
+
+
+    def predict(self, y_proba, k, seed=None):
+        return predict_using_randomized_classifier(y_proba, self.a, self.b, self.p, k, seed=seed)
+

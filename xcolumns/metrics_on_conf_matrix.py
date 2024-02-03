@@ -152,11 +152,11 @@ def update_unnormalized_confusion_matrix(tp, fp, fn, tn, y_true, y_pred, skip_tn
         raise ValueError("y_true and y_pred must have the same shape")
 
     if isinstance(y_true, np.ndarray) and isinstance(y_pred, np.ndarray):
-        tp += np.sum(y_true * y_pred, axis=0)
-        fp += np.sum((1 - y_true) * y_pred, axis=0)
-        fn += np.sum(y_true * (1 - y_pred), axis=0)
+        tp += y_true * y_pred
+        fp += (1 - y_true) * y_pred
+        fn += y_true * (1 - y_pred)
         if not skip_tn:
-            tn += np.sum((1 - y_true) * (1 - y_pred), axis=0)
+            tn += (1 - y_true) * (1 - y_pred)
     elif isinstance(y_true, csr_matrix) and isinstance(y_pred, csr_matrix):
         numba_add_to_unnormalized_confusion_matrix_csr(
             tp,
@@ -172,6 +172,7 @@ def update_unnormalized_confusion_matrix(tp, fp, fn, tn, y_true, y_pred, skip_tn
     else:
         raise ValueError("y_true and y_pred must be both dense or both sparse")
 
+# Binary metrics
 
 def bin_precision_at_k_on_conf_matrix(
     tp: Union[Number, np.ndarray],
@@ -246,6 +247,19 @@ def macro_recall_on_conf_matrix(
     return bin_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon).mean()
 
 
+def micro_fmeasure_on_conf_matrix(
+    tp: np.ndarray,
+    fp: np.ndarray,
+    fn: np.ndarray,
+    tn: Union[np.ndarray, None],
+    beta: float = 1.0,
+    epsilon: float = 1e-6,
+):
+    return bin_fmeasure_on_conf_matrix(
+        tp.sum(), fp.sum(), fn.sum(), None, beta=beta, epsilon=epsilon
+    )
+        
+
 def macro_fmeasure_on_conf_matrix(
     tp: np.ndarray,
     fp: np.ndarray,
@@ -313,4 +327,28 @@ def hamming_loss(
     return hamming_loss_on_conf_matrix(
         *calculate_confusion_matrix(y_true, y_pred, normalize=False),
         normalize=normalize,
+    )
+
+
+def micro_f1(
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    epsilon: float = 1e-6,
+):
+    """
+    Alias for micro_fmeasure with beta=1.0. 
+    """
+    return micro_fmeasure(
+        y_true, y_pred, beta=1.0, epsilon=epsilon
+    )
+
+
+def micro_fmeasure(
+    y_true: Union[np.ndarray, csr_matrix],
+    y_pred: Union[np.ndarray, csr_matrix],
+    beta: float = 1.0,
+    epsilon: float = 1e-6,
+):
+    return micro_fmeasure_on_conf_matrix(
+        *calculate_confusion_matrix(y_true, y_pred, normalize=False), beta=beta, epsilon=epsilon
     )
