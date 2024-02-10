@@ -236,19 +236,11 @@ def bc_with_0approx_csr_step(
     )
     gains = np.asarray(gains).ravel()
 
-    if maximize:
+    if not maximize:
         gains = -gains
 
     # Update select labels with the best gain and update prediction
-    y_pred.indices, y_pred.indptr = numba_set_gains_csr(y_pred.indices, y_pred.indptr, gains, t_indices, i, k, 0.0)
-
-    # if gains.size > k:
-    #     top_k = np.argpartition(gains, k)[:k]
-    #     y_pred.indices[p_start:p_end] = sorted(t_indices[top_k])
-    # else:
-    #     t_indices = np.resize(t_indices, k)
-    #     t_indices[gains.size :] = 0
-    #     y_pred.indices[p_start:p_end] = sorted(t_indices)
+    y_pred.data, y_pred.indices, y_pred.indptr = numba_set_gains_csr(y_pred.data, y_pred.indices, y_pred.indptr, gains, t_indices, i, k, 0.0)
 
     # Update local confusion matrix
     if not only_pred:
