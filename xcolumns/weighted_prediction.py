@@ -89,9 +89,7 @@ def _predict_weighted_per_instance_csr(
 def predict_weighted_per_instance(
     y_proba: Union[np.ndarray, torch.tensor, csr_matrix],
     k: int,
-    th: float = 0,
-    weights: Union[np.ndarray, torch.tensor, None] = None,
-    bases: Union[np.ndarray, torch.tensor, None] = None,
+    th: float = 0.0,
     a: Union[np.ndarray, torch.tensor, None] = None,
     b: Union[np.ndarray, torch.tensor, None] = None,
     dtype: Optional[Union[np.dtype, torch.dtype]] = None,
@@ -100,13 +98,6 @@ def predict_weighted_per_instance(
     """
     Predict ... TODO: Add description
     """
-
-    # Support for weights and bases aliases
-    if weights is not None and a is None:
-        a = weights
-
-    if bases is not None and b is None:
-        b = bases
 
     # Arguments validation
     if not isinstance(y_proba, (np.ndarray, torch.tensor, csr_matrix)):
@@ -186,7 +177,7 @@ def predict_for_optimal_macro_recall(  # (for population)
 
     weights = 1.0 / (priors + epsilon)
     return predict_weighted_per_instance(
-        y_proba, k=k, weights=weights, return_meta=return_meta
+        y_proba, k=k, a=weights, return_meta=return_meta
     )
 
 
@@ -201,7 +192,7 @@ def predict_inv_propensity_weighted_instance(
         raise ValueError("inv_ps must be of shape (y_proba[1],)")
 
     return predict_weighted_per_instance(
-        y_proba, k=k, weights=inv_ps, return_meta=return_meta
+        y_proba, k=k, a=inv_ps, return_meta=return_meta
     )
 
 
@@ -218,7 +209,7 @@ def predict_log_weighted_per_instance(
 
     weights = -np.log(priors + epsilon)
     return predict_weighted_per_instance(
-        y_proba, k=k, weights=weights, return_meta=return_meta
+        y_proba, k=k, a=weights, return_meta=return_meta
     )
 
 
@@ -235,7 +226,7 @@ def predict_sqrt_weighted_instance(
 
     weights = 1.0 / np.sqrt(priors + epsilon)
     return predict_weighted_per_instance(
-        y_proba, k=k, weights=weights, return_meta=return_meta
+        y_proba, k=k, a=weights, return_meta=return_meta
     )
 
 
@@ -253,7 +244,7 @@ def predict_power_law_weighted_instance(
 
     weights = 1.0 / (priors + epsilon) ** beta
     return predict_weighted_per_instance(
-        y_proba, k=k, weights=weights, return_meta=return_meta
+        y_proba, k=k, a=weights, return_meta=return_meta
     )
 
 

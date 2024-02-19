@@ -19,10 +19,11 @@ def _get_grad_as_numpy(t):
 
 
 def utility_func_with_gradient(utility_func, tp, fp, fn, tn):
-    tp = torch.tensor(tp, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
-    fp = torch.tensor(fp, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
-    fn = torch.tensor(fn, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
-    tn = torch.tensor(tn, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
+    if not isinstance(tp, torch.Tensor) or not tp.requires_grad:
+        tp = torch.tensor(tp, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
+        fp = torch.tensor(fp, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
+        fn = torch.tensor(fn, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
+        tn = torch.tensor(tn, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
     utility = utility_func(tp, fp, fn, tn)
     utility.backward()
     return (
@@ -78,7 +79,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     alpha_eps: float = 0.001,
     alpha_lin_search_step: float = 0.001,
     skip_tn=False,
-    seed = None,
+    seed=None,
     verbose: bool = True,
     return_meta: bool = False,
     **kwargs,
@@ -195,9 +196,16 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
 
     if return_meta:
         meta["time"] = time() - meta["time"]
-        return classifiers_a, classifiers_b, classifiers_proba, meta
+        return (
+            RandomizedWeightedClassifier(
+                classifiers_a, classifiers_b, classifiers_proba
+            ),
+            meta,
+        )
     else:
-        return classifiers_a, classifiers_b, classifiers_proba
+        return RandomizedWeightedClassifier(
+            classifiers_a, classifiers_b, classifiers_proba
+        )
 
 
 def _predict_using_randomized_classifier_np(
@@ -239,9 +247,16 @@ def _predict_using_randomized_classifier_csr(
     for i in range(n):
         c_i = np.random.choice(classifiers_range, p=classifiers_proba)
         y_pred_indices, y_pred_indptr = numba_predict_weighted_per_instance_csr_step(
-            y_pred_indices, y_pred_indptr, 
-            y_proba.data, y_proba.indices, y_proba.indptr, 
-            i, k, 0.0, classifiers_a[c_i], classifiers_b[c_i]
+            y_pred_indices,
+            y_pred_indptr,
+            y_proba.data,
+            y_proba.indices,
+            y_proba.indptr,
+            i,
+            k,
+            0.0,
+            classifiers_a[c_i],
+            classifiers_b[c_i],
         )
 
     y_pred_data = np.ones(y_pred_indices.size, dtype=FLOAT_TYPE)
@@ -261,7 +276,7 @@ def predict_using_randomized_classifier(
         or not isinstance(classifiers_proba, np.ndarray)
     ):
         raise ValueError(
-            "classifiers_a, classifier_b, and classifiers_proba must be ndarray"
+            "classifiers_a, classifiers_b, and classifiers_proba must be ndarray"
         )
 
     if len(y_proba.shape) == 1:
@@ -293,19 +308,13 @@ def predict_using_randomized_classifier(
         )
 
 
-class RandomizedWeightedClassifier(object):
+class RandomizedWeightedClassifier:
     def __init__(self, a, b, p):
         self.a = a
         self.b = b
         self.p = p
 
-
-    def fit(self, y_true, y_proba, utility_func, k, max_iters=100, init_classifier="random", search_for_best_alpha=True, alpha_search_algo="lin", alpha_eps=0.001, alpha_lin_search_step=0.001, skip_tn=False, seed=None, verbose=True, return_meta=False, **kwargs):
-        self.a, self.b, self.p = find_optimal_randomized_classifier_using_frank_wolfe(
-            y_true, y_proba, utility_func, k, max_iters, init_classifier, search_for_best_alpha, alpha_search_algo, alpha_eps, alpha_lin_search_step, skip_tn, seed, verbose, return_meta, **kwargs
+    def predict(self, y_proba, k, seed=None) -> Union[np.ndarray, torch.tensor, csr_matrix]:
+        return predict_using_randomized_classifier(
+            y_proba, self.a, self.b, self.p, k, seed=seed
         )
-
-
-    def predict(self, y_proba, k, seed=None):
-        return predict_using_randomized_classifier(y_proba, self.a, self.b, self.p, k, seed=seed)
-

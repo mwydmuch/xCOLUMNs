@@ -1,17 +1,17 @@
-from typing import Callable, Tuple, Union
+from typing import Callable, List, Tuple, Union
 
 import numpy as np
 from scipy.sparse import csr_matrix
 
 from .default_types import *
-from .numba_csr_methods import *
+from .numba_csr_functions import *
 
 
-def unpack_csr_matrix(matrix: csr_matrix):
+def unpack_csr_matrix(matrix: csr_matrix) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     return matrix.data, matrix.indices, matrix.indptr  # , matrix.shape
 
 
-def unpack_csr_matrices(*matrices):
+def unpack_csr_matrices(*matrices) -> List[np.ndarray]:
     y_pred = []
     for m in matrices:
         y_pred.extend(unpack_csr_matrix(m))
@@ -25,14 +25,14 @@ def construct_csr_matrix(
     dtype=None,
     shape=None,
     sort_indices=False,
-):
+) -> csr_matrix:
     mat = csr_matrix((data, indices, indptr), dtype=dtype, shape=shape)
     if sort_indices:
         mat.sort_indices()
     return mat
 
 
-def random_at_k_csr(shape: Tuple[int, int], k: int, seed: int = None):
+def random_at_k_csr(shape: Tuple[int, int], k: int, seed: int = None) -> csr_matrix:
     n, m = shape
     y_pred_data, y_pred_indices, y_pred_indptr = numba_random_at_k(n, m, k, seed=seed)
     return construct_csr_matrix(
@@ -44,7 +44,7 @@ def random_at_k_csr(shape: Tuple[int, int], k: int, seed: int = None):
     )
 
 
-def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None):
+def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None) -> np.ndarray:
     n, m = shape
     y_pred = np.zeros(shape, dtype=FLOAT_TYPE)
 
@@ -55,7 +55,9 @@ def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None):
     return y_pred
 
 
-def lin_search(low, high, step, func) -> Tuple[float, float]:
+def lin_search(
+    low: float, high: float, step: float, func: Callable
+) -> Tuple[float, float]:
     best = low
     best_val = func(low)
     for i in np.arange(low + step, high, step):
@@ -66,7 +68,9 @@ def lin_search(low, high, step, func) -> Tuple[float, float]:
     return best, best_val
 
 
-def bin_search(low, high, eps, func) -> Tuple[float, float]:
+def bin_search(
+    low: float, high: float, eps: float, func: Callable
+) -> Tuple[float, float]:
     while high - low > eps:
         mid = (low + high) / 2
         mid_next = (mid + high) / 2
@@ -81,7 +85,9 @@ def bin_search(low, high, eps, func) -> Tuple[float, float]:
     return best, best_val
 
 
-def ternary_search(low, high, eps, func) -> Tuple[float, float]:
+def ternary_search(
+    low: float, high: float, eps: float, func: Callable
+) -> Tuple[float, float]:
     while high - low > eps:
         mid1 = low + (high - low) / 3
         mid2 = high - (high - low) / 3

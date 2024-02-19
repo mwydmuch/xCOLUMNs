@@ -98,7 +98,7 @@ def numba_random_at_k(n: int, m: int, k: int, seed: int = None):
 #@njit(cache=True)
 def numba_csr_vec_mul_vec(
     a_data: np.ndarray, a_indices: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray
-):
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Performs a fast multiplication of sparse vectors a and b.
     Gives the same result as a.multiply(b) where a and b are sparse vectors.
@@ -133,7 +133,7 @@ def numba_calculate_sum_0_csr_mat_mul_mat(
     b_indptr: np.ndarray,
     n: int,
     m: int,
-):
+) -> np.ndarray:
     """
     Performs a fast multiplication of sparse matricies a and b.
     Gives the same result as a.multiply(b).sum(axis=0) where a and b are sparse vectors.
@@ -158,7 +158,7 @@ def numba_calculate_sum_0_csr_mat_mul_mat(
 #@njit(cache=True)
 def numba_csr_vec_mul_ones_minus_vec(
     a_data: np.ndarray, a_indices: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray
-):
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Performs a fast multiplication of a sparse vector a
     with a dense vector of ones minus other sparse vector b.
@@ -197,7 +197,7 @@ def numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
     b_indptr: np.ndarray,
     n: int,
     m: int,
-):
+) -> np.ndarray:
     """
     Performs a fast multiplication of a sparse matrix a
     with a dense matrix of ones minus other sparse matrix b and then sums the rows (axis=0).
@@ -224,7 +224,7 @@ def numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
 #@njit(cache=True)
 def numba_calculate_prod_0_csr_mat_mul_ones_minus_mat(
     a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, n, m
-):
+) -> np.ndarray:
     """
     Performs a fast multiplication of a sparse matrix a
     with a dense matrix of ones minus other sparse matrix b and then sums the rows (axis=0).
@@ -258,7 +258,7 @@ def numba_sub_from_unnormalized_confusion_matrix_csr(
     pred_data: np.ndarray,
     pred_indices: np.ndarray,
     skip_tn=False,
-):
+) -> None:
     tp_data, tp_indices = numba_csr_vec_mul_vec(
         pred_data, pred_indices, true_data, true_indices
     )
@@ -290,7 +290,7 @@ def numba_add_to_unnormalized_confusion_matrix_csr(
     pred_data: np.ndarray,
     pred_indices: np.ndarray,
     skip_tn=False,
-):
+) -> None:
     tp_data, tp_indices = numba_csr_vec_mul_vec(
         pred_data, pred_indices, true_data, true_indices
     )
@@ -312,7 +312,7 @@ def numba_add_to_unnormalized_confusion_matrix_csr(
 
 
 #@njit(cache=True)
-def numba_argtopk(y_proba_data, y_proba_indices, k):
+def numba_argtopk_csr(y_proba_data, y_proba_indices, k) -> np.ndarray:
     """
     Returns the y_proba_indices of the top k elements
     """
@@ -325,7 +325,7 @@ def numba_argtopk(y_proba_data, y_proba_indices, k):
 
 
 #@njit(cache=True)
-def numba_resize(arr, new_size, fill=0):
+def numba_resize(arr, new_size, fill=0) -> np.ndarray:
     new_arr = np.zeros(new_size, arr.dtype)
     new_arr[:arr.size] = arr
     if fill != 0:
@@ -334,12 +334,12 @@ def numba_resize(arr, new_size, fill=0):
 
 
 #@njit(cache=True)
-def numba_set_gains_csr(y_pred_data, y_pred_indices, y_pred_indptr, gains_data, gains_indices, i, k, th, is_insert=True):
+def numba_set_gains_csr(y_pred_data, y_pred_indices, y_pred_indptr, gains_data, gains_indices, i, k, th, is_insert=True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Sets top k gains or gains > th for the i-th instance in the y_pred csr matrix.
     """
     if k > 0:
-        new_y_pred_i_indices = numba_argtopk(gains_data, gains_indices, k)
+        new_y_pred_i_indices = numba_argtopk_csr(gains_data, gains_indices, k)
     else:
         new_y_pred_i_indices = gains_indices[gains_data >= th]
 
@@ -382,7 +382,7 @@ def numba_set_gains_csr(y_pred_data, y_pred_indices, y_pred_indptr, gains_data, 
 
 
 #@njit(cache=True)
-def numba_predict_weighted_per_instance_csr_step(y_pred_indices, y_pred_indptr, y_proba_data, y_proba_indices, y_proba_indptr, i, k, th, a, b, is_insert=True):
+def numba_predict_weighted_per_instance_csr_step(y_pred_indices, y_pred_indptr, y_proba_data, y_proba_indices, y_proba_indptr, i, k, th, a, b, is_insert=True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     gains_data = y_proba_data[y_proba_indptr[i] : y_proba_indptr[i + 1]]
     gains_indices = y_proba_indices[y_proba_indptr[i] : y_proba_indptr[i + 1]]
 
@@ -404,7 +404,7 @@ def numba_predict_weighted_per_instance_csr(
     th: float = 0,
     a: Optional[np.ndarray] = None,
     b: Optional[np.ndarray] = None,
-):
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     # This can be done in parallel, but Numba parallelism seems to not work well here
     n = y_proba_indptr.size - 1
     initial_row_size = k if k > 0 else 10
@@ -429,7 +429,7 @@ def numba_predict_macro_balanced_accuracy(
     m: int,
     k: int,
     marginals: np.ndarray,
-):
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Predicts k labels for each instance according to the optimal strategy for macro-balanced accuracy.
     """
@@ -442,7 +442,7 @@ def numba_predict_macro_balanced_accuracy(
         row_indices = y_proba_indices[y_proba_indptr[i] : y_proba_indptr[i + 1]]
         row_marginals = marginals[row_indices].reshape(-1)
         row_gains = row_data / row_marginals - (1 - row_data) / (1 - row_marginals)
-        top_k = numba_argtopk(row_gains, row_indices, k)
+        top_k = numba_argtopk_csr(row_gains, row_indices, k)
         y_pred_indices[i * k : i * k + len(top_k)] = top_k
         y_pred_indptr[i + 1] = y_pred_indptr[i] + k
 
