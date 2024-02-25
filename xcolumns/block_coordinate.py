@@ -7,9 +7,10 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from tqdm import tqdm, trange
 
-from .default_types import *
-from .metrics_on_conf_matrix import *
+from .confusion_matrix import *
+from .metrics import *
 from .numba_csr_functions import *
+from .types import *
 from .utils import *
 from .weighted_prediction import predict_top_k
 
@@ -30,7 +31,7 @@ def _get_initial_y_pred(
     init_y_pred: Union[np.ndarray, csr_matrix],
     k: int,
     random_at_k_func: Callable,
-):
+) -> Union[np.ndarray, csr_matrix]:
     n, m = y_proba.shape
 
     if init_y_pred in ["random", "greedy"]:
@@ -57,7 +58,7 @@ def _calculate_utility(
     Efp: np.ndarray,
     Efn: np.ndarray,
     Etn: np.ndarray,
-):
+) -> np.ndarray:
     if callable(bin_utility_func):
         bin_utilities = bin_utility_func(Etp, Efp, Efn, Etn)
     else:
@@ -89,7 +90,7 @@ def _calculate_binary_gains(
     neg_Efp: np.ndarray,
     neg_Efn: np.ndarray,
     neg_Etn: np.ndarray,
-):
+) -> np.ndarray:
     if callable(bin_utility_func):
         pos_utility = bin_utility_func(pos_Etp, pos_Efp, pos_Efn, pos_Etn)
         neg_utility = bin_utility_func(neg_Etp, neg_Efp, neg_Efn, neg_Etn)
@@ -124,7 +125,7 @@ def bc_with_0approx_step_np(
     maximize: bool = True,
     only_pred: bool = False,
     skip_tn: bool = False,
-):
+) -> None:
     n, m = y_proba.shape
     y_proba_i = y_proba[i, :]
     y_pred_i = y_pred[i, :]
@@ -195,7 +196,7 @@ def bc_with_0approx_step_csr(
     maximize: bool = True,
     only_pred: bool = False,
     skip_tn: bool = False,
-):
+) -> None:
     n, m = y_proba.shape
     p_start, p_end = y_pred.indptr[i], y_pred.indptr[i + 1]
     t_start, t_end = y_proba.indptr[i], y_proba.indptr[i + 1]
@@ -276,7 +277,7 @@ def predict_using_bc_with_0approx(
     verbose: bool = False,
     return_meta: bool = False,
     **kwargs,
-):
+) -> Union[np.ndarray, csr_matrix]:
     """
     TODO: Add docstring
 

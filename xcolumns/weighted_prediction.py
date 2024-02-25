@@ -4,8 +4,8 @@ from typing import Optional, Union
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from .default_types import *
 from .numba_csr_functions import *
+from .types import *
 from .utils import *
 
 
@@ -13,33 +13,42 @@ from .utils import *
 # General functions for weighted prediction
 ########################################################################################
 
+_torch_available = None
+try:
+    # Try to import torch
+    import torch
 
-def _predict_weighted_per_instance_torch(
-    y_proba: torch.tensor,
-    k: int,
-    th: float = 0.0,
-    a: Optional[torch.tensor] = None,
-    b: Optional[torch.tensor] = None,
-    dtype: Optional[torch.dtype] = None,
-) -> torch.tensor:
-    n, m = y_proba.shape
-    y_pred = torch.zeros(
-        n, m, dtype=y_proba.dtype if dtype is None else dtype, device=y_proba.device
-    )
+    # Define the specialized implementation for torch.Tensor
+    def _predict_weighted_per_instance_torch(
+        y_proba: torch.Tensor,
+        k: int,
+        th: float = 0.0,
+        a: Optional[torch.Tensor] = None,
+        b: Optional[torch.Tensor] = None,
+        dtype: Optional[torch.dtype] = None,
+    ) -> torch.Tensor:
+        n, m = y_proba.shape
+        y_pred = torch.zeros(
+            n, m, dtype=y_proba.dtype if dtype is None else dtype, device=y_proba.device
+        )
 
-    gains = y_proba
-    if a is not None:
-        gains = gains * a
-    if b is not None:
-        gains = gains + b
+        gains = y_proba
+        if a is not None:
+            gains = gains * a
+        if b is not None:
+            gains = gains + b
 
-    if k > 0:
-        _, top_k = torch.topk(gains, k, axis=1)
-        y_pred[torch.arange(n)[:, None], top_k] = 1
-    else:
-        y_pred[gains >= th] = 1
+        if k > 0:
+            _, top_k = torch.topk(gains, k, axis=1)
+            y_pred[torch.arange(n)[:, None], top_k] = 1
+        else:
+            y_pred[gains >= th] = 1
 
-    return y_pred
+        return y_pred
+
+    _torch_available = True
+except ImportError:
+    pass
 
 
 def _predict_weighted_per_instance_np(
@@ -74,6 +83,7 @@ def _predict_weighted_per_instance_csr(
     th: float = 0.0,
     a: Optional[np.ndarray] = None,
     b: Optional[np.ndarray] = None,
+    dtype: Optional[np.dtype] = None,
 ) -> csr_matrix:
     n, m = y_proba.shape
     (
@@ -87,22 +97,24 @@ def _predict_weighted_per_instance_csr(
 
 
 def predict_weighted_per_instance(
-    y_proba: Union[np.ndarray, torch.tensor, csr_matrix],
+    y_proba: Matrix,
     k: int,
     th: float = 0.0,
-    a: Union[np.ndarray, torch.tensor, None] = None,
-    b: Union[np.ndarray, torch.tensor, None] = None,
-    dtype: Optional[Union[np.dtype, torch.dtype]] = None,
+    a: Optional[DenseMatrix] = None,
+    b: Optional[DenseMatrix] = None,
+    dtype: Optional[DType] = None,
     return_meta: bool = False,
-) -> Union[np.ndarray, torch.tensor, csr_matrix]:
+) -> Matrix:
     """
     Predict ... TODO: Add description
     """
 
     # Arguments validation
-    if not isinstance(y_proba, (np.ndarray, torch.tensor, csr_matrix)):
+
+    # Check y_proba
+    if not isinstance(y_proba, Matrix):
         raise ValueError(
-            "y_proba must be either np.ndarray, torch.tensor, or csr_matrix"
+            "y_proba must be either np.ndarray, torch.Tensor, or csr_matrix"
         )
 
     if len(y_proba.shape) == 1:
@@ -110,17 +122,22 @@ def predict_weighted_per_instance(
     elif len(y_proba.shape) > 2:
         raise ValueError("y_proba must be 1d or 2d")
 
+    # Check k and th
+    if not isinstance(k, int):
+        raise ValueError("k must be an integer")
+
+    # Check a and b
     n, m = y_proba.shape
     if a is not None:
-        if not isinstance(a, (np.ndarray, torch.tensor)):
-            raise ValueError("a must be np.ndarray or torch.tensor")
+        if not isinstance(a, DenseMatrix):
+            raise ValueError("a must be np.ndarray or torch.Tensor")
 
         if a.shape != (m,):
             raise ValueError("a must be of shape (y_proba[1],)")
 
     if b is not None:
-        if not isinstance(b, (np.ndarray, torch.tensor)):
-            raise ValueError("b must be np.ndarray or torch.tensor")
+        if not isinstance(b, DenseMatrix):
+            raise ValueError("b must be np.ndarray or torch.Tensor")
 
         if b.shape != (m,):
             raise ValueError("b must be of shape (y_proba[1],)")
@@ -134,12 +151,12 @@ def predict_weighted_per_instance(
         y_pred = _predict_weighted_per_instance_np(
             y_proba, k, th=th, a=a, b=b, dtype=dtype
         )
-    elif isinstance(y_proba, torch.tensor):
-        y_pred = _predict_weighted_per_instance_torch(
-            y_proba, k, th=th, a=a, b=b, dtype=dtype
-        )
     elif isinstance(y_proba, csr_matrix):
         y_pred = _predict_weighted_per_instance_csr(
+            y_proba, k, th=th, a=a, b=b, dtype=dtype
+        )
+    elif _torch_available and isinstance(y_proba, torch.Tensor):
+        y_pred = _predict_weighted_per_instance_torch(
             y_proba, k, th=th, a=a, b=b, dtype=dtype
         )
 
@@ -156,7 +173,7 @@ def predict_weighted_per_instance(
 
 
 def predict_top_k(
-    y_proba: Union[np.ndarray, torch.tensor, csr_matrix],
+    y_proba: Matrix,
     k: int,
     return_meta: bool = False,
 ):
@@ -165,9 +182,9 @@ def predict_top_k(
 
 # Implementations of different weighting schemes
 def predict_for_optimal_macro_recall(  # (for population)
-    y_proba: Union[np.ndarray, torch.tensor, csr_matrix],
+    y_proba: Matrix,
     k: int,
-    priors: Union[np.ndarray, torch.tensor],
+    priors: DenseMatrix,
     epsilon: float = 1e-6,
     return_meta: bool = False,
     **kwargs,
@@ -182,9 +199,9 @@ def predict_for_optimal_macro_recall(  # (for population)
 
 
 def predict_inv_propensity_weighted_instance(
-    y_proba: Union[np.ndarray, torch.tensor, csr_matrix],
+    y_proba: Matrix,
     k: int,
-    inv_ps: Union[np.ndarray, torch.tensor],
+    inv_ps: DenseMatrix,
     return_meta: bool = False,
     **kwargs,
 ):
@@ -197,9 +214,9 @@ def predict_inv_propensity_weighted_instance(
 
 
 def predict_log_weighted_per_instance(
-    y_proba: Union[np.ndarray, torch.tensor, csr_matrix],
+    y_proba: Matrix,
     k: int,
-    priors: Union[np.ndarray, torch.tensor],
+    priors: DenseMatrix,
     epsilon: float = 1e-6,
     return_meta: bool = False,
     **kwargs,
@@ -214,9 +231,9 @@ def predict_log_weighted_per_instance(
 
 
 def predict_sqrt_weighted_instance(
-    y_proba: Union[np.ndarray, torch.tensor, csr_matrix],
+    y_proba: Matrix,
     k: int,
-    priors: Union[np.ndarray, torch.tensor],
+    priors: DenseMatrix,
     epsilon: float = 1e-6,
     return_meta: bool = False,
     **kwargs,
@@ -231,9 +248,9 @@ def predict_sqrt_weighted_instance(
 
 
 def predict_power_law_weighted_instance(
-    y_proba: Union[np.ndarray, torch.tensor, csr_matrix],
+    y_proba: Matrix,
     k: int,
-    priors: Union[np.ndarray, torch.tensor],
+    priors: DenseMatrix,
     beta: float,
     epsilon: float = 1e-6,
     return_meta: bool = False,
@@ -249,7 +266,7 @@ def predict_power_law_weighted_instance(
 
 
 def predict_for_optimal_instance_precision(
-    y_proba: Union[np.ndarray, torch.tensor, csr_matrix],
+    y_proba: Matrix,
     k: int,
     return_meta: bool = False,
     **kwargs,
@@ -260,7 +277,7 @@ def predict_for_optimal_instance_precision(
 def _predict_for_optimal_macro_balanced_accuracy_np(
     y_proba: np.ndarray,
     k: int,
-    priors: Union[np.ndarray, torch.tensor],
+    priors: DenseMatrix,
     epsilon: float = 1e-6,
 ):
     n, m = y_proba.shape
@@ -280,7 +297,7 @@ def _predict_for_optimal_macro_balanced_accuracy_np(
 def _predict_for_optimal_macro_balanced_accuracy_csr(
     y_proba: csr_matrix,
     k: int,
-    priors: Union[np.ndarray, torch.tensor],
+    priors: DenseMatrix,
     epsilon: float = 1e-6,
 ):
     n, m = y_proba.shape
@@ -298,9 +315,9 @@ def _predict_for_optimal_macro_balanced_accuracy_csr(
 
 
 def predict_for_optimal_macro_balanced_accuracy(  # (for population)
-    y_proba: Union[np.ndarray, torch.tensor, csr_matrix],
+    y_proba: Matrix,
     k: int,
-    priors: Union[np.ndarray, torch.tensor],
+    priors: DenseMatrix,
     epsilon: float = 1e-6,
     return_meta: bool = False,
     **kwargs,
@@ -312,11 +329,13 @@ def predict_for_optimal_macro_balanced_accuracy(  # (for population)
         meta = {"iters": 1, "time": time()}
 
     if isinstance(y_proba, np.ndarray):
-        # Invoke original dense implementation
-        y_pred = _predict_weighted_per_instance_np(y_proba, k, priors, epsilon=epsilon)
+        y_pred = _predict_for_optimal_macro_balanced_accuracy_np(
+            y_proba, k, priors, epsilon=epsilon
+        )
     elif isinstance(y_proba, csr_matrix):
-        # Invoke implementation for sparse matrices
-        y_pred = _predict_weighted_per_instance_csr(y_proba, k, priors, epsilon=epsilon)
+        y_pred = _predict_for_optimal_macro_balanced_accuracy_csr(
+            y_proba, k, priors, epsilon=epsilon
+        )
     else:
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
 

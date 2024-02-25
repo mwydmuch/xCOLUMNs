@@ -3,8 +3,41 @@ from typing import Callable, List, Tuple, Union
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from .default_types import *
 from .numba_csr_functions import *
+from .types import *
+
+
+########################################################################################
+# Functions for generating matrices with random prediction at k
+########################################################################################
+
+
+def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None) -> np.ndarray:
+    n, m = shape
+    y_pred = np.zeros(shape, dtype=FLOAT_TYPE)
+
+    rng = np.random.default_rng(seed)
+    labels_range = np.arange(m)
+    for i in range(n):
+        y_pred[i, rng.choice(labels_range, k, replace=False, shuffle=False)] = 1.0
+    return y_pred
+
+
+def random_at_k_csr(shape: Tuple[int, int], k: int, seed: int = None) -> csr_matrix:
+    n, m = shape
+    y_pred_data, y_pred_indices, y_pred_indptr = numba_random_at_k(n, m, k, seed=seed)
+    return construct_csr_matrix(
+        y_pred_data,
+        y_pred_indices,
+        y_pred_indptr,
+        shape=shape,
+        sort_indices=True,
+    )
+
+
+########################################################################################
+# csr_matrix utilities
+########################################################################################
 
 
 def unpack_csr_matrix(matrix: csr_matrix) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -32,27 +65,9 @@ def construct_csr_matrix(
     return mat
 
 
-def random_at_k_csr(shape: Tuple[int, int], k: int, seed: int = None) -> csr_matrix:
-    n, m = shape
-    y_pred_data, y_pred_indices, y_pred_indptr = numba_random_at_k(n, m, k, seed=seed)
-    return construct_csr_matrix(
-        y_pred_data,
-        y_pred_indices,
-        y_pred_indptr,
-        shape=shape,
-        sort_indices=True,
-    )
-
-
-def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None) -> np.ndarray:
-    n, m = shape
-    y_pred = np.zeros(shape, dtype=FLOAT_TYPE)
-
-    rng = np.random.default_rng(seed)
-    labels_range = np.arange(m)
-    for i in range(n):
-        y_pred[i, rng.choice(labels_range, k, replace=False, shuffle=False)] = 1.0
-    return y_pred
+########################################################################################
+# Maximum search functions
+########################################################################################
 
 
 def lin_search(

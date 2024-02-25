@@ -1,12 +1,14 @@
 from time import time
 from typing import Callable, Union
 
-import numpy as np
+import autograd.numpy as np
 import torch
+from autograd import grad
 from scipy.sparse import csr_matrix
 
-from .default_types import *
-from .metrics_on_conf_matrix import *
+from .confusion_matrix import calculate_confusion_matrix
+from .metrics import *
+from .types import *
 from .utils import *
 from .weighted_prediction import predict_weighted_per_instance
 
@@ -18,7 +20,7 @@ def _get_grad_as_numpy(t):
         return np.zeros(t.shape, dtype=FLOAT_TYPE)
 
 
-def utility_func_with_gradient(utility_func, tp, fp, fn, tn):
+def utility_func_with_gradient_torch(utility_func, tp, fp, fn, tn):
     if not isinstance(tp, torch.Tensor) or not tp.requires_grad:
         tp = torch.tensor(tp, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
         fp = torch.tensor(fp, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
@@ -33,6 +35,11 @@ def utility_func_with_gradient(utility_func, tp, fp, fn, tn):
         _get_grad_as_numpy(fn),
         _get_grad_as_numpy(tn),
     )
+
+
+def utility_func_with_gradient_autograd(utility_func, tp, fp, fn, tn):
+    grad_func = grad(utility_func, argnum=[0, 1, 2, 3])
+    return float(utility_func(tp, fp, fn, tn)), *grad_func(tp, fp, fn, tn)
 
 
 def _find_best_alpha(
@@ -66,13 +73,13 @@ def _find_best_alpha(
 
 
 def find_optimal_randomized_classifier_using_frank_wolfe(
-    y_true: Union[np.ndarray, csr_matrix],
-    y_proba: Union[np.ndarray, csr_matrix],
+    y_true: Matrix,
+    y_proba: Matrix,
     utility_func: Callable,
     k: int,
     max_iters: int = 100,
     init_classifier: Union[
-        str, Tuple[np.ndarray, np.ndarray]
+        str, Tuple[DenseMatrix, DenseMatrix]
     ] = "random",  # or "random"
     search_for_best_alpha: bool = True,
     alpha_search_algo: str = "lin",
@@ -82,6 +89,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     seed=None,
     verbose: bool = True,
     return_meta: bool = False,
+    grad_func="torch",
     **kwargs,
 ):
     log = print
@@ -90,11 +98,18 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
 
     if type(y_true) != type(y_proba):
         raise ValueError(
-            f"y_true and y_proba have unsupported combination of types {type(y_true)}, {type(y_proba)}, should be both np.ndarray or both csr_matrix"
+            f"y_true and y_proba have unsupported combination of types {type(y_true)}, {type(y_proba)}, should be both np.ndarray, both torch.Tensor, or both csr_matrix"
         )
 
     log("Starting Frank-Wolfe algorithm")
     n, m = y_proba.shape
+
+    if grad_func == "torch":
+        utility_func_with_gradient = utility_func_with_gradient_torch
+    elif grad_func == "autograd":
+        utility_func_with_gradient = utility_func_with_gradient_autograd
+    else:
+        raise ValueError(f"Unsupported grad_func: {grad_func}")
 
     rng = np.random.default_rng(seed)
     classifiers_a = np.zeros((max_iters, m), dtype=FLOAT_TYPE)
@@ -194,22 +209,27 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
             classifiers_proba = classifiers_proba[:i]
             break
 
+    rnd_classifier = RandomizedWeightedClassifier(
+        k, classifiers_a, classifiers_b, classifiers_proba
+    )
+
     if return_meta:
         meta["time"] = time() - meta["time"]
         return (
-            RandomizedWeightedClassifier(
-                classifiers_a, classifiers_b, classifiers_proba
-            ),
+            rnd_classifier,
             meta,
         )
     else:
-        return RandomizedWeightedClassifier(
-            classifiers_a, classifiers_b, classifiers_proba
-        )
+        return rnd_classifier
 
 
 def _predict_using_randomized_classifier_np(
-    y_proba, classifiers_a, classifiers_b, classifiers_proba, k, seed=None
+    y_proba: np.ndarray,
+    k: int,
+    classifiers_a: np.ndarray,
+    classifiers_b: np.ndarray,
+    classifiers_proba: np.ndarray,
+    seed: Optional[int] = None,
 ):
     if seed is not None:
         np.random.seed(seed)
@@ -232,21 +252,30 @@ def _predict_using_randomized_classifier_np(
 
 
 def _predict_using_randomized_classifier_csr(
-    y_proba, classifiers_a, classifiers_b, classifiers_proba, k, seed=None
+    y_proba: csr_matrix,
+    k: int,
+    classifiers_a: np.ndarray,
+    classifiers_b: np.ndarray,
+    classifiers_proba: np.ndarray,
+    seed: Optional[int] = None,
 ):
     if seed is not None:
         np.random.seed(seed)
 
     n, m = y_proba.shape
     c = classifiers_proba.shape[0]
-    y_pred_indices = np.zeros(n * max(1, k), dtype=IND_TYPE)
-    y_pred_indptr = np.zeros(n + 1, dtype=IND_TYPE)
     classifiers_range = np.arange(c)
 
-    # TODO: Can be futher optimized in numba
+    initial_row_size = k if k > 0 else 10
+    y_pred_data = np.ones(n * initial_row_size, dtype=FLOAT_TYPE)
+    y_pred_indices = np.zeros(n * initial_row_size, dtype=IND_TYPE)
+    y_pred_indptr = np.arange(n + 1, dtype=IND_TYPE) * initial_row_size
+
+    # TODO: Can be further optimized in numba
     for i in range(n):
         c_i = np.random.choice(classifiers_range, p=classifiers_proba)
-        y_pred_indices, y_pred_indptr = numba_predict_weighted_per_instance_csr_step(
+        y_pred_data, y_pred_indices, y_pred_indptr = numba_predict_weighted_per_instance_csr_step(
+            y_pred_data,
             y_pred_indices,
             y_pred_indptr,
             y_proba.data,
@@ -265,24 +294,39 @@ def _predict_using_randomized_classifier_csr(
 
 
 def predict_using_randomized_classifier(
-    y_proba, classifiers_a, classifiers_b, classifiers_proba, k, seed=None
+    y_proba: Matrix,
+    k: int,
+    classifiers_a: DenseMatrix,
+    classifiers_b: DenseMatrix,
+    classifiers_proba: DenseMatrix,
+    seed: Optional[int] = None,
 ):
-    if not isinstance(y_proba, (np.ndarray, csr_matrix)):
-        raise ValueError("y_proba must be either np.ndarray or csr_matrix")
+    # Validate arguments
 
-    if (
-        not isinstance(classifiers_a, np.ndarray)
-        or not isinstance(classifiers_b, np.ndarray)
-        or not isinstance(classifiers_proba, np.ndarray)
-    ):
+    # y_proba
+    if not isinstance(y_proba, Matrix):
         raise ValueError(
-            "classifiers_a, classifiers_b, and classifiers_proba must be ndarray"
+            "y_proba must be either np.ndarray, torch.Tensor, or csr_matrix"
         )
 
     if len(y_proba.shape) == 1:
         y_proba = y_proba.reshape(1, -1)
     elif len(y_proba.shape) > 2:
         raise ValueError("y_proba must be 1d or 2d")
+
+    # k
+    if not isinstance(k, int):
+        raise ValueError("k must be an integer")
+
+    # classifiers_a, classifiers_b, classifiers_proba
+    if (
+        not isinstance(classifiers_a, DenseMatrix)
+        or not isinstance(classifiers_b, DenseMatrix)
+        or not isinstance(classifiers_proba, DenseMatrix)
+    ):
+        raise ValueError(
+            "classifiers_a, classifiers_b, and classifiers_proba must be ndarray"
+        )
 
     n, m = y_proba.shape
     if classifiers_a.shape[1] != m or classifiers_b.shape[1] != m:
@@ -300,21 +344,22 @@ def predict_using_randomized_classifier(
 
     if isinstance(y_proba, np.ndarray):
         return _predict_using_randomized_classifier_np(
-            y_proba, classifiers_a, classifiers_b, classifiers_proba, k, seed=seed
+            y_proba, k, classifiers_a, classifiers_b, classifiers_proba, seed=seed
         )
     elif isinstance(y_proba, csr_matrix):
         return _predict_using_randomized_classifier_csr(
-            y_proba, classifiers_a, classifiers_b, classifiers_proba, k, seed=seed
+            y_proba, k, classifiers_a, classifiers_b, classifiers_proba, seed=seed
         )
 
 
 class RandomizedWeightedClassifier:
-    def __init__(self, a, b, p):
+    def __init__(self, k, a, b, p):
+        self.k = k
         self.a = a
         self.b = b
         self.p = p
 
-    def predict(self, y_proba, k, seed=None) -> Union[np.ndarray, torch.tensor, csr_matrix]:
+    def predict(self, y_proba: Matrix, seed: Optional[int] = None) -> Matrix:
         return predict_using_randomized_classifier(
-            y_proba, self.a, self.b, self.p, k, seed=seed
+            y_proba, self.k, self.a, self.b, self.p, seed=seed
         )
