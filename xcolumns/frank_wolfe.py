@@ -13,38 +13,11 @@ from .utils import *
 from .weighted_prediction import predict_weighted_per_instance
 
 
-def _get_grad_as_numpy(t):
-    if t.grad is not None:
-        return t.grad.numpy()
-    else:
-        return np.zeros(t.shape, dtype=FLOAT_TYPE)
-
-
 _torch_available = False
 try:
     import torch
 
-    def metric_func_with_gradient_torch_old(metric_func, tp, fp, fn, tn):
-        if not isinstance(tp, torch.Tensor) or not tp.requires_grad:
-            tp = torch.tensor(tp, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
-            fp = torch.tensor(fp, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
-            fn = torch.tensor(fn, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
-            tn = torch.tensor(tn, requires_grad=True, dtype=TORCH_FLOAT_TYPE)
-        utility = metric_func(tp, fp, fn, tn)
-        utility.backward()
-        return (
-            float(utility),
-            _get_grad_as_numpy(tp),
-            _get_grad_as_numpy(fp),
-            _get_grad_as_numpy(fn),
-            _get_grad_as_numpy(tn),
-        )
-
     def metric_func_with_gradient_torch(metric_func, tp, fp, fn, tn):
-        # tp = torch.tensor(tp, requires_grad=True)
-        # fp = torch.tensor(fp, requires_grad=True)
-        # fn = torch.tensor(fn, requires_grad=True)
-        # tn = torch.tensor(tn, requires_grad=True)
         tp.requires_grad_(True)
         fp.requires_grad_(True)
         fn.requires_grad_(True)

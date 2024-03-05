@@ -15,23 +15,12 @@ from .utils import *
 from .weighted_prediction import predict_top_k
 
 
-def _get_metric_aggregation_func(metric_aggregation: str):
-    if metric_aggregation == "mean":
-        return np.mean
-    elif metric_aggregation == "sum":
-        return np.sum
-    else:
-        raise ValueError(
-            f"Unsupported utility aggregation function: {metric_aggregation}, must be either 'mean' or 'sum'"
-        )
-
-
 def _get_initial_y_pred(
-    y_proba: Union[np.ndarray, csr_matrix],
-    init_y_pred: Union[np.ndarray, csr_matrix],
+    y_proba: Matrix,
+    init_y_pred: Matrix,
     k: int,
     random_at_k_func: Callable,
-) -> Union[np.ndarray, csr_matrix]:
+) -> Matrix:
     n, m = y_proba.shape
 
     if init_y_pred in ["random", "greedy"]:
@@ -52,36 +41,42 @@ def _get_initial_y_pred(
 
 
 def _calculate_utility(
-    bin_matric_func: Union[Callable, list[Callable]],
-    metric_aggregation_func: Callable,
+    bin_metric_func: Union[Callable, list[Callable]],
+    metric_aggregation: str,
     Etp: np.ndarray,
     Efp: np.ndarray,
     Efn: np.ndarray,
     Etn: np.ndarray,
-) -> np.ndarray:
-    if callable(bin_matric_func):
-        bin_utilities = bin_matric_func(Etp, Efp, Efn, Etn)
+) -> float:
+    if callable(bin_metric_func):
+        bin_utilities = bin_metric_func(Etp, Efp, Efn, Etn)
     else:
         bin_utilities = np.array(
-            [f(Etp[i], Efp[i], Efn[i], Etn[i]) for i, f in enumerate(bin_matric_func)]
+            [f(Etp[i], Efp[i], Efn[i], Etn[i]) for i, f in enumerate(bin_metric_func)]
         )
 
     # Validate bin utilities here to omit unnecessary calculations later in _calculate_binary_gains
     if not isinstance(bin_utilities, np.ndarray):
         raise ValueError(
-            f"bin_matric_func must return np.ndarray, but returned {type(bin_utilities)}"
+            f"bin_metric_func must return np.ndarray, but returned {type(bin_utilities)}"
         )
 
     if bin_utilities.shape != (Etp.shape[0],):
         raise ValueError(
-            f"bin_matric_func must return np.ndarray of shape {Etp.shape[0]}, but returned {bin_utilities.shape}"
+            f"bin_metric_func must return np.ndarray of shape {Etp.shape[0]}, but returned {bin_utilities.shape}"
+        )
+    
+    if metric_aggregation == "sum":
+        return bin_utilities.sum()
+    elif metric_aggregation == "mean":
+        return bin_utilities.mean()
+    else:
+        raise ValueError(
+            f"Unsupported utility aggregation function: {metric_aggregation}, must be either 'mean' or 'sum'"
         )
 
-    return metric_aggregation_func(bin_utilities)
-
-
 def _calculate_binary_gains(
-    bin_matric_func,
+    bin_metric_func,
     pos_Etp: np.ndarray,
     pos_Efp: np.ndarray,
     pos_Efn: np.ndarray,
@@ -91,20 +86,20 @@ def _calculate_binary_gains(
     neg_Efn: np.ndarray,
     neg_Etn: np.ndarray,
 ) -> np.ndarray:
-    if callable(bin_matric_func):
-        pos_utility = bin_matric_func(pos_Etp, pos_Efp, pos_Efn, pos_Etn)
-        neg_utility = bin_matric_func(neg_Etp, neg_Efp, neg_Efn, neg_Etn)
+    if callable(bin_metric_func):
+        pos_utility = bin_metric_func(pos_Etp, pos_Efp, pos_Efn, pos_Etn)
+        neg_utility = bin_metric_func(neg_Etp, neg_Efp, neg_Efn, neg_Etn)
     else:
         pos_utility = np.array(
             [
                 f(pos_Etp[i], pos_Efp[i], pos_Efn[i], pos_Etn[i])
-                for i, f in enumerate(bin_matric_func)
+                for i, f in enumerate(bin_metric_func)
             ]
         )
         neg_utility = np.array(
             [
                 f(neg_Etp[i], neg_Efp[i], neg_Efn[i], neg_Etn[i])
-                for i, f in enumerate(bin_matric_func)
+                for i, f in enumerate(bin_metric_func)
             ]
         )
 
@@ -120,7 +115,7 @@ def bc_with_0approx_step_np(
     Efn: np.ndarray,
     Etn: np.ndarray,
     k: int,
-    bin_matric_func: Union[Callable, list[Callable]],
+    bin_metric_func: Union[Callable, list[Callable]],
     greedy: bool = False,
     maximize: bool = True,
     only_pred: bool = False,
@@ -149,7 +144,7 @@ def bc_with_0approx_step_np(
         neg_Etn = Etn + (1 - y_proba_i)
 
     gains = _calculate_binary_gains(
-        bin_matric_func,
+        bin_metric_func,
         pos_Etp / n,
         pos_Efp / n,
         Efn / n,
@@ -191,7 +186,7 @@ def bc_with_0approx_step_csr(
     Efn: np.ndarray,
     Etn: np.ndarray,
     k: int,
-    bin_matric_func: Union[Callable, list[Callable]],
+    bin_metric_func: Union[Callable, list[Callable]],
     greedy: bool = False,
     maximize: bool = True,
     only_pred: bool = False,
@@ -233,7 +228,7 @@ def bc_with_0approx_step_csr(
 
     # Calculate gain and selection
     gains = _calculate_binary_gains(
-        bin_matric_func,
+        bin_metric_func,
         pos_Etpp,
         pos_Efpp,
         pos_Efn,
@@ -261,8 +256,8 @@ def bc_with_0approx_step_csr(
 
 
 def predict_using_bc_with_0approx(
-    y_proba: Union[np.ndarray, csr_matrix],
-    bin_matric_func: Union[Callable, list[Callable]],
+    y_proba: Matrix,
+    bin_metric_func: Union[Callable, list[Callable]],
     k: int,
     metric_aggregation: str = "mean",  # "mean" or "sum"
     maximize=True,
@@ -277,7 +272,7 @@ def predict_using_bc_with_0approx(
     seed: Optional[int] = None,
     verbose: bool = False,
     **kwargs,
-) -> Union[np.ndarray, csr_matrix]:
+) -> Matrix:
     """
     TODO: Add docstring
 
@@ -306,9 +301,6 @@ def predict_using_bc_with_0approx(
 
     n, m = y_proba.shape
 
-    # Get aggregation function
-    metric_aggregation_func = _get_metric_aggregation_func(metric_aggregation)
-
     # Initialize the prediction matrix
     log_info(f"  Initializing initial prediction ...", verbose)
     greedy = init_y_pred == "greedy"
@@ -326,10 +318,10 @@ def predict_using_bc_with_0approx(
         # Recalculate expected conf matrices to prevent numerical errors from accumulating too much
         # In this variant they will be all np.matrix with shape (1, m)
         if greedy:
-            Etp = np.zeros(m, dtype=FLOAT_TYPE)
-            Efp = np.zeros(m, dtype=FLOAT_TYPE)
-            Efn = np.zeros(m, dtype=FLOAT_TYPE)
-            Etn = np.zeros(m, dtype=FLOAT_TYPE)
+            Etp = np.zeros(m, dtype=DefaultDataDType)
+            Efp = np.zeros(m, dtype=DefaultDataDType)
+            Efn = np.zeros(m, dtype=DefaultDataDType)
+            Etn = np.zeros(m, dtype=DefaultDataDType)
         else:
             log_info("    Calculating expected confusion matrix ...", verbose)
             Etp, Efp, Efn, Etn = calculate_confusion_matrix(
@@ -337,15 +329,15 @@ def predict_using_bc_with_0approx(
             )
 
         old_utility = _calculate_utility(
-            bin_matric_func,
-            metric_aggregation_func,
+            bin_metric_func,
+            metric_aggregation,
             Etp / n,
             Efp / n,
             Efn / n,
             Etn / n,
         )
 
-        for i in tqdm(order, disable=(not verbose)):
+        for i in order:
             bc_with_0approx_step_func(
                 y_proba,
                 y_pred,
@@ -355,15 +347,15 @@ def predict_using_bc_with_0approx(
                 Efn,
                 Etn,
                 k,
-                bin_matric_func,
+                bin_metric_func,
                 greedy=greedy,
                 maximize=maximize,
                 skip_tn=skip_tn,
             )
 
         new_utility = _calculate_utility(
-            bin_matric_func,
-            metric_aggregation_func,
+            bin_metric_func,
+            metric_aggregation,
             Etp / n,
             Efp / n,
             Efn / n,
@@ -393,8 +385,6 @@ def predict_using_bc_with_0approx(
 
 
 # Implementations of specialized BC for coverage
-
-
 def bc_for_coverage_step_np(
     y_proba: np.ndarray,
     y_pred: np.ndarray,
@@ -473,30 +463,24 @@ def bc_for_coverage_step_csr(
 
 
 def _calculate_coverage_utility(
-    y_proba: Union[np.ndarray, csr_matrix],
-    y_pred: Union[np.ndarray, csr_matrix],
+    y_proba: Matrix,
+    y_pred: Matrix,
     Ef: np.ndarray,
     k: int,
     alpha: float,
 ):
     n, m = y_proba.shape
 
-    cov_utility = 1 - np.mean(Ef)
+    cov_utility = 1 - Ef.mean()
     if alpha < 1:
         precision_at_k = (calculate_tp(y_proba, y_pred) / n / k).sum()
-        # if isinstance(y_proba, np.ndarray):
-        #     precision_at_k = (np.sum(y_pred * y_proba, axis=0) / n / k).sum()
-        # elif isinstance(y_proba, csr_matrix):
-        #     precision_at_k = (
-        #         np.asarray(calculate_tp_csr(y_proba, y_pred) / n / k).ravel().sum()
-        #     )
         cov_utility = alpha * cov_utility + (1 - alpha) * precision_at_k
 
     return cov_utility
 
 
 def predict_optimizing_coverage_using_bc(
-    y_proba: Union[np.ndarray, csr_matrix],
+    y_proba: Matrix,
     k: int,
     alpha: float = 1,
     tolerance: float = 1e-6,
@@ -560,7 +544,7 @@ def predict_optimizing_coverage_using_bc(
 
         old_cov = _calculate_coverage_utility(y_proba, y_pred, Ef, k, alpha)
 
-        for i in tqdm(order, disable=(not verbose)):
+        for i in order:
             bc_coverage_step_func(y_proba, y_pred, i, Ef, k, alpha, greedy=greedy)
 
         new_cov = _calculate_coverage_utility(y_proba, y_pred, Ef, k, alpha)

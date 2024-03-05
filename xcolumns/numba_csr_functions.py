@@ -10,6 +10,9 @@ from .types import *
 
 @njit(cache=True)
 def numba_first_k(n: int, k: int) -> CSRMatrixAsTuple:
+    """
+    Selects the first k labels indexes ([0, 1, ..., k]) for each instance.
+    """
     y_pred_data = np.ones(n * k, dtype=DefaultDataDType)
     y_pred_indices = np.zeros(n * k, dtype=DefaultIndDType)
     y_pred_indptr = np.zeros(n + 1, dtype=DefaultIndDType)
