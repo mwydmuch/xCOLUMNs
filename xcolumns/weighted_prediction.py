@@ -1,5 +1,5 @@
 from time import time
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -85,6 +85,11 @@ def _predict_weighted_per_instance_csr(
     b: Optional[np.ndarray] = None,
     dtype: Optional[np.dtype] = None,
 ) -> csr_matrix:
+    if a is not None and a.dtype != y_proba.dtype:
+        a = a.astype(y_proba.dtype)
+    if b is not None and b.dtype != y_proba.dtype:
+        b = b.astype(y_proba.dtype)
+
     n, m = y_proba.shape
     (
         y_pred_data,
@@ -93,7 +98,9 @@ def _predict_weighted_per_instance_csr(
     ) = numba_predict_weighted_per_instance_csr(
         *unpack_csr_matrix(y_proba), k, th, a, b
     )
-    return csr_matrix((y_pred_data, y_pred_indices, y_pred_indptr), shape=(n, m))
+    return csr_matrix(
+        (y_pred_data, y_pred_indices, y_pred_indptr), shape=(n, m), dtype=dtype
+    )
 
 
 def predict_weighted_per_instance(
@@ -104,7 +111,7 @@ def predict_weighted_per_instance(
     b: Optional[DenseMatrix] = None,
     dtype: Optional[DType] = None,
     return_meta: bool = False,
-) -> Matrix:
+) -> Union[Matrix, Tuple[Matrix, dict]]:
     """
     Predict ... TODO: Add description
     """
@@ -176,7 +183,7 @@ def predict_top_k(
     y_proba: Matrix,
     k: int,
     return_meta: bool = False,
-):
+) -> Union[Matrix, Tuple[Matrix, dict]]:
     return predict_weighted_per_instance(y_proba, k=k, return_meta=return_meta)
 
 
@@ -187,8 +194,7 @@ def predict_for_optimal_macro_recall(  # (for population)
     priors: DenseMatrix,
     epsilon: float = 1e-6,
     return_meta: bool = False,
-    **kwargs,
-):
+) -> Union[Matrix, Tuple[Matrix, dict]]:
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
 
@@ -203,8 +209,7 @@ def predict_inv_propensity_weighted_instance(
     k: int,
     inv_ps: DenseMatrix,
     return_meta: bool = False,
-    **kwargs,
-):
+) -> Union[Matrix, Tuple[Matrix, dict]]:
     if inv_ps.shape[0] != y_proba.shape[1]:
         raise ValueError("inv_ps must be of shape (y_proba[1],)")
 
@@ -219,8 +224,7 @@ def predict_log_weighted_per_instance(
     priors: DenseMatrix,
     epsilon: float = 1e-6,
     return_meta: bool = False,
-    **kwargs,
-):
+) -> Union[Matrix, Tuple[Matrix, dict]]:
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
 
@@ -236,8 +240,7 @@ def predict_sqrt_weighted_instance(
     priors: DenseMatrix,
     epsilon: float = 1e-6,
     return_meta: bool = False,
-    **kwargs,
-):
+) -> Union[Matrix, Tuple[Matrix, dict]]:
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
 
@@ -254,8 +257,7 @@ def predict_power_law_weighted_instance(
     beta: float,
     epsilon: float = 1e-6,
     return_meta: bool = False,
-    **kwargs,
-):
+) -> Union[Matrix, Tuple[Matrix, dict]]:
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
 
@@ -269,8 +271,7 @@ def predict_for_optimal_instance_precision(
     y_proba: Matrix,
     k: int,
     return_meta: bool = False,
-    **kwargs,
-):
+) -> Union[Matrix, Tuple[Matrix, dict]]:
     return predict_top_k(y_proba, k=k, return_meta=return_meta)
 
 
@@ -279,7 +280,7 @@ def _predict_for_optimal_macro_balanced_accuracy_np(
     k: int,
     priors: DenseMatrix,
     epsilon: float = 1e-6,
-):
+) -> Matrix:
     n, m = y_proba.shape
     assert priors.shape == (m,)
     priors = priors + epsilon
@@ -299,7 +300,7 @@ def _predict_for_optimal_macro_balanced_accuracy_csr(
     k: int,
     priors: DenseMatrix,
     epsilon: float = 1e-6,
-):
+) -> Matrix:
     n, m = y_proba.shape
     assert priors.shape == (m,)
     priors = priors + epsilon
@@ -320,8 +321,7 @@ def predict_for_optimal_macro_balanced_accuracy(  # (for population)
     priors: DenseMatrix,
     epsilon: float = 1e-6,
     return_meta: bool = False,
-    **kwargs,
-):
+) -> Union[Matrix, Tuple[Matrix, dict]]:
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
 

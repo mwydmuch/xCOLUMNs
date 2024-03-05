@@ -15,14 +15,14 @@ from .utils import *
 from .weighted_prediction import predict_top_k
 
 
-def _get_utility_aggregation_func(utility_aggregation: str):
-    if utility_aggregation == "mean":
+def _get_metric_aggregation_func(metric_aggregation: str):
+    if metric_aggregation == "mean":
         return np.mean
-    elif utility_aggregation == "sum":
+    elif metric_aggregation == "sum":
         return np.sum
     else:
         raise ValueError(
-            f"Unsupported utility aggregation function: {utility_aggregation}, must be either 'mean' or 'sum'"
+            f"Unsupported utility aggregation function: {metric_aggregation}, must be either 'mean' or 'sum'"
         )
 
 
@@ -52,36 +52,36 @@ def _get_initial_y_pred(
 
 
 def _calculate_utility(
-    bin_utility_func: Union[Callable, list[Callable]],
-    utility_aggregation_func: Callable,
+    bin_matric_func: Union[Callable, list[Callable]],
+    metric_aggregation_func: Callable,
     Etp: np.ndarray,
     Efp: np.ndarray,
     Efn: np.ndarray,
     Etn: np.ndarray,
 ) -> np.ndarray:
-    if callable(bin_utility_func):
-        bin_utilities = bin_utility_func(Etp, Efp, Efn, Etn)
+    if callable(bin_matric_func):
+        bin_utilities = bin_matric_func(Etp, Efp, Efn, Etn)
     else:
         bin_utilities = np.array(
-            [f(Etp[i], Efp[i], Efn[i], Etn[i]) for i, f in enumerate(bin_utility_func)]
+            [f(Etp[i], Efp[i], Efn[i], Etn[i]) for i, f in enumerate(bin_matric_func)]
         )
 
     # Validate bin utilities here to omit unnecessary calculations later in _calculate_binary_gains
     if not isinstance(bin_utilities, np.ndarray):
         raise ValueError(
-            f"bin_utility_func must return np.ndarray, but returned {type(bin_utilities)}"
+            f"bin_matric_func must return np.ndarray, but returned {type(bin_utilities)}"
         )
 
     if bin_utilities.shape != (Etp.shape[0],):
         raise ValueError(
-            f"bin_utility_func must return np.ndarray of shape {Etp.shape[0]}, but returned {bin_utilities.shape}"
+            f"bin_matric_func must return np.ndarray of shape {Etp.shape[0]}, but returned {bin_utilities.shape}"
         )
 
-    return utility_aggregation_func(bin_utilities)
+    return metric_aggregation_func(bin_utilities)
 
 
 def _calculate_binary_gains(
-    bin_utility_func,
+    bin_matric_func,
     pos_Etp: np.ndarray,
     pos_Efp: np.ndarray,
     pos_Efn: np.ndarray,
@@ -91,20 +91,20 @@ def _calculate_binary_gains(
     neg_Efn: np.ndarray,
     neg_Etn: np.ndarray,
 ) -> np.ndarray:
-    if callable(bin_utility_func):
-        pos_utility = bin_utility_func(pos_Etp, pos_Efp, pos_Efn, pos_Etn)
-        neg_utility = bin_utility_func(neg_Etp, neg_Efp, neg_Efn, neg_Etn)
+    if callable(bin_matric_func):
+        pos_utility = bin_matric_func(pos_Etp, pos_Efp, pos_Efn, pos_Etn)
+        neg_utility = bin_matric_func(neg_Etp, neg_Efp, neg_Efn, neg_Etn)
     else:
         pos_utility = np.array(
             [
                 f(pos_Etp[i], pos_Efp[i], pos_Efn[i], pos_Etn[i])
-                for i, f in enumerate(bin_utility_func)
+                for i, f in enumerate(bin_matric_func)
             ]
         )
         neg_utility = np.array(
             [
                 f(neg_Etp[i], neg_Efp[i], neg_Efn[i], neg_Etn[i])
-                for i, f in enumerate(bin_utility_func)
+                for i, f in enumerate(bin_matric_func)
             ]
         )
 
@@ -120,7 +120,7 @@ def bc_with_0approx_step_np(
     Efn: np.ndarray,
     Etn: np.ndarray,
     k: int,
-    bin_utility_func: Union[Callable, list[Callable]],
+    bin_matric_func: Union[Callable, list[Callable]],
     greedy: bool = False,
     maximize: bool = True,
     only_pred: bool = False,
@@ -149,7 +149,7 @@ def bc_with_0approx_step_np(
         neg_Etn = Etn + (1 - y_proba_i)
 
     gains = _calculate_binary_gains(
-        bin_utility_func,
+        bin_matric_func,
         pos_Etp / n,
         pos_Efp / n,
         Efn / n,
@@ -191,7 +191,7 @@ def bc_with_0approx_step_csr(
     Efn: np.ndarray,
     Etn: np.ndarray,
     k: int,
-    bin_utility_func: Union[Callable, list[Callable]],
+    bin_matric_func: Union[Callable, list[Callable]],
     greedy: bool = False,
     maximize: bool = True,
     only_pred: bool = False,
@@ -233,7 +233,7 @@ def bc_with_0approx_step_csr(
 
     # Calculate gain and selection
     gains = _calculate_binary_gains(
-        bin_utility_func,
+        bin_matric_func,
         pos_Etpp,
         pos_Efpp,
         pos_Efn,
@@ -262,20 +262,20 @@ def bc_with_0approx_step_csr(
 
 def predict_using_bc_with_0approx(
     y_proba: Union[np.ndarray, csr_matrix],
-    bin_utility_func: Union[Callable, list[Callable]],
+    bin_matric_func: Union[Callable, list[Callable]],
     k: int,
-    utility_aggregation: str = "mean",  # "mean" or "sum"
+    metric_aggregation: str = "mean",  # "mean" or "sum"
+    maximize=True,
     tolerance: float = 1e-6,
     init_y_pred: Union[
         str, np.ndarray, csr_matrix
     ] = "random",  # "random", "topk", "greedy", np.ndarray or csr_matrix
     max_iter: int = 100,
     shuffle_order: bool = True,
-    maximize=True,
     skip_tn=False,
-    seed: int = None,
-    verbose: bool = False,
     return_meta: bool = False,
+    seed: Optional[int] = None,
+    verbose: bool = False,
     **kwargs,
 ) -> Union[np.ndarray, csr_matrix]:
     """
@@ -285,6 +285,11 @@ def predict_using_bc_with_0approx(
     as opposed to algorithms presented in the final version of the paper, which use t, q, p parametrization.
     However both algorithms are equivalent.
     """
+
+    log_info(
+        f"Starting optimization of ETU utility metric block coordinate {'ascent' if maximize else 'descent'} algorithm ...",
+        verbose,
+    )
 
     # Initialize the meta data dictionary
     meta = {"utilities": [], "iters": 0, "time": time()}
@@ -299,23 +304,21 @@ def predict_using_bc_with_0approx(
     else:
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
 
-    # y_proba is ndarray or csr_matrix
     n, m = y_proba.shape
 
     # Get aggregation function
-    utility_aggregation_func = _get_utility_aggregation_func(utility_aggregation)
+    metric_aggregation_func = _get_metric_aggregation_func(metric_aggregation)
 
     # Initialize the prediction matrix
-    print(f"  Initializing starting prediction ...")
+    log_info(f"  Initializing initial prediction ...", verbose)
     greedy = init_y_pred == "greedy"
     y_pred = _get_initial_y_pred(y_proba, init_y_pred, k, random_at_k_func)
-    print(y_pred.shape, y_proba.shape)
 
     # Initialize the instance order and set seed for shuffling
     rng = np.random.default_rng(seed)
     order = np.arange(n)
     for j in range(1, max_iter + 1):
-        print(f"  Starting iteration {j} ...")
+        log_info(f"  Starting iteration {j}/{max_iter} ...", verbose)
 
         if shuffle_order:
             rng.shuffle(order)
@@ -328,14 +331,14 @@ def predict_using_bc_with_0approx(
             Efn = np.zeros(m, dtype=FLOAT_TYPE)
             Etn = np.zeros(m, dtype=FLOAT_TYPE)
         else:
-            print("  Calculating expected confusion matrix ...")
+            log_info("    Calculating expected confusion matrix ...", verbose)
             Etp, Efp, Efn, Etn = calculate_confusion_matrix(
                 y_proba, y_pred, normalize=False, skip_tn=skip_tn
             )
 
         old_utility = _calculate_utility(
-            bin_utility_func,
-            utility_aggregation_func,
+            bin_matric_func,
+            metric_aggregation_func,
             Etp / n,
             Efp / n,
             Efn / n,
@@ -352,15 +355,15 @@ def predict_using_bc_with_0approx(
                 Efn,
                 Etn,
                 k,
-                bin_utility_func,
+                bin_matric_func,
                 greedy=greedy,
                 maximize=maximize,
                 skip_tn=skip_tn,
             )
 
         new_utility = _calculate_utility(
-            bin_utility_func,
-            utility_aggregation_func,
+            bin_matric_func,
+            metric_aggregation_func,
             Etp / n,
             Efp / n,
             Efn / n,
@@ -371,12 +374,14 @@ def predict_using_bc_with_0approx(
         meta["iters"] = j
         meta["utilities"].append(new_utility)
 
-        print(
-            f"  Iteration {j} finished, expected utility: {old_utility} -> {new_utility}"
+        log_info(
+            f"    Iteration {j}/{max_iter} finished, expected metric value: {old_utility} -> {new_utility}",
+            verbose,
         )
         if abs(new_utility - old_utility) < tolerance:
-            print(
-                f"  Stopping because improvement of expected utility is smaller than {tolerance}"
+            log_info(
+                f"  Stopping because improvement of expected metric value is smaller than {tolerance}",
+                verbose,
             )
             break
 
@@ -500,9 +505,9 @@ def predict_optimizing_coverage_using_bc(
     ] = "random",  # "random", "topk", "random", or csr_matrix
     max_iter: int = 100,
     shuffle_order: bool = True,
+    return_meta: bool = False,
     seed: int = None,
     verbose: bool = False,
-    return_meta: bool = False,
     **kwargs,
 ):
     """
@@ -528,7 +533,7 @@ def predict_optimizing_coverage_using_bc(
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
 
     # Initialize the prediction matrix
-    print(f"  Initializing starting prediction ...")
+    log_info(f"  Initializing starting prediction ...", verbose)
     greedy = init_y_pred == "greedy"
     y_pred = _get_initial_y_pred(y_proba, init_y_pred, k, random_at_k_func)
 
@@ -538,7 +543,7 @@ def predict_optimizing_coverage_using_bc(
     rng = np.random.default_rng(seed)
     order = np.arange(n)
     for j in range(1, max_iter + 1):
-        print(f"  Starting iteration {j} ...")
+        log_info(f"  Starting iteration {j}/{max_iter} ...", verbose)
 
         if shuffle_order:
             rng.shuffle(order)
@@ -564,8 +569,15 @@ def predict_optimizing_coverage_using_bc(
         meta["iters"] = j
         meta["utilities"].append(new_cov)
 
-        print(f"  Iteration {j} finished, expected coverage: {old_cov} -> {new_cov}")
+        log_info(
+            f"    Iteration {j}/{max_iter} finished, expected coverage: {old_cov} -> {new_cov}",
+            verbose,
+        )
         if new_cov <= old_cov + tolerance:
+            log_info(
+                f"  Stopping because improvement of expected coverage is smaller than {tolerance}",
+                verbose,
+            )
             break
 
     if return_meta:

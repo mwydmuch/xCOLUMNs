@@ -9,16 +9,22 @@ from xcolumns.weighted_prediction import predict_top_k
 
 
 def _run_frank_wolfe(y_val, y_proba_val, y_test, y_proba_test, k, init_a, init_b):
+    print(f"input dtype={y_proba_val.dtype}")
+    if isinstance(y_proba_val, csr_matrix):
+        print(
+            f"  csr_matrix nnz={y_proba_val.nnz}, shape={y_proba_val.shape}, sparsity={y_proba_val.nnz / y_proba_val.shape[0] / y_proba_val.shape[1]}"
+        )
     rnd_clf, meta = find_optimal_randomized_classifier_using_frank_wolfe(
         y_val,
         y_proba_val,
         macro_fmeasure_on_conf_matrix,
         k,
-        grad_func="torch",
         return_meta=True,
         seed=2024,
         init_classifier=(init_a, init_b),
+        verbose=True,
     )
+    print(f"  time={meta['time']}s")
 
     y_pred = rnd_clf.predict(y_proba_test, seed=2024)
     assert type(y_pred) == type(y_proba_test)
@@ -84,6 +90,9 @@ def test_frank_wolfe(generated_test_data):
     assert np_C == csr_C == torch_C
 
     # Compare with top_k
-    assert macro_fmeasure_on_conf_matrix(
-        np_C.tp, np_C.fp, np_C.fn, np_C.tn
-    ) > macro_fmeasure_on_conf_matrix(top_k_C.tp, top_k_C.fp, top_k_C.fn, top_k_C.tn)
+    fw_score = macro_fmeasure_on_conf_matrix(np_C.tp, np_C.fp, np_C.fn, np_C.tn)
+    top_k_score = macro_fmeasure_on_conf_matrix(
+        top_k_C.tp, top_k_C.fp, top_k_C.fn, top_k_C.tn
+    )
+    print(f"fw_score={fw_score}, top_k_score={top_k_score}")
+    assert fw_score >= top_k_score

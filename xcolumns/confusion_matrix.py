@@ -1,4 +1,4 @@
-from typing import Union, Optional
+from typing import Optional, Union
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -12,24 +12,51 @@ from .utils import *
 # Confusion matrix class
 ########################################################################################
 
+
 class ConfusionMatrix:
     """
     Class representing a confusion matrix.
 
     When unpacked returns (tp, fp, fn, tn) (in this order).
     """
-    def __init__(self, tp: Union[Number, DenseMatrix], fp: Union[Number, DenseMatrix], fn: Union[Number, DenseMatrix], tn: Union[Number, DenseMatrix]):
+
+    def __init__(
+        self,
+        tp: Union[Number, DenseMatrix],
+        fp: Union[Number, DenseMatrix],
+        fn: Union[Number, DenseMatrix],
+        tn: Union[Number, DenseMatrix],
+    ):
         self.tp = tp
         self.fp = fp
         self.fn = fn
         self.tn = tn
 
-    # For compatibility with sklearn confusion matrix
+    # For compatibility with methods that expect a tuple
     def __iter__(self):
         yield self.tp
         yield self.fp
         yield self.fn
         yield self.tn
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ConfusionMatrix):
+            return False
+
+        if isinstance(self.tp, Number):
+            return (
+                self.tp == other.tp
+                and self.fp == other.fp
+                and self.fn == other.fn
+                and self.tn == other.tn
+            )
+        elif isinstance(self.tp, DenseMatrix):
+            return (
+                (self.tp == other.tp).all()
+                and (self.fp == other.fp).all()
+                and (self.fn == other.fn).all()
+                and (self.tn == other.tn).all()
+            )
 
     def __add__(self, other: "ConfusionMatrix") -> "ConfusionMatrix":
         return ConfusionMatrix(
@@ -38,14 +65,14 @@ class ConfusionMatrix:
             self.fn + other.fn,
             self.tn + other.tn,
         )
-    
+
     def __iadd__(self, other: "ConfusionMatrix") -> "ConfusionMatrix":
         self.tp += other.tp
         self.fp += other.fp
         self.fn += other.fn
         self.tn += other.tn
         return self
-    
+
     def __sub__(self, other: "ConfusionMatrix") -> "ConfusionMatrix":
         return ConfusionMatrix(
             self.tp - other.tp,
@@ -53,14 +80,14 @@ class ConfusionMatrix:
             self.fn - other.fn,
             self.tn - other.tn,
         )
-    
+
     def __isub__(self, other: "ConfusionMatrix") -> "ConfusionMatrix":
         self.tp -= other.tp
         self.fp -= other.fp
         self.fn -= other.fn
         self.tn -= other.tn
         return self
-    
+
     def __mul__(self, other: Union[Number, DenseMatrix]) -> "ConfusionMatrix":
         return ConfusionMatrix(
             self.tp * other,
@@ -68,14 +95,14 @@ class ConfusionMatrix:
             self.fn * other,
             self.tn * other,
         )
-    
+
     def __imul__(self, other: Union[Number, DenseMatrix]) -> "ConfusionMatrix":
         self.tp *= other
         self.fp *= other
         self.fn *= other
         self.tn *= other
         return self
-    
+
     def __truediv__(self, other: Union[Number, DenseMatrix]) -> "ConfusionMatrix":
         return ConfusionMatrix(
             self.tp / other,
@@ -83,14 +110,14 @@ class ConfusionMatrix:
             self.fn / other,
             self.tn / other,
         )
-    
+
     def __itruediv__(self, other: Union[Number, DenseMatrix]) -> "ConfusionMatrix":
         self.tp /= other
         self.fp /= other
         self.fn /= other
         self.tn /= other
         return self
-    
+
     def __floordiv__(self, other: Union[Number, DenseMatrix]) -> "ConfusionMatrix":
         return ConfusionMatrix(
             self.tp // other,
@@ -98,14 +125,13 @@ class ConfusionMatrix:
             self.fn // other,
             self.tn // other,
         )
-    
+
     def __ifloordiv__(self, other: Union[Number, DenseMatrix]) -> "ConfusionMatrix":
         self.tp //= other
         self.fp //= other
         self.fn //= other
         self.tn //= other
         return self
-    
 
 
 ########################################################################################
@@ -196,7 +222,7 @@ def _calculate_conf_mat_entry(
     val = func(y_true, y_pred)
 
     if normalize:
-        val /= y_true.shape[0]
+        val = val / y_true.shape[0]
 
     return val
 
@@ -258,7 +284,7 @@ def calculate_confusion_matrix(
         tn = tp.copy()
         tn[:] = -1
     else:
-        tn = -tp - fp - fn + (1 if normalize else n)
+        tn = -tp - fp - fn + (1.0 if normalize else n)
 
     return ConfusionMatrix(tp, fp, fn, tn)
 

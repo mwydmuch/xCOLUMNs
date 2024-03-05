@@ -1,3 +1,4 @@
+import logging
 from typing import Callable, List, Tuple, Union
 
 import numpy as np
@@ -5,6 +6,35 @@ from scipy.sparse import csr_matrix
 
 from .numba_csr_functions import *
 from .types import *
+
+
+########################################################################################
+# Logger
+########################################################################################
+
+
+logger = logging.getLogger("xcolumns")
+
+
+def log(msg: str, verbose: bool, level: int = logging.INFO):
+    if verbose:
+        logger.log(level, msg)
+
+
+def log_info(msg: str, verbose: bool):
+    log(msg, verbose, level=logging.INFO)
+
+
+def log_debug(msg: str, verbose: bool):
+    log(msg, verbose, level=logging.DEBUG)
+
+
+def log_warning(msg: str, verbose: bool):
+    log(msg, verbose, level=logging.WARNING)
+
+
+def log_error(msg: str, verbose: bool):
+    log(msg, verbose, level=logging.ERROR)
 
 
 ########################################################################################
@@ -70,7 +100,7 @@ def construct_csr_matrix(
 ########################################################################################
 
 
-def lin_search(
+def uniform_search(
     low: float, high: float, step: float, func: Callable
 ) -> Tuple[float, float]:
     best = low
@@ -80,23 +110,6 @@ def lin_search(
         if score > best_val:
             best = i
             best_val = score
-    return best, best_val
-
-
-def bin_search(
-    low: float, high: float, eps: float, func: Callable
-) -> Tuple[float, float]:
-    while high - low > eps:
-        mid = (low + high) / 2
-        mid_next = (mid + high) / 2
-
-        if func(mid) < func(mid_next):
-            high = mid_next
-        else:
-            low = mid
-
-    best = (low + high) / 2
-    best_val = func(best)
     return best, best_val
 
 
