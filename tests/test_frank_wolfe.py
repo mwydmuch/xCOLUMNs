@@ -28,11 +28,15 @@ def _run_frank_wolfe(y_val, y_proba_val, y_test, y_proba_test, k, init_a, init_b
 
     y_pred = rnd_clf.predict(y_proba_test, seed=2024)
     assert type(y_pred) == type(y_proba_test)
+    assert y_pred.dtype == y_proba_test.dtype
     assert (y_pred.sum(axis=1) == k).all()
-    return calculate_confusion_matrix(y_test, y_pred, normalize=False, skip_tn=False)
+    return (
+        calculate_confusion_matrix(y_test, y_pred, normalize=False, skip_tn=False),
+        y_pred,
+    )
 
 
-def test_frank_wolfe(generated_test_data):
+def test_frank_wolfe(generated_test_data, test_method):
     (
         x_train,
         x_val,
@@ -56,41 +60,15 @@ def test_frank_wolfe(generated_test_data):
         y_test, top_k_y_pred, normalize=False, skip_tn=False
     )
 
-    # Run numpy implementation
-    np_C = _run_frank_wolfe(y_val, y_proba_val, y_test, y_proba_test, k, init_a, init_b)
-
-    # Run csr_matrix implementation
-    csr_C = _run_frank_wolfe(
-        csr_matrix(y_val),
-        csr_matrix(y_proba_val),
-        csr_matrix(y_test),
-        csr_matrix(y_proba_test),
-        k,
-        init_a,
-        init_b,
+    conf_mats, y_preds = test_method(
+        _run_frank_wolfe,
+        (y_val, y_proba_val, y_test, y_proba_test, k, init_a, init_b),
     )
-
-    # Run torch implementation
-    torch_C = _run_frank_wolfe(
-        torch.tensor(y_val),
-        torch.tensor(y_proba_val),
-        torch.tensor(y_test),
-        torch.tensor(y_proba_test),
-        k,
-        torch.tensor(init_a),
-        torch.tensor(init_b),
-    )
-
-    # Convert torch tensors to numpy arrays for easier comparison
-    torch_C.tp = torch_C.tp.numpy()
-    torch_C.fp = torch_C.fp.numpy()
-    torch_C.fn = torch_C.fn.numpy()
-    torch_C.tn = torch_C.tn.numpy()
-
-    assert np_C == csr_C == torch_C
 
     # Compare with top_k
-    fw_score = macro_fmeasure_on_conf_matrix(np_C.tp, np_C.fp, np_C.fn, np_C.tn)
+    fw_score = macro_fmeasure_on_conf_matrix(
+        conf_mats[0].tp, conf_mats[0].fp, conf_mats[0].fn, conf_mats[0].tn
+    )
     top_k_score = macro_fmeasure_on_conf_matrix(
         top_k_C.tp, top_k_C.fp, top_k_C.fn, top_k_C.tn
     )

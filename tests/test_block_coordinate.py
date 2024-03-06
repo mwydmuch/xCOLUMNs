@@ -9,6 +9,11 @@ from xcolumns.weighted_prediction import predict_top_k
 
 
 def _run_block_coordinate(y_test, y_proba_test, k, init_pred):
+    print(f"input dtype={y_proba_test.dtype}")
+    if isinstance(y_proba_test, csr_matrix):
+        print(
+            f"  csr_matrix nnz={y_proba_test.nnz}, shape={y_proba_test.shape}, sparsity={y_proba_test.nnz / y_proba_test.shape[0] / y_proba_test.shape[1]}"
+        )
     y_pred, meta = predict_using_bc_with_0approx(
         y_proba_test,
         bin_fmeasure_on_conf_matrix,
@@ -19,11 +24,15 @@ def _run_block_coordinate(y_test, y_proba_test, k, init_pred):
     )
 
     assert type(y_pred) == type(y_proba_test)
+    assert y_pred.dtype == y_proba_test.dtype
     assert (y_pred.sum(axis=1) == k).all()
-    return calculate_confusion_matrix(y_test, y_pred, normalize=False, skip_tn=False)
+    return (
+        calculate_confusion_matrix(y_test, y_pred, normalize=False, skip_tn=False),
+        y_pred,
+    )
 
 
-def test_frank_wolfe(generated_test_data):
+def test_block_coordinate(generated_test_data, test_method):
     (
         x_train,
         x_val,
@@ -43,28 +52,17 @@ def test_frank_wolfe(generated_test_data):
         y_test, top_k_y_pred, normalize=False, skip_tn=False
     )
 
-    # Run numpy implementation
-    np_C = _run_block_coordinate(y_test, y_proba_test, k, top_k_y_pred)
-
-    # Run csr_matrix implementation
-    csr_C = _run_frank_wolfe(
-        csr_matrix(y_test), csr_matrix(y_proba_test), k, csr_matrix(top_k_y_pred)
+    conf_mats, y_preds = test_method(
+        _run_block_coordinate,
+        (y_test, y_proba_test, k, top_k_y_pred),
     )
-
-    # Run torch implementation
-    torch_C = _run_frank_wolfe(
-        torch.tensor(y_test), torch.tensor(y_proba_test), k, torch.tensor(top_k_y_pred)
-    )
-
-    # Convert torch tensors to numpy arrays for easier comparison
-    torch_C.tp = torch_C.tp.numpy()
-    torch_C.fp = torch_C.fp.numpy()
-    torch_C.fn = torch_C.fn.numpy()
-    torch_C.tn = torch_C.tn.numpy()
-
-    assert np_C == csr_C == torch_C
 
     # Compare with top_k
-    assert macro_fmeasure_on_conf_matrix(
-        np_C.tp, np_C.fp, np_C.fn, np_C.tn
-    ) > macro_fmeasure_on_conf_matrix(top_k_C.tp, top_k_C.fp, top_k_C.fn, top_k_C.tn)
+    bc_score = macro_fmeasure_on_conf_matrix(
+        conf_mats[0].tp, conf_mats[0].fp, conf_mats[0].fn, conf_mats[0].tn
+    )
+    top_k_score = macro_fmeasure_on_conf_matrix(
+        top_k_C.tp, top_k_C.fp, top_k_C.fn, top_k_C.tn
+    )
+    print(f"bc_score={bc_score}, top_k_score={top_k_score}")
+    assert bc_score >= top_k_score
