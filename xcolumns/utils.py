@@ -38,13 +38,50 @@ def log_error(msg: str, verbose: bool):
 
 
 ########################################################################################
+# Dense array utilities
+########################################################################################
+
+
+def zeros_like(a: DenseMatrix, shape=None, dtype: DType = None) -> DenseMatrix:
+    if isinstance(a, np.ndarray):
+        return np.zeros_like(a, shape=shape, dtype=dtype)
+    elif isinstance(a, csr_matrix):
+        return np.zeros(
+            shape if shape is not None else a.shape,
+            dtype=dtype if dtype is not None else a.dtype,
+        )
+    elif TORCH_AVAILABLE and isinstance(a, torch.Tensor):
+        return torch.zeros(
+            shape if shape is not None else a.shape,
+            dtype=dtype if dtype is not None else a.dtype,
+            device=a.device,
+        )
+    else:
+        raise ValueError(f"Unsupported type {type(a)}")
+
+
+def ones_like(a: DenseMatrix, dtype: DType = None) -> DenseMatrix:
+    if isinstance(a, np.ndarray):
+        return np.ones_like(a, dtype=dtype)
+    elif TORCH_AVAILABLE and isinstance(a, torch.Tensor):
+        return torch.ones_like(a, dtype=dtype)
+    else:
+        raise ValueError(f"Unsupported type {type(a)}")
+
+
+########################################################################################
 # Functions for generating matrices with random prediction at k
 ########################################################################################
 
 
-def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None) -> np.ndarray:
+def random_at_k_np(
+    shape: Tuple[int, int],
+    k: int,
+    dtype: Optional[np.dtype] = None,
+    seed: Optional[int] = None,
+) -> np.ndarray:
     n, m = shape
-    y_pred = np.zeros(shape, dtype=FLOAT_TYPE)
+    y_pred = np.zeros(shape, dtype=dtype)
 
     rng = np.random.default_rng(seed)
     labels_range = np.arange(m)
@@ -53,13 +90,21 @@ def random_at_k_np(shape: Tuple[int, int], k: int, seed: int = None) -> np.ndarr
     return y_pred
 
 
-def random_at_k_csr(shape: Tuple[int, int], k: int, seed: int = None) -> csr_matrix:
+def random_at_k_csr(
+    shape: Tuple[int, int],
+    k: int,
+    dtype: Optional[np.dtype] = None,
+    seed: Optional[int] = None,
+) -> csr_matrix:
     n, m = shape
-    y_pred_data, y_pred_indices, y_pred_indptr = numba_random_at_k(n, m, k, seed=seed)
+    y_pred_data, y_pred_indices, y_pred_indptr = numba_random_at_k(
+        n, m, k, seed=seed, dtype=dtype
+    )
     return construct_csr_matrix(
-        y_pred_data,
+        y_pred_data.astype(dtype),
         y_pred_indices,
         y_pred_indptr,
+        dtype=dtype,
         shape=shape,
         sort_indices=True,
     )

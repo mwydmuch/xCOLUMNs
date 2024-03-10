@@ -30,7 +30,7 @@ def numba_random_at_k_from(
     n: int,
     m: int,
     k: int,
-    seed: int = None,
+    seed: Optional[int] = None,
 ) -> CSRMatrixAsTuple:
     """
     Selects k random labels for each instance.
@@ -75,7 +75,9 @@ def numba_fast_random_choice(array, k=-1) -> np.ndarray:
 
 
 @njit(cache=True)
-def numba_random_at_k(n: int, m: int, k: int, seed: int = None) -> CSRMatrixAsTuple:
+def numba_random_at_k(
+    n: int, m: int, k: int, seed: Optional[int] = None, dtype: Optional[np.dtype] = None
+) -> CSRMatrixAsTuple:
     """
     Selects k random labels for each instance.
     """
@@ -135,7 +137,7 @@ def numba_calculate_sum_0_csr_mat_mul_mat(
     m: int,
 ) -> np.ndarray:
     """
-    Performs a fast multiplication of sparse matricies a and b.
+    Performs a fast multiplication of sparse matrices a and b.
     Gives the same result as a.multiply(b).sum(axis=0) where a and b are sparse vectors.
     Requires a and b to have sorted y_proba_indices (in ascending order).
     """

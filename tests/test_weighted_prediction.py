@@ -1,4 +1,5 @@
 import numpy as np
+from pytest import _report_data_type, _test_prediction_method_with_different_types
 from scipy.sparse import csr_matrix
 
 from xcolumns.confusion_matrix import calculate_confusion_matrix
@@ -10,11 +11,7 @@ from xcolumns.weighted_prediction import (
 
 
 def _run_and_test_weighted_prediction(y_true, y_proba, k, a, b):
-    print(f"input dtype={y_proba.dtype}")
-    if isinstance(y_proba, csr_matrix):
-        print(
-            f"  csr_matrix nnz={y_proba.nnz}, shape={y_proba.shape}, sparsity={y_proba.nnz / y_proba.shape[0] / y_proba.shape[1]}"
-        )
+    _report_data_type(y_proba)
     y_pred, meta = predict_weighted_per_instance(y_proba, k, a=a, b=b, return_meta=True)
     print(f"  time={meta['time']}s")
 
@@ -28,7 +25,7 @@ def _run_and_test_weighted_prediction(y_true, y_proba, k, a, b):
     )
 
 
-def test_weighted_prediction(generated_test_data, test_method):
+def test_weighted_prediction(generated_test_data):
     (
         x_train,
         x_val,
@@ -47,7 +44,7 @@ def test_weighted_prediction(generated_test_data, test_method):
     b = np.random.rand(y_proba_train.shape[1])
     # b = np.zeros(y_proba_train.shape[1])
 
-    test_method(
+    _test_prediction_method_with_different_types(
         _run_and_test_weighted_prediction,
         (y_test, y_proba_test, k, a, b),
     )
@@ -56,11 +53,7 @@ def test_weighted_prediction(generated_test_data, test_method):
 def _run_and_test_prediction_for_optimal_macro_balanced_accuracy(
     y_true, y_proba, k, priors
 ):
-    print(f"input dtype={y_proba.dtype}")
-    if isinstance(y_proba, csr_matrix):
-        print(
-            f"  csr_matrix nnz={y_proba.nnz}, shape={y_proba.shape}, sparsity={y_proba.nnz / y_proba.shape[0] / y_proba.shape[1]}"
-        )
+    _report_data_type(y_proba)
     y_pred, meta = predict_for_optimal_macro_balanced_accuracy(
         y_proba, k, priors, return_meta=True
     )
@@ -76,9 +69,7 @@ def _run_and_test_prediction_for_optimal_macro_balanced_accuracy(
     )
 
 
-def test_prediction_for_optimal_macro_balanced_accuracy(
-    generated_test_data, test_method
-):
+def test_prediction_for_optimal_macro_balanced_accuracy(generated_test_data):
     (
         x_train,
         x_val,
@@ -95,7 +86,7 @@ def test_prediction_for_optimal_macro_balanced_accuracy(
     # Calculate priors
     priors = y_train.mean(axis=0)
 
-    test_method(
+    _test_prediction_method_with_different_types(
         _run_and_test_prediction_for_optimal_macro_balanced_accuracy,
         (y_test, y_proba_test, k, priors),
     )

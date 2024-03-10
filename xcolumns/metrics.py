@@ -90,7 +90,7 @@ def bin_fmeasure_on_conf_matrix(
 #     )
 
 
-def bin_ballanced_accuracy_on_conf_matrix(
+def bin_balanced_accuracy_on_conf_matrix(
     tp: Union[Number, np.ndarray],
     fp: Union[Number, np.ndarray],
     fn: Union[Number, np.ndarray],

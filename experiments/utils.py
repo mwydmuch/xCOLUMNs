@@ -13,6 +13,13 @@ from tqdm import tqdm
 from xcolumns.utils import construct_csr_matrix
 
 
+def call_function_with_supported_kwargs(func, *args, **kwargs):
+    selected_kwargs = {
+        k: v for k, v in kwargs.items() if k in func.__code__.co_varnames
+    }
+    return func(*args, **selected_kwargs)
+
+
 def align_dim1(a, b):
     if a.shape[1] != b.shape[1]:
         print("  Fixing shapes ...")

@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from pytest import _report_data_type, _test_prediction_method_with_different_types
 from scipy.sparse import csr_matrix
 
 from xcolumns.confusion_matrix import calculate_confusion_matrix
@@ -9,11 +10,7 @@ from xcolumns.weighted_prediction import predict_top_k
 
 
 def _run_frank_wolfe(y_val, y_proba_val, y_test, y_proba_test, k, init_a, init_b):
-    print(f"input dtype={y_proba_val.dtype}")
-    if isinstance(y_proba_val, csr_matrix):
-        print(
-            f"  csr_matrix nnz={y_proba_val.nnz}, shape={y_proba_val.shape}, sparsity={y_proba_val.nnz / y_proba_val.shape[0] / y_proba_val.shape[1]}"
-        )
+    _report_data_type(y_proba_val)
     rnd_clf, meta = find_optimal_randomized_classifier_using_frank_wolfe(
         y_val,
         y_proba_val,
@@ -36,7 +33,7 @@ def _run_frank_wolfe(y_val, y_proba_val, y_test, y_proba_test, k, init_a, init_b
     )
 
 
-def test_frank_wolfe(generated_test_data, test_method):
+def test_frank_wolfe(generated_test_data):
     (
         x_train,
         x_val,
@@ -60,9 +57,10 @@ def test_frank_wolfe(generated_test_data, test_method):
         y_test, top_k_y_pred, normalize=False, skip_tn=False
     )
 
-    conf_mats, y_preds = test_method(
+    conf_mats, y_preds = _test_prediction_method_with_different_types(
         _run_frank_wolfe,
         (y_val, y_proba_val, y_test, y_proba_test, k, init_a, init_b),
+        test_torch=False,
     )
 
     # Compare with top_k

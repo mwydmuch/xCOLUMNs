@@ -1,5 +1,7 @@
 # Create data for testing using sklearn
 
+import sys
+
 import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
@@ -64,7 +66,7 @@ def generated_test_data():
         return y_proba
 
     y_proba_train = clf_predict(clf, x_train)
-    y_proba_val = clf_predict(clf, x_val)
+    data = clf_predict(clf, x_val)
     y_proba_test = clf_predict(clf, x_test)
 
     return (
@@ -75,16 +77,22 @@ def generated_test_data():
         y_val,
         y_test,
         y_proba_train,
-        y_proba_val,
+        data,
         y_proba_test,
     )
 
 
-if TORCH_AVAILABLE:
-    import torch
+def _report_data_type(data):
+    print(f"input dtype={data.dtype}")
+    if isinstance(data, csr_matrix):
+        print(
+            f"  csr_matrix nnz={data.nnz}, shape={data.shape}, sparsity={data.nnz / data.shape[0] / data.shape[1]}"
+        )
+    elif TORCH_AVAILABLE and isinstance(data, torch.Tensor):
+        print(f"  device={data.device}")
 
 
-def _test_method(method_wrapper, args):
+def _test_prediction_method_with_different_types(method_wrapper, args, test_torch=True):
     """
     Test a method with different input types and compare the results.
     """
@@ -120,9 +128,12 @@ def _test_method(method_wrapper, args):
     assert np_C_64 == csr_C
 
     # Run torch implementation
-    if TORCH_AVAILABLE:
+    if TORCH_AVAILABLE and test_torch:
         torch_args = [
-            torch.tensor(arg) if isinstance(arg, np.ndarray) else arg for arg in args
+            torch.tensor(arg, dtype=torch.float32)
+            if isinstance(arg, np.ndarray)
+            else arg
+            for arg in args
         ]
         torch_C, torch_pred = method_wrapper(*torch_args)
         conf_mats.append(torch_C)
@@ -131,12 +142,19 @@ def _test_method(method_wrapper, args):
         # Run torch implementation on cuda
         if torch.cuda.is_available():
             torch_cuda_args = [
-                torch.tensor(arg) if isinstance(arg, np.ndarray) else arg
+                torch.tensor(arg, device="cuda", dtype=torch.float32)
+                if isinstance(arg, np.ndarray)
+                else arg
                 for arg in args
             ]
             torch_cuda_C, torch_cuda_pred = method_wrapper(*torch_cuda_args)
             conf_mats.append(torch_cuda_C)
             y_preds.append(torch_cuda_pred)
+
+            torch_cuda_C.tp = torch_cuda_C.tp.cpu()
+            torch_cuda_C.fp = torch_cuda_C.fp.cpu()
+            torch_cuda_C.fn = torch_cuda_C.fn.cpu()
+            torch_cuda_C.tn = torch_cuda_C.tn.cpu()
 
             assert torch_cuda_C == torch_C
 
@@ -151,6 +169,9 @@ def _test_method(method_wrapper, args):
     return conf_mats, y_preds
 
 
-@pytest.fixture(autouse=True, scope="session")
-def test_method():
-    return _test_method
+sys.modules[
+    "pytest"
+]._test_prediction_method_with_different_types = (
+    _test_prediction_method_with_different_types
+)
+sys.modules["pytest"]._report_data_type = _report_data_type

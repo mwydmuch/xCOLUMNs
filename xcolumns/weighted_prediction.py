@@ -13,54 +13,17 @@ from .utils import *
 # General functions for weighted prediction
 ########################################################################################
 
-_torch_available = None
-try:
-    # Try to import torch
-    import torch
 
-    # Define the specialized implementation for torch.Tensor
-    def _predict_weighted_per_instance_torch(
-        y_proba: torch.Tensor,
-        k: int,
-        th: float = 0.0,
-        a: Optional[torch.Tensor] = None,
-        b: Optional[torch.Tensor] = None,
-        dtype: Optional[torch.dtype] = None,
-    ) -> torch.Tensor:
-        n, m = y_proba.shape
-        y_pred = torch.zeros(
-            n, m, dtype=y_proba.dtype if dtype is None else dtype, device=y_proba.device
-        )
-
-        gains = y_proba
-        if a is not None:
-            gains = gains * a
-        if b is not None:
-            gains = gains + b
-
-        if k > 0:
-            _, top_k = torch.topk(gains, k, axis=1)
-            y_pred[torch.arange(n)[:, None], top_k] = 1
-        else:
-            y_pred[gains >= th] = 1
-
-        return y_pred
-
-    _torch_available = True
-except ImportError:
-    pass
-
-
-def _predict_weighted_per_instance_np(
-    y_proba: np.ndarray,
+def _predict_weighted_per_instance_dense(
+    y_proba: DenseMatrix,
     k: int,
     th: float = 0.0,
-    a: Optional[np.ndarray] = None,
-    b: Optional[np.ndarray] = None,
-    dtype: Optional[np.dtype] = None,
-) -> np.ndarray:
+    a: Optional[DenseMatrix] = None,
+    b: Optional[DenseMatrix] = None,
+    dtype: Optional[DType] = None,
+) -> DenseMatrix:
     n, m = y_proba.shape
-    y_pred = np.zeros((n, m), dtype=y_proba.dtype if dtype is None else dtype)
+    y_pred = zeros_like(y_proba, dtype=dtype)
 
     gains = y_proba
     if a is not None:
@@ -69,8 +32,15 @@ def _predict_weighted_per_instance_np(
         gains = gains + b
 
     if k > 0:
-        top_k = np.argpartition(-gains, k, axis=1)[:, :k]
-        y_pred[np.arange(n)[:, None], top_k] = 1
+        # Numpy implementation
+        if isinstance(y_proba, np.ndarray):
+            top_k = np.argpartition(-gains, k, axis=1)[:, :k]
+            y_pred[np.arange(n)[:, None], top_k] = 1
+
+        # Torch implementation
+        elif TORCH_AVAILABLE and isinstance(y_proba, torch.Tensor):
+            _, top_k = torch.topk(gains, k, axis=1)
+            y_pred[torch.arange(n)[:, None], top_k] = 1
     else:
         y_pred[gains >= th] = 1
 
@@ -112,8 +82,26 @@ def predict_weighted_per_instance(
     dtype: Optional[DType] = None,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
-    """
-    Predict ... TODO: Add description
+    r"""
+    Returns the weighted prediction for each instance (row) in provided matrix of conditional probabilities estimaes for labels $\eta$.
+    The gains vector is calculated according to:
+    $$
+        g = a \cdeot \eta + b
+    $$.
+    If k is lareger then 0, the top k labels with the highest gains are selected for each instance.
+    If k is 0, then the labels with gains higher than th are selected for each instance.
+
+    Args:
+        y_proba: A 2D matrix of conditional probabilities for each label.
+        k: The number of labels to predict for each instance.
+        th: The threshold for the gains. Defaults to 0.0.
+        a: The weights for the gains. Defaults to None.
+        b: The biases for the gains. Defaults to None.
+        dtype: The data type for the output matrix, if equal to None, the data type of y_proba will be used. Defaults to None.
+        return_meta: Whether to return meta data. Defaults to False.
+
+    Returns:
+        The weighted prediction for each instance (row) in provided matrix of conditional probabilities estimaes for labels $\eta$.
     """
 
     # Arguments validation
@@ -154,16 +142,12 @@ def predict_weighted_per_instance(
         meta = {"iters": 1, "time": time()}
 
     # Invoke the specialized implementation
-    if isinstance(y_proba, np.ndarray):
-        y_pred = _predict_weighted_per_instance_np(
+    if isinstance(y_proba, DenseMatrix):
+        y_pred = _predict_weighted_per_instance_dense(
             y_proba, k, th=th, a=a, b=b, dtype=dtype
         )
     elif isinstance(y_proba, csr_matrix):
         y_pred = _predict_weighted_per_instance_csr(
-            y_proba, k, th=th, a=a, b=b, dtype=dtype
-        )
-    elif _torch_available and isinstance(y_proba, torch.Tensor):
-        y_pred = _predict_weighted_per_instance_torch(
             y_proba, k, th=th, a=a, b=b, dtype=dtype
         )
 
@@ -184,17 +168,39 @@ def predict_top_k(
     k: int,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
+    r"""
+    Predicts the top k labels for each instance (row) in provided matrix of conditional probabilities estimaes for labels $\eta$.
+    It is equivalent to calling predict_weighted_per_instance(y_proba, k=k, a=None, b=None, return_meta=return_meta).
+
+    Args:
+        y_proba: A 2D matrix of conditional probabilities for each label.
+        k: The number of labels to predict for each instance.
+        return_meta: Whether to return meta data. Defaults to False.
+
+    Returns:
+        The top k labels for each instance in the provided matrix of conditional probabilities estimaes for labels $\eta$.
+    """
     return predict_weighted_per_instance(y_proba, k=k, return_meta=return_meta)
 
 
-# Implementations of different weighting schemes
-def predict_for_optimal_macro_recall(  # (for population)
+def predict_optmizing_macro_recall(
     y_proba: Matrix,
     k: int,
     priors: DenseMatrix,
     epsilon: float = 1e-6,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
+    r"""
+    Predicts the top k labels for each instance (row) in provided matrix of conditional probabilities estimaes for labels $\eta$.
+    It is equivalent to calling predict_weighted_per_instance(y_proba, k=k, a=priors, return_meta=return_meta).
+
+    Args:
+        y_proba: A 2D matrix of conditional probabilities for each label.
+        k: The number of labels to predict for each instance.
+        priors: The prior probabilities for each label.
+        epsilon: A small value to avoid division by zero. Defaults to 1e-6.
+        return_meta: Whether to return meta data. Defaults to False.
+    """
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
 
@@ -202,6 +208,100 @@ def predict_for_optimal_macro_recall(  # (for population)
     return predict_weighted_per_instance(
         y_proba, k=k, a=weights, return_meta=return_meta
     )
+
+
+def _predict_optmizing_macro_balanced_accuracy_dense(
+    y_proba: DenseMatrix,
+    k: int,
+    priors: DenseMatrix,
+    epsilon: float = 1e-6,
+    dtype: Optional[DType] = None,
+) -> Matrix:
+    n, m = y_proba.shape
+    priors = priors + epsilon
+    y_pred = zeros_like(y_proba, dtype=dtype)
+
+    # TODO: Vectorize this
+    # for i in range(n):
+    #     eta = y_proba[i, :]
+    #     g = eta / priors - (1 - eta) / (1 - priors)
+    #     top_k = np.argpartition(-g, k)[:k]
+    #     y_pred[i, top_k] = 1.0
+
+    gains = y_proba / priors - (1 - y_proba) / (1 - priors)
+
+    if k > 0:
+        # Numpy implementation
+        if isinstance(y_proba, np.ndarray):
+            top_k = np.argpartition(-gains, k, axis=1)[:, :k]
+            y_pred[np.arange(n)[:, None], top_k] = 1
+
+        # Torch implementation
+        elif TORCH_AVAILABLE and isinstance(y_proba, torch.Tensor):
+            _, top_k = torch.topk(gains, k, axis=1)
+            y_pred[torch.arange(n)[:, None], top_k] = 1
+    else:
+        y_pred[gains >= 0] = 1
+
+    return y_pred
+
+
+def _predict_optmizing_macro_balanced_accuracy_csr(
+    y_proba: csr_matrix,
+    k: int,
+    priors: np.array,
+    epsilon: float = 1e-6,
+    dtype: Optional[DType] = None,
+) -> csr_matrix:
+    n, m = y_proba.shape
+    priors = priors + epsilon
+
+    data, indices, indptr = numba_predict_macro_balanced_accuracy(
+        *unpack_csr_matrix(y_proba),
+        n,
+        m,
+        k,
+        priors,
+    )
+    return csr_matrix(
+        (data, indices, indptr),
+        shape=y_proba.shape,
+        dtype=y_proba.dtype if dtype is None else dtype,
+    )
+
+
+def predict_optmizing_macro_balanced_accuracy(  # (for population)
+    y_proba: Matrix,
+    k: int,
+    priors: DenseMatrix,
+    epsilon: float = 1e-6,
+    dtype: Optional[DType] = None,
+    return_meta: bool = False,
+) -> Union[Matrix, Tuple[Matrix, dict]]:
+    if priors.shape[0] != y_proba.shape[1]:
+        raise ValueError("priors must be of shape (y_proba[1],)")
+
+    if return_meta:
+        meta = {"iters": 1, "time": time()}
+
+    if isinstance(y_proba, DenseMatrix):
+        y_pred = _predict_optmizing_macro_balanced_accuracy_dense(
+            y_proba, k, priors, epsilon=epsilon, dtype=dtype
+        )
+    elif isinstance(y_proba, csr_matrix):
+        y_pred = _predict_optmizing_macro_balanced_accuracy_csr(
+            y_proba, k, priors, epsilon=epsilon, dtype=dtype
+        )
+    else:
+        raise ValueError(
+            "y_proba must be either np.ndarray, torch.Tensor, or csr_matrix"
+        )
+
+    if return_meta:
+        meta["time"] = time() - meta["time"]
+        return y_pred, meta
+    else:
+        return y_pred
 
 
 def predict_inv_propensity_weighted_instance(
@@ -234,7 +334,7 @@ def predict_log_weighted_per_instance(
     )
 
 
-def predict_sqrt_weighted_instance(
+def predict_sqrt_weighted_per_instance(
     y_proba: Matrix,
     k: int,
     priors: DenseMatrix,
@@ -250,7 +350,7 @@ def predict_sqrt_weighted_instance(
     )
 
 
-def predict_power_law_weighted_instance(
+def predict_power_law_weighted_per_instance(
     y_proba: Matrix,
     k: int,
     priors: DenseMatrix,
@@ -267,80 +367,35 @@ def predict_power_law_weighted_instance(
     )
 
 
-def predict_for_optimal_instance_precision(
+def predict_optimizing_instance_precision(
     y_proba: Matrix,
     k: int,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
+    if k <= 0:
+        raise ValueError("k must be > 0")
+
     return predict_top_k(y_proba, k=k, return_meta=return_meta)
 
 
-def _predict_for_optimal_macro_balanced_accuracy_np(
-    y_proba: np.ndarray,
-    k: int,
-    priors: DenseMatrix,
-    epsilon: float = 1e-6,
-) -> Matrix:
-    n, m = y_proba.shape
-    assert priors.shape == (m,)
-    priors = priors + epsilon
-
-    y_pred = np.zeros((n, m), np.float32)
-    for i in range(n):
-        eta = y_proba[i, :]
-        g = eta / priors - (1 - eta) / (1 - priors)
-        top_k = np.argpartition(-g, k)[:k]
-        y_pred[i, top_k] = 1.0
-
-    return y_pred
-
-
-def _predict_for_optimal_macro_balanced_accuracy_csr(
-    y_proba: csr_matrix,
-    k: int,
-    priors: DenseMatrix,
-    epsilon: float = 1e-6,
-) -> Matrix:
-    n, m = y_proba.shape
-    assert priors.shape == (m,)
-    priors = priors + epsilon
-
-    data, indices, indptr = numba_predict_macro_balanced_accuracy(
-        *unpack_csr_matrix(y_proba),
-        n,
-        m,
-        k,
-        priors,
-    )
-    return csr_matrix((data, indices, indptr), shape=y_proba.shape)
-
-
-def predict_for_optimal_macro_balanced_accuracy(  # (for population)
+def predict_optimizing_instance_propensity_weighted_precision(
     y_proba: Matrix,
     k: int,
-    priors: DenseMatrix,
-    epsilon: float = 1e-6,
+    inverse_propensities: Optional[DenseMatrix] = None,
+    propensities: Optional[DenseMatrix] = None,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
-    if priors.shape[0] != y_proba.shape[1]:
-        raise ValueError("priors must be of shape (y_proba[1],)")
-
-    if return_meta:
-        meta = {"iters": 1, "time": time()}
-
-    if isinstance(y_proba, np.ndarray):
-        y_pred = _predict_for_optimal_macro_balanced_accuracy_np(
-            y_proba, k, priors, epsilon=epsilon
-        )
-    elif isinstance(y_proba, csr_matrix):
-        y_pred = _predict_for_optimal_macro_balanced_accuracy_csr(
-            y_proba, k, priors, epsilon=epsilon
-        )
+    if inverse_propensities is not None:
+        if inverse_propensities.shape[0] != y_proba.shape[1]:
+            raise ValueError("inverse_propensities must be of shape (y_proba[1],)")
+    elif propensities is not None:
+        if propensities.shape[0] != y_proba.shape[1]:
+            raise ValueError("propensities must be of shape (y_proba[1],)")
+        propensities[propensities == 0] = 1.0
+        inverse_propensities = 1.0 / propensities
     else:
-        raise ValueError("y_proba must be either np.ndarray or csr_matrix")
+        raise ValueError("either inverse_propensities or propensities must be provided")
 
-    if return_meta:
-        meta["time"] = time() - meta["time"]
-        return y_pred, meta
-    else:
-        return y_pred
+    return predict_weighted_per_instance(
+        y_proba, k=k, a=inverse_propensities, return_meta=return_meta
+    )

@@ -142,14 +142,14 @@ def balanced_accuracy(
 
 
 def make_average(fn, **kwargs):
-    def avg_fun(
+    def avg_func(
         y_true: Union[np.ndarray, csr_matrix],
         y_pred: Union[np.ndarray, csr_matrix],
         **inner_kw,
     ) -> float:
         return fn(y_true=y_true, y_pred=y_pred, **kwargs, **inner_kw).mean()
 
-    return avg_fun
+    return avg_func
 
 
 macro_precision = make_average(precision, axis=0)
