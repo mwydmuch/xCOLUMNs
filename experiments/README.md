@@ -6,7 +6,7 @@ This directory contains the code for reproducing experiments from the following 
 
 and
 
-> [Erik Schultheis, Wojciech Kotłowski, Marek Wydmuch, Rohit Babbar, Krzysztof Dembczyński. Consistent algorithms for multi-label classification with macro-at-k metrics. ICLR 2024.](https://arxiv.org/abs/2401.16594)
+> [Erik Schultheis, Wojciech Kotłowski, Marek Wydmuch, Rohit Babbar, Strom Borman, Krzysztof Dembczyński. Consistent algorithms for multi-label classification with macro-at-k metrics. ICLR 2024.](https://arxiv.org/abs/2401.16594)
 
 and some additional experiments.
 

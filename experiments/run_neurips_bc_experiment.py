@@ -40,12 +40,12 @@ METHODS = {
         {"beta": 0.25},
     ),
     "log": (predict_log_weighted_per_instance, {}),
-    "optimal-macro-recall": (predict_optmizing_macro_recall, {}),
+    "optimal-macro-recall": (predict_optimizing_macro_recall, {}),
     #
     # Block coordinate with default parameters - commented out because it better to use variatns with specific tolerance to stopping condition
     # "block-coord-macro-prec": (predict_optimizing_macro_precision_using_bc, {}),
     # "block-coord-macro-recall": (predict_optimizing_macro_recall_using_bc, {}),
-    # "block-coord-macro-f1": (predict_optimizing_macro_f1_using_bc, {}),
+    # "block-coord-macro-f1": (predict_optimizing_macro_fmeasure_using_bc, {}),
     # "block-coord-cov": (predict_optimizing_coverage_using_bc, {}),
     #
     # Tolerance on stopping condiction experiments
@@ -93,23 +93,23 @@ METHODS = {
     ),
     #
     "block-coord-macro-f1-tol=1e-3": (
-        predict_optimizing_macro_f1_using_bc,
+        predict_optimizing_macro_fmeasure_using_bc,
         {"tolerance": 1e-3},
     ),
     "block-coord-macro-f1-tol=1e-4": (
-        predict_optimizing_macro_f1_using_bc,
+        predict_optimizing_macro_fmeasure_using_bc,
         {"tolerance": 1e-4},
     ),
     "block-coord-macro-f1-tol=1e-5": (
-        predict_optimizing_macro_f1_using_bc,
+        predict_optimizing_macro_fmeasure_using_bc,
         {"tolerance": 1e-5},
     ),
     "block-coord-macro-f1-tol=1e-6": (
-        predict_optimizing_macro_f1_using_bc,
+        predict_optimizing_macro_fmeasure_using_bc,
         {"tolerance": 1e-6},
     ),
     "block-coord-macro-f1-tol=1e-7": (
-        predict_optimizing_macro_f1_using_bc,
+        predict_optimizing_macro_fmeasure_using_bc,
         {"tolerance": 1e-7},
     ),
     #
@@ -143,7 +143,7 @@ METHODS = {
         {"init_y_pred": "greedy", "max_iter": 1},
     ),
     "greedy-macro-f1": (
-        predict_optimizing_macro_f1_using_bc,
+        predict_optimizing_macro_fmeasure_using_bc,
         {"init_y_pred": "greedy", "max_iter": 1},
     ),
     "greedy-cov": (
@@ -160,15 +160,15 @@ METHODS = {
         {"max_iter": 1},
     ),
     "block-coord-macro-f1-iter=1": (
-        predict_optimizing_macro_f1_using_bc,
+        predict_optimizing_macro_fmeasure_using_bc,
         {"max_iter": 1},
     ),
     "block-coord-cov-iter=1": (predict_optimizing_coverage_using_bc, {"max_iter": 1}),
     #
     # Similar results to the above
     # "greedy-start-block-coord-macro-prec": (predict_optimizing_macro_precision_using_bc, {"init_y_pred": "greedy"},),
-    # "greedy-start-block-coord-macro-recall": (predict_optimizing_macro_f1_using_bc, {"init_y_pred": "greedy"}),
-    # "greedy-start-block-coord-macro-f1": (predict_optimizing_macro_f1_using_bc, {"init_y_pred": "greedy"}),
+    # "greedy-start-block-coord-macro-recall": (predict_optimizing_macro_fmeasure_using_bc, {"init_y_pred": "greedy"}),
+    # "greedy-start-block-coord-macro-f1": (predict_optimizing_macro_fmeasure_using_bc, {"init_y_pred": "greedy"}),
     # "greedy-start-block-coord-cov": (predict_optimizing_coverage_using_bc, {"init_y_pred": "greedy"}),
 }
 
@@ -193,7 +193,7 @@ alphas = [
 for alpha in alphas:
     pass
     METHODS[f"block-coord-mixed-prec-f1-alpha={alpha}-tol=1e-6"] = (
-        predict_optimizing_mixed_instance_precision_and_macro_f1_using_bc,
+        predict_optimizing_mixed_instance_precision_and_macro_fmeasure_using_bc,
         {"alpha": alpha, "tolerance": 1e-6},
     )
     METHODS[f"block-coord-mixed-prec-prec-alpha={alpha}-tol=1e-6"] = (

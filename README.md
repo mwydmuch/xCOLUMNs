@@ -18,7 +18,7 @@ Based on these estimates, the methods aim to find the optimal prediction for a g
 This makes the library very flexible and allows to use it with any multi-label classification model that provides conditional probability estimates.
 The library directly supports numpy arrays, PyTorch tensors (work in progress), and sparse CSR matrices from scipy as input/output data types.
 
-For more details, please see our short usage guide, the documentation, and/or the papers that describe the methods implemented in the library.
+For more details, please see our short usage guide, the documentation (work in progress), and/or the papers that describe the methods implemented in the library.
 
 
 ## Quick start
@@ -61,7 +61,7 @@ The method was first introduced and described in the paper:
 ### Finding optimal population classifier via Frank-Wolfe (FW)
 
 The method was first introduced and described in the paper:
-> [Erik Schultheis, Wojciech Kotłowski, Marek Wydmuch, Rohit Babbar, Krzysztof Dembczyński. Consistent algorithms for multi-label classification with macro-at-k metrics. ICLR 2024.](https://arxiv.org/abs/2401.16594)
+> [Erik Schultheis, Wojciech Kotłowski, Marek Wydmuch, Rohit Babbar, Strom Borman, Krzysztof Dembczyński. Consistent algorithms for multi-label classification with macro-at-k metrics. ICLR 2024.](https://arxiv.org/abs/2401.16594)
 
 
 ## Repository structure
