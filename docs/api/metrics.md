@@ -1,5 +1,7 @@
 # Metrics
 
+Metrics module implements
+
 ```{eval-rst}
 .. automodule:: xcolumns.metrics
    :members:

@@ -7,8 +7,9 @@ from scipy.sparse import csr_matrix
 
 from .confusion_matrix import calculate_confusion_matrix
 from .metrics import *
-from .types import *
-from .utils import *
+from .numba_csr_functions import numba_predict_weighted_per_instance_csr_step
+from .types import TORCH_AVAILABLE, DefaultDataDType, DenseMatrix, DType, Matrix
+from .utils import log_info, ternary_search, uniform_search
 from .weighted_prediction import predict_weighted_per_instance
 
 
@@ -224,7 +225,7 @@ def predict_using_randomized_classifier(
 
 
 class RandomizedWeightedClassifier:
-    def __init__(self, k, a, b, p):
+    def __init__(self, k: int, a: DenseMatrix, b: DenseMatrix, p: DenseMatrix):
         self.k = k
         self.a = a
         self.b = b
@@ -247,18 +248,18 @@ def _metric_func_with_gradient_autograd(metric_func, tp, fp, fn, tn):
 
 
 def _find_best_alpha(
-    metric_func,
-    tp,
-    fp,
-    fn,
-    tn,
-    tp_i,
-    fp_i,
-    fn_i,
-    tn_i,
-    search_algo="uniform",
-    eps=0.001,
-    uniform_search_step=0.001,
+    metric_func: Callable,
+    tp: DenseMatrix,
+    fp: DenseMatrix,
+    fn: DenseMatrix,
+    tn: DenseMatrix,
+    tp_i: DenseMatrix,
+    fp_i: DenseMatrix,
+    fn_i: DenseMatrix,
+    tn_i: DenseMatrix,
+    search_algo: str = "uniform",
+    eps: float = 0.001,
+    uniform_search_step: float = 0.001,
 ) -> Tuple[float, float]:
     conf_mat_comb = lambda alpha: metric_func(
         (1 - alpha) * tp + alpha * tp_i,
@@ -280,9 +281,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
     metric_func: Callable,
     k: int,
     max_iters: int = 100,
-    init_classifier: Union[
-        str, Tuple[DenseMatrix, DenseMatrix]
-    ] = "random",  # or "default", "topk"
+    init_classifier: Union[str, Tuple[DenseMatrix, DenseMatrix]] = "random",  # or "top"
     maximize=True,
     search_for_best_alpha: bool = True,
     alpha_search_algo: str = "uniform",  # or "ternary"
@@ -300,6 +299,8 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
         verbose,
     )
 
+    alpha_eps = alpha_uniform_search_step
+
     # Validate y_true and y_proba
     if type(y_true) != type(y_proba) and isinstance(y_true, Matrix):
         raise ValueError(
@@ -313,14 +314,17 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
 
     n, m = y_proba.shape
 
-    log_info(f"  Initializing initial {init_classifier} classifier ...", verbose)
+    log_info(
+        f"  Initializing initial {init_classifier if isinstance(init_classifier, str) else 'custom'} classifier ...",
+        verbose,
+    )
     # Initialize the classifiers matrix
     rng = np.random.default_rng(seed)
-    classifiers_a = np.zeros((max_iters, m), dtype=DefaultDataDType)
-    classifiers_b = np.zeros((max_iters, m), dtype=DefaultDataDType)
-    classifiers_proba = np.ones(max_iters, dtype=DefaultDataDType)
+    classifiers_a = np.zeros((max_iters + 1, m), dtype=DefaultDataDType)
+    classifiers_b = np.zeros((max_iters + 1, m), dtype=DefaultDataDType)
+    classifiers_proba = np.ones(max_iters + 1, dtype=DefaultDataDType)
 
-    if init_classifier in ["default", "topk"]:
+    if init_classifier == "top":
         classifiers_a[0] = np.ones(m, dtype=DefaultDataDType)
         classifiers_b[0] = np.full(m, -0.5, dtype=DefaultDataDType)
     elif init_classifier == "random":
@@ -346,7 +350,7 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
             classifiers_b[0] = init_classifier[1]
     else:
         raise ValueError(
-            f"Unsupported type of init_classifier, it should be 'default', 'topk', 'random', or a tuple of two np.ndarray or torch.Tensor of shape (y_true.shape[1], )"
+            f"Unsupported type of init_classifier, it should be in ['random', 'top'], or a tuple of two np.ndarray or torch.Tensor of shape (y_true.shape[1], )"
         )
 
     # Adjust types according to the type of y_true and y_proba
@@ -421,20 +425,11 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
         else:
             alpha = 2 / (i + 1)
 
-        classifiers_proba[:i] *= 1 - alpha
-        classifiers_proba[i] = alpha
         tp = (1 - alpha) * tp + alpha * tp_i
         fp = (1 - alpha) * fp + alpha * fp_i
         fn = (1 - alpha) * fn + alpha * fn_i
         tn = (1 - alpha) * tn + alpha * tn_i
-
         new_utility = metric_func(tp, fp, fn, tn)
-
-        if return_meta:
-            meta["alphas"].append(alpha)
-            meta["classifiers_utilities"].append(utility_i)
-            meta["utilities"].append(new_utility)
-            meta["iters"] = i
 
         log_info(
             f"    Iteration {i}/{max_iters} finished, alpha: {alpha}, utility: {old_utility} -> {new_utility}",
@@ -448,6 +443,15 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
             classifiers_b = classifiers_b[:i]
             classifiers_proba = classifiers_proba[:i]
             break
+
+        if return_meta:
+            meta["alphas"].append(alpha)
+            meta["classifiers_utilities"].append(utility_i)
+            meta["utilities"].append(new_utility)
+            meta["iters"] = i
+
+        classifiers_proba[:i] *= 1 - alpha
+        classifiers_proba[i] = alpha
 
     rnd_classifier = RandomizedWeightedClassifier(
         k, classifiers_a, classifiers_b, classifiers_proba

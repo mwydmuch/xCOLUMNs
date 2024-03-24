@@ -15,9 +15,12 @@ from .utils import *
 
 class ConfusionMatrix:
     """
-    Class representing a confusion matrix.
+    Class representing a confusion matrix,
+    containing counts or ratios of true positives, false positives, false negatives, and true negatives.
+    Implements basic operations for confusion matrices such as comparison, addition, subtraction, multiplication, and division.
 
-    When unpacked returns (tp, fp, fn, tn) (in this order).
+    Additionally, it can be unpacked into a tuple of counts or ratios (tp, fp, fn, tn) (in this order).
+    So it can be used with metric functions that expect tp, fp, fn, and tn as separate arguments.
     """
 
     def __init__(
@@ -133,71 +136,61 @@ class ConfusionMatrix:
         self.tn //= other
         return self
 
+    def normalize(self) -> "ConfusionMatrix":
+        pass  # TODO
+
 
 ########################################################################################
 # Functions to calculate/update confusion matrix
 ########################################################################################
 
 
-def _calculate_tp_dense(y_true: DenseMatrix, y_pred: DenseMatrix) -> DenseMatrix:
-    return (y_true * y_pred).sum(axis=0)
+def _calculate_tp_dense(
+    y_true: DenseMatrix, y_pred: DenseMatrix, axis=0
+) -> DenseMatrix:
+    return (y_true * y_pred).sum(axis=axis)
 
 
 # Alternative version, performance is similar
-# def _calculate_tp_csr(y_true: csr_matrix, y_pred: csr_matrix):
-#     return (y_pred.multiply(y_true)).sum(axis=0)
+# def _calculate_tp_csr(y_true: csr_matrix, y_pred: csr_matrix, axis=0) -> np.ndarray:
+#     return (y_pred.multiply(y_true)).sum(axis=axis)
 
 
-def _calculate_tp_csr(y_true: csr_matrix, y_pred: csr_matrix) -> np.ndarray:
+def _calculate_tp_csr(y_true: csr_matrix, y_pred: csr_matrix, axis=0) -> np.ndarray:
     n, m = y_true.shape
     return numba_calculate_sum_0_csr_mat_mul_mat(
-        *unpack_csr_matrices(y_pred, y_true), n, m
+        *unpack_csr_matrices(y_pred, y_true), n, m, axis=axis
     )
 
 
-def _calculate_fp_dense(y_true: DenseMatrix, y_pred: DenseMatrix) -> DenseMatrix:
-    return ((1 - y_true) * y_pred).sum(axis=0)
+def _calculate_fp_dense(
+    y_true: DenseMatrix, y_pred: DenseMatrix, axis=0
+) -> DenseMatrix:
+    return ((1 - y_true) * y_pred).sum(axis=axis)
 
 
-def _calculate_fp_csr_slow(y_true: csr_matrix, y_pred: csr_matrix) -> np.ndarray:
-    n, m = y_true.shape
-    fp = np.zeros(m, dtype=FLOAT_TYPE)
-    dense_ones = np.ones(m, dtype=FLOAT_TYPE)
-    for i in range(n):
-        fp += y_pred[i].multiply(dense_ones - y_true[i])
-    return fp
+def _calculate_fn_dense(
+    y_true: DenseMatrix, y_pred: DenseMatrix, axis=0
+) -> DenseMatrix:
+    return (y_true * (1 - y_pred)).sum(axis=axis)
 
 
-def _calculate_fn_dense(y_true: DenseMatrix, y_pred: DenseMatrix) -> DenseMatrix:
-    return (y_true * (1 - y_pred)).sum(axis=0)
-
-
-def _calculate_fp_csr(y_true: csr_matrix, y_pred: csr_matrix) -> np.ndarray:
+def _calculate_fp_csr(y_true: csr_matrix, y_pred: csr_matrix, axis=0) -> np.ndarray:
     n, m = y_true.shape
     return numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
-        *unpack_csr_matrices(y_pred, y_true), n, m
+        *unpack_csr_matrices(y_pred, y_true), n, m, axis=axis
     )
 
 
-def _calculate_fn_csr_slow(y_true: csr_matrix, y_pred: csr_matrix) -> np.ndarray:
-    n, m = y_true.shape
-    fn = np.zeros(m, dtype=FLOAT_TYPE)
-    dense_ones = np.ones(m, dtype=FLOAT_TYPE)
-    for i in range(n):
-        fn += y_true[i].multiply(dense_ones - y_pred[i])
-
-    return fn
-
-
-def _calculate_fn_csr(y_true: csr_matrix, y_pred: csr_matrix) -> np.ndarray:
+def _calculate_fn_csr(y_true: csr_matrix, y_pred: csr_matrix, axis=0) -> np.ndarray:
     n, m = y_true.shape
     return numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
-        *unpack_csr_matrices(y_true, y_pred), n, m
+        *unpack_csr_matrices(y_true, y_pred), n, m, axis=axis
     )
 
 
-def _calculate_tn_dense(y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
-    return (1 - y_true) * (1 - y_pred).sum(axis=0)
+def _calculate_tn_dense(y_true: np.ndarray, y_pred: np.ndarray, axis=0) -> np.ndarray:
+    return (1 - y_true) * (1 - y_pred).sum(axis=axis)
 
 
 def _calculate_conf_mat_entry(
@@ -206,6 +199,7 @@ def _calculate_conf_mat_entry(
     func_for_dense: Callable,
     func_for_csr: Callable,
     normalize: bool = False,
+    axis: int = 0,
 ) -> DenseMatrix:
     if isinstance(y_true, DenseMatrix) and isinstance(y_pred, DenseMatrix):
         func = func_for_dense
@@ -219,7 +213,10 @@ def _calculate_conf_mat_entry(
     if y_true.shape != y_pred.shape:
         raise ValueError("y_true and y_pred must have the same shape")
 
-    val = func(y_true, y_pred)
+    if axis not in (0, 1):
+        raise ValueError("axis must be 0 or 1")
+
+    val = func(y_true, y_pred, axis=axis)
 
     if normalize:
         val = val / y_true.shape[0]
@@ -231,9 +228,19 @@ def calculate_tp(
     y_true: Matrix,
     y_pred: Matrix,
     normalize: bool = False,
-) -> DenseMatrix:
+    axis: Optional[int] = 0,
+) -> Union[Number, DenseMatrix]:
     """
-    Calculate true positives for the given true and predicted labels.
+    Calculate number of true positives for the given true and predicted labels along an axis.
+
+    Args:
+        y_true: The true labels.
+        y_pred: The predicted labels.
+        normalize: Whether to normalize the confusion matrix, resulting the rates instead of counts.
+        axis: The axis along which to calculate the confusion matrix.
+
+    Returns:
+        The number of vector of false positives counts or rates.
     """
     return _calculate_conf_mat_entry(
         y_true, y_pred, _calculate_tp_dense, _calculate_tp_csr, normalize=normalize
@@ -244,9 +251,19 @@ def calculate_fp(
     y_true: Matrix,
     y_pred: Matrix,
     normalize: bool = False,
-) -> DenseMatrix:
+    axis: Optional[int] = 0,
+) -> Union[Number, DenseMatrix]:
     """
-    Calculate false positives for the given true and predicted labels.
+    Calculate number of false positives for the given true and predicted labels along an axis.
+
+    Args:
+        y_true: The true labels.
+        y_pred: The predicted labels.
+        normalize: Whether to normalize the confusion matrix, resulting the rates instead of counts.
+        axis: The axis along which to calculate the confusion matrix.
+
+    Returns:
+        The number of vector of false positives counts or rates.
     """
     return _calculate_conf_mat_entry(
         y_true, y_pred, _calculate_fp_dense, _calculate_fp_csr, normalize=normalize
@@ -257,9 +274,19 @@ def calculate_fn(
     y_true: Matrix,
     y_pred: Matrix,
     normalize: bool = False,
-) -> DenseMatrix:
+    axis: Optional[int] = 0,
+) -> Union[Number, DenseMatrix]:
     """
-    Calculate false negatives for the given true and predicted labels.
+    Calculate number of false negatives for the given true and predicted labels along an axis.
+
+    Args:
+        y_true: The true labels.
+        y_pred: The predicted labels.
+        normalize: Whether to normalize the confusion matrix, resulting the rates instead of counts.
+        axis: The axis along which to calculate the confusion matrix.
+
+    Returns:
+        The number of vector of false negatives counts or rates.
     """
     return _calculate_conf_mat_entry(
         y_true, y_pred, _calculate_fn_dense, _calculate_fn_csr, normalize=normalize
@@ -271,25 +298,38 @@ def calculate_confusion_matrix(
     y_pred: Matrix,
     normalize: bool = False,
     skip_tn: bool = False,
+    axis: Optional[int] = 0,
 ) -> ConfusionMatrix:
     """
-    Calculate confusion matrix for given true and predicted labels.
+    Calculate confusion matrix for given true and predicted labels along an axis.
+
+    Args:
+        y_true: The true labels.
+        y_pred: The predicted labels.
+        normalize: Whether to normalize the confusion matrix, resulting the rates instead of counts.
+        skip_tn: Whether to skip calculating true negatives, as they may not be always needed.
+        axis: The axis along which to calculate the confusion matrix.
+
+    Returns:
+        The confusion matrix.
     """
-    tp = calculate_tp(y_true, y_pred, normalize=normalize)
-    fp = calculate_fp(y_true, y_pred, normalize=normalize)
-    fn = calculate_fn(y_true, y_pred, normalize=normalize)
+    tp = calculate_tp(y_true, y_pred, normalize=normalize, axis=axis)
+    fp = calculate_fp(y_true, y_pred, normalize=normalize, axis=axis)
+    fn = calculate_fn(y_true, y_pred, normalize=normalize, axis=axis)
 
     n, m = y_true.shape
     if skip_tn:
         tn = tp.copy()
         tn[:] = -1
     else:
-        tn = -tp - fp - fn + (1.0 if normalize else n)
+        # It is faster to calculate tn from tp, fp, and fn
+
+        tn = -tp - fp - fn + (1.0 if normalize else (n if axis == 0 else m))
 
     return ConfusionMatrix(tp, fp, fn, tn)
 
 
-def update_unnormalized_confusion_matrix(
+def _update_unnormalized_confusion_matrix(
     C: ConfusionMatrix,
     y_true: Matrix,
     y_pred: Matrix,

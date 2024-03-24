@@ -7,9 +7,15 @@ from tqdm import tqdm, trange
 
 from .confusion_matrix import *
 from .metrics import *
-from .numba_csr_functions import *
-from .types import *
-from .utils import *
+from .numba_csr_functions import (
+    numba_add_to_unnormalized_confusion_matrix_csr,
+    numba_calculate_prod_0_csr_mat_mul_ones_minus_mat,
+    numba_csr_vec_mul_ones_minus_vec,
+    numba_set_gains_csr,
+    numba_sub_from_unnormalized_confusion_matrix_csr,
+)
+from .types import TORCH_AVAILABLE, DenseMatrix, Matrix
+from .utils import log_info, ones_like, unpack_csr_matrices, zeros_like
 from .weighted_prediction import predict_top_k
 
 
@@ -29,7 +35,7 @@ def _get_initial_y_pred(
 
     if isinstance(init_y_pred, str) and init_y_pred in ["random", "greedy"]:
         y_pred = random_at_k_func((n, m), k, dtype=y_proba.dtype, seed=seed)
-    elif isinstance(init_y_pred, str) and init_y_pred == "topk":
+    elif isinstance(init_y_pred, str) and init_y_pred == "top":
         y_pred = predict_top_k(y_proba, k, return_meta=False)
     elif isinstance(init_y_pred, Matrix):
         if init_y_pred.shape != (n, m):
@@ -39,7 +45,7 @@ def _get_initial_y_pred(
         y_pred = init_y_pred
     else:
         raise ValueError(
-            f"init_y_pred must be np.ndarray, Torch.tensor, csr_matrix or str in ['random', 'greedy', 'topk'], but has type {type(init_y_pred)}"
+            f"init_y_pred must be np.ndarray, Torch.tensor, csr_matrix or str in ['random', 'greedy', 'top'], but has type {type(init_y_pred)}"
         )
     return y_pred
 
@@ -53,9 +59,9 @@ def _calculate_utility(
     Etn: DenseMatrix,
 ) -> float:
     if callable(binary_metric_func):
-        bin_utilities = binary_metric_func(Etp, Efp, Efn, Etn)
+        binary_metric_values = binary_metric_func(Etp, Efp, Efn, Etn)
     else:
-        bin_utilities = np.array(
+        binary_metric_values = np.array(
             [
                 f(Etp[i], Efp[i], Efn[i], Etn[i])
                 for i, f in enumerate(binary_metric_func)
@@ -63,20 +69,20 @@ def _calculate_utility(
         )
 
     # Validate bin utilities here to omit unnecessary calculations later in _calculate_binary_gains
-    if not isinstance(bin_utilities, np.ndarray):
+    if not isinstance(binary_metric_values, np.ndarray):
         raise ValueError(
-            f"binary_metric_func must return np.ndarray, but returned {type(bin_utilities)}"
+            f"binary_metric_func must return np.ndarray, but returned {type(binary_metric_values)}"
         )
 
-    if bin_utilities.shape != (Etp.shape[0],):
+    if binary_metric_values.shape != (Etp.shape[0],):
         raise ValueError(
-            f"binary_metric_func must return np.ndarray of shape {Etp.shape[0]}, but returned {bin_utilities.shape}"
+            f"binary_metric_func must return np.ndarray of shape {Etp.shape[0]}, but returned {binary_metric_values.shape}"
         )
 
     if metric_aggregation == "sum":
-        return bin_utilities.sum()
+        return binary_metric_values.sum()
     elif metric_aggregation == "mean":
-        return bin_utilities.mean()
+        return binary_metric_values.mean()
     else:
         raise ValueError(
             f"Unsupported utility aggregation function: {metric_aggregation}, must be either 'mean' or 'sum'"
@@ -114,7 +120,7 @@ def _calculate_binary_gains(
     return pos_utility - neg_utility
 
 
-def bc_with_0approx_step_dense(
+def _bc_with_0approx_step_dense(
     y_proba: DenseMatrix,
     y_pred: DenseMatrix,
     i: int,
@@ -188,7 +194,7 @@ def bc_with_0approx_step_dense(
             Etn += (1 - y_pred_i) * (1 - y_proba_i)
 
 
-def bc_with_0approx_step_csr(
+def _bc_with_0approx_step_csr(
     y_proba: csr_matrix,
     y_pred: csr_matrix,
     i: int,
@@ -273,7 +279,7 @@ def predict_using_bc_with_0approx(
     metric_aggregation: str = "mean",  # "mean" or "sum"
     maximize=True,
     tolerance: float = 1e-6,
-    init_y_pred: Union[str, Matrix] = "random",  # "random", "topk", "greedy", Matrix
+    init_y_pred: Union[str, Matrix] = "random",  # "random", "top", "greedy", Matrix
     max_iter: int = 100,
     shuffle_order: bool = True,
     skip_tn=False,
@@ -282,15 +288,13 @@ def predict_using_bc_with_0approx(
     verbose: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, Dict[str, Any]]]:
     """
-    TODO: Add docstring
+    Predicts for the provided probability matrix using block coordinate ascent/descent with 0-th order approximation of ETU objective
+    optimizing a given metric, that decomposes into a sum/mean of binary metrics.
 
-    BCA with 0-approximation here uses tp, fp, fn, tn matrices parametrization of the confussion matrix,
-    as opposed to algorithms presented in the final version of the paper, which use t, q, p parametrization.
-    However both algorithms are equivalent.
     """
 
     log_info(
-        f"Starting optimization of ETU utility metric block coordinate {'ascent' if maximize else 'descent'} algorithm ...",
+        f"Starting optimization of ETU metric using block coordinate {'ascent' if maximize else 'descent'} algorithm ...",
         verbose,
     )
 
@@ -303,10 +307,10 @@ def predict_using_bc_with_0approx(
 
     # Get specialized functions
     if isinstance(y_proba, DenseMatrix):
-        bc_with_0approx_step_func = bc_with_0approx_step_dense
+        bc_with_0approx_step_func = _bc_with_0approx_step_dense
         random_at_k_func = random_at_k_np
     elif isinstance(y_proba, csr_matrix):
-        bc_with_0approx_step_func = bc_with_0approx_step_csr
+        bc_with_0approx_step_func = _bc_with_0approx_step_csr
         random_at_k_func = random_at_k_csr
     else:
         raise ValueError(
@@ -403,7 +407,7 @@ def predict_using_bc_with_0approx(
 ########################################################################################
 
 
-def bc_for_coverage_step_np(
+def _bc_for_coverage_step_np(
     y_proba: DenseMatrix,
     y_pred: DenseMatrix,
     i: int,
@@ -432,7 +436,7 @@ def bc_for_coverage_step_np(
     Ef *= 1 - y_pred[i] * y_proba[i]
 
 
-def bc_for_coverage_step_csr(
+def _bc_for_coverage_step_csr(
     y_proba: csr_matrix,
     y_pred: csr_matrix,
     i: int,
@@ -461,7 +465,19 @@ def bc_for_coverage_step_csr(
         )
         Ef[indices] /= data
 
-    # Calculate gain and selection at kbility
+    # Calculate gain and selection
+    gains = Ef[t_indices] * t_data
+    if alpha < 1:
+        gains = alpha * gains + (1 - alpha) * t_data / k
+    if gains.size > k:
+        top_k = np.argpartition(-gains, k)[:k]
+        y_pred.indices[p_start:p_end] = sorted(t_indices[top_k])
+    else:
+        t_indices = np.resize(t_indices, k)
+        t_indices[gains.size :] = 0
+        y_pred.indices[p_start:p_end] = sorted(t_indices)
+
+    # Update estimates of failure probability
     data, indices = numba_csr_vec_mul_ones_minus_vec(
         p_data, p_indices, t_data, t_indices
     )
@@ -503,7 +519,7 @@ def predict_optimizing_coverage_using_bc(
     An efficient implementation of the block coordinate-descent for coverage
     """
     log_info(
-        f"Starting optimization of ETU coverage@{k} metric block coordinate ascent algorithm ...",
+        f"Starting optimization of ETU coverage@{k} metric using block coordinate ascent algorithm ...",
         verbose,
     )
 
@@ -522,10 +538,10 @@ def predict_optimizing_coverage_using_bc(
 
     # Get specialized functions
     if isinstance(y_proba, np.ndarray):
-        bc_coverage_step_func = bc_for_coverage_step_np
+        bc_coverage_step_func = _bc_for_coverage_step_np
         random_at_k_func = random_at_k_np
     elif isinstance(y_proba, csr_matrix):
-        bc_coverage_step_func = bc_for_coverage_step_csr
+        bc_coverage_step_func = _bc_for_coverage_step_csr
         random_at_k_func = random_at_k_csr
     else:
         raise ValueError("y_proba must be either np.ndarray or csr_matrix")
@@ -547,7 +563,7 @@ def predict_optimizing_coverage_using_bc(
             rng.shuffle(order)
 
         if greedy:
-            Ef = np.ones(m, dtype=FLOAT_TYPE)
+            Ef = ones_like(y_pred, shape=(m,))  # np.ones(m, dtype=FLOAT_TYPE)
         else:
             if isinstance(y_proba, np.ndarray):
                 Ef = np.product(1 - y_pred * y_proba, axis=0)
@@ -606,7 +622,7 @@ def predict_optimizing_instance_precision_using_bc(
     """
 
     def instance_precision_with_specific_k(tp, fp, fn, tn):
-        return bin_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k)
+        return binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k)
 
     return predict_using_bc_with_0approx(
         y_proba,
@@ -638,7 +654,7 @@ def predict_optimizing_macro_precision_using_bc(
     """
     return predict_using_bc_with_0approx(
         y_proba,
-        binary_metric_func=bin_precision_on_conf_matrix,
+        binary_metric_func=binary_precision_on_conf_matrix,
         k=k,
         metric_aggregation="mean",
         skip_tn=True,
@@ -667,7 +683,7 @@ def predict_optimizing_macro_recall_using_bc(
     """
     return predict_using_bc_with_0approx(
         y_proba,
-        binary_metric_func=bin_recall_on_conf_matrix,
+        binary_metric_func=binary_recall_on_conf_matrix,
         k=k,
         metric_aggregation="mean",
         skip_tn=True,
@@ -680,9 +696,10 @@ def predict_optimizing_macro_recall_using_bc(
     )
 
 
-def predict_optimizing_macro_f1_using_bc(
+def predict_optimizing_macro_fmeasure_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
+    beta: float = 1,
     tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
     max_iter: int = 100,
@@ -691,12 +708,16 @@ def predict_optimizing_macro_f1_using_bc(
     return_meta: bool = False,
 ):
     """
-    This function is a wrapper for using block coordinate ascent with macro f1 as the target metric.
+    This function is a wrapper for using block coordinate ascent with macro f-measure as the target metric.
     See `predict_using_bc_with_0approx` for more details and a description of parameters.
     """
+
+    def binary_fmeasure_on_conf_matrix_with_specific_beta(tp, fp, fn, tn):
+        return binary_fbeta_score_on_conf_matrix(tp, fp, fn, tn, beta=beta)
+
     return predict_using_bc_with_0approx(
         y_proba,
-        binary_metric_func=bin_fmeasure_on_conf_matrix,
+        binary_metric_func=binary_fmeasure_on_conf_matrix_with_specific_beta,
         k=k,
         metric_aggregation="mean",
         skip_tn=True,
@@ -728,9 +749,9 @@ def predict_optimizing_mixed_instance_precision_and_macro_precision_using_bc(
     n, m = y_proba.shape
 
     def mixed_utility_fn(tp, fp, fn, tn):
-        return (1 - alpha) * bin_precision_at_k_on_conf_matrix(
+        return (1 - alpha) * binary_precision_at_k_on_conf_matrix(
             tp, fp, fn, tn, k
-        ) + alpha * bin_precision_on_conf_matrix(tp, fp, fn, tn) / m
+        ) + alpha * binary_precision_on_conf_matrix(tp, fp, fn, tn) / m
 
     return predict_using_bc_with_0approx(
         y_proba,
@@ -766,9 +787,9 @@ def predict_optimizing_mixed_instance_precision_and_macro_recall_using_bc(
     n, m = y_proba.shape
 
     def mixed_utility_fn(tp, fp, fn, tn):
-        return (1 - alpha) * bin_precision_at_k_on_conf_matrix(
+        return (1 - alpha) * binary_precision_at_k_on_conf_matrix(
             tp, fp, fn, tn, k
-        ) + alpha * bin_recall_on_conf_matrix(tp, fp, fn, tn) / m
+        ) + alpha * binary_recall_on_conf_matrix(tp, fp, fn, tn) / m
 
     return predict_using_bc_with_0approx(
         y_proba,
@@ -785,10 +806,11 @@ def predict_optimizing_mixed_instance_precision_and_macro_recall_using_bc(
     )
 
 
-def predict_optimizing_mixed_instance_precision_and_macro_f1_using_bc(
+def predict_optimizing_mixed_instance_precision_and_macro_fmeasure_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     alpha: float = 1,
+    beta: float = 1,
     tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
     max_iter: int = 100,
@@ -804,9 +826,9 @@ def predict_optimizing_mixed_instance_precision_and_macro_f1_using_bc(
     n, m = y_proba.shape
 
     def mixed_utility_fn(tp, fp, fn, tn):
-        return (1 - alpha) * bin_precision_at_k_on_conf_matrix(
+        return (1 - alpha) * binary_precision_at_k_on_conf_matrix(
             tp, fp, fn, tn, k
-        ) + alpha * bin_fmeasure_on_conf_matrix(tp, fp, fn, tn) / m
+        ) + alpha * binary_fbeta_score_on_conf_matrix(tp, fp, fn, tn, beta=beta) / m
 
     return predict_using_bc_with_0approx(
         y_proba,

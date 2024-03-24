@@ -5,7 +5,11 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from .numba_csr_functions import *
-from .types import *
+from .types import TORCH_AVAILABLE, DenseMatrix, DType
+
+
+if TORCH_AVAILABLE:
+    import torch
 
 
 ########################################################################################
@@ -13,10 +17,12 @@ from .types import *
 ########################################################################################
 
 
+logging.basicConfig()
 logger = logging.getLogger("xcolumns")
+logger.setLevel(logging.INFO)
 
 
-def log(msg: str, verbose: bool, level: int = logging.INFO):
+def log(msg: str, verbose: bool = True, level: int = logging.INFO):
     if verbose:
         logger.log(level, msg)
 

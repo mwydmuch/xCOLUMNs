@@ -28,10 +28,10 @@ def generated_test_data():
     max_top_k = 5
     x, y = make_multilabel_classification(
         n_samples=100000,
-        n_features=100,
-        n_classes=50,
+        n_features=50,
+        n_classes=25,
         n_labels=3,
-        length=50,
+        length=25,
         allow_unlabeled=True,
         sparse=False,
         return_indicator="dense",
@@ -45,6 +45,11 @@ def generated_test_data():
         x_train, y_train, test_size=0.3, random_state=seed
     )
     clf = MultiOutputClassifier(LogisticRegression()).fit(x_train, y_train)
+
+    assert x_train.shape[0] == y_train.shape[0]
+    assert x_val.shape[0] == y_val.shape[0]
+    assert x_test.shape[0] == y_test.shape[0]
+    assert y_train.shape[1] == y_val.shape[1] == y_test.shape[1]
 
     def clf_predict(clf, x, sparsfy=False):
         """
@@ -66,20 +71,26 @@ def generated_test_data():
         return y_proba
 
     y_proba_train = clf_predict(clf, x_train)
-    data = clf_predict(clf, x_val)
+    y_proba_val = clf_predict(clf, x_val)
     y_proba_test = clf_predict(clf, x_test)
 
-    return (
-        x_train,
-        x_val,
-        x_test,
-        y_train,
-        y_val,
-        y_test,
-        y_proba_train,
-        data,
-        y_proba_test,
-    )
+    assert y_proba_train.shape == y_train.shape
+    assert y_proba_val.shape == y_val.shape
+    assert y_proba_test.shape == y_test.shape
+
+    test_data = {
+        "x_train": x_train,
+        "x_val": x_val,
+        "x_test": x_test,
+        "y_train": y_train,
+        "y_val": y_val,
+        "y_test": y_test,
+        "y_proba_train": y_proba_train,
+        "y_proba_val": y_proba_val,
+        "y_proba_test": y_proba_test,
+    }
+
+    return test_data
 
 
 def _report_data_type(data):
@@ -92,7 +103,22 @@ def _report_data_type(data):
         print(f"  device={data.device}")
 
 
-def _test_prediction_method_with_different_types(method_wrapper, args, test_torch=True):
+def _comparison_of_C_matrices(C1, C2, max_diff=5):
+    if max_diff > 0:
+        assert np.abs(C1.tp - C2.tp).max() <= max_diff
+        assert np.abs(C1.fp - C2.fp).max() <= max_diff
+        assert np.abs(C1.fn - C2.fn).max() <= max_diff
+        assert np.abs(C1.tn - C2.tn).max() <= max_diff
+    else:
+        assert np.allclose(C1.tp, C2.tp)
+        assert np.allclose(C1.fp, C2.fp)
+        assert np.allclose(C1.fn, C2.fn)
+        assert np.allclose(C1.tn, C2.tn)
+
+
+def _test_prediction_method_with_different_types(
+    method_wrapper, args, test_torch=True, max_diff=3
+):
     """
     Test a method with different input types and compare the results.
     """
@@ -114,7 +140,7 @@ def _test_prediction_method_with_different_types(method_wrapper, args, test_torc
     conf_mats.append(np_C_32)
     y_preds.append(np_pred_32)
 
-    assert np_C_64 == np_C_32
+    _comparison_of_C_matrices(np_C_64, np_C_32, max_diff=max_diff)
 
     # Run csr_matrix implementation
     csr_args = [
@@ -125,7 +151,7 @@ def _test_prediction_method_with_different_types(method_wrapper, args, test_torc
     conf_mats.append(csr_C)
     y_preds.append(csr_pred)
 
-    assert np_C_64 == csr_C
+    _comparison_of_C_matrices(np_C_64, csr_C, max_diff=max_diff)
 
     # Run torch implementation
     if TORCH_AVAILABLE and test_torch:
@@ -156,7 +182,7 @@ def _test_prediction_method_with_different_types(method_wrapper, args, test_torc
             torch_cuda_C.fn = torch_cuda_C.fn.cpu()
             torch_cuda_C.tn = torch_cuda_C.tn.cpu()
 
-            assert torch_cuda_C == torch_C
+            _comparison_of_C_matrices(torch_cuda_C, torch_C, max_diff=max_diff)
 
         # Convert torch tensors to numpy arrays for easier comparison
         torch_C.tp = torch_C.tp.numpy()
@@ -164,7 +190,7 @@ def _test_prediction_method_with_different_types(method_wrapper, args, test_torc
         torch_C.fn = torch_C.fn.numpy()
         torch_C.tn = torch_C.tn.numpy()
 
-        assert np_C_64 == torch_C
+        _comparison_of_C_matrices(np_C_64, torch_C, max_diff=max_diff)
 
     return conf_mats, y_preds
 

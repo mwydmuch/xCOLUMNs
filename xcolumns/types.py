@@ -18,7 +18,7 @@ TORCH_AVAILABLE = False
 try:
     import torch
 
-    DTypes = Union[DType, torch.dtype]
+    DType = Union[DType, torch.dtype]
     DenseMatrix = Union[DenseMatrix, torch.Tensor]
     Matrix = Union[Matrix, torch.Tensor]
     TORCH_FLOAT_TYPE = torch.float32

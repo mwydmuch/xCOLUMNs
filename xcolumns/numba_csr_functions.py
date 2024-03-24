@@ -5,7 +5,7 @@ import numpy as np
 from numba import njit
 from scipy.sparse import csr_matrix
 
-from .types import *
+from .types import CSRMatrixAsTuple, DefaultDataDType, DefaultIndDType
 
 
 @njit(cache=True)
@@ -135,13 +135,18 @@ def numba_calculate_sum_0_csr_mat_mul_mat(
     b_indptr: np.ndarray,
     n: int,
     m: int,
+    axis: int = 0,
 ) -> np.ndarray:
     """
     Performs a fast multiplication of sparse matrices a and b.
     Gives the same result as a.multiply(b).sum(axis=0) where a and b are sparse vectors.
     Requires a and b to have sorted y_proba_indices (in ascending order).
     """
-    result = np.zeros(m, dtype=a_data.dtype)
+    if axis == 0:
+        result = np.zeros(m, dtype=a_data.dtype)
+    else:
+        result = np.zeros(n, dtype=a_data.dtype)
+
     for i in range(n):
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
@@ -152,7 +157,11 @@ def numba_calculate_sum_0_csr_mat_mul_mat(
             b_data[b_start:b_end],
             b_indices[b_start:b_end],
         )
-        result[y_proba_indices] += y_proba_data
+
+        if axis == 0:
+            result[y_proba_indices] += y_proba_data
+        else:
+            result[i] = np.sum(y_proba_data)
 
     return result
 
@@ -199,6 +208,7 @@ def numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
     b_indptr: np.ndarray,
     n: int,
     m: int,
+    axis: int = 0,
 ) -> np.ndarray:
     """
     Performs a fast multiplication of a sparse matrix a
@@ -206,7 +216,11 @@ def numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
     Gives the same result as a.multiply(ones - b).sum(axis=0) where a and b are sparse matrices but makes it more efficient.
     Requires a and b to have sorted y_proba_indices (in ascending order).
     """
-    result = np.zeros(m, dtype=a_data.dtype)
+    if axis == 0:
+        result = np.zeros(m, dtype=a_data.dtype)
+    else:
+        result = np.zeros(n, dtype=a_data.dtype)
+
     for i in range(n):
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
@@ -217,7 +231,11 @@ def numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
             b_data[b_start:b_end],
             b_indices[b_start:b_end],
         )
-        result[y_proba_indices] += y_proba_data
+
+        if axis == 0:
+            result[y_proba_indices] += y_proba_data
+        else:
+            result[i] = np.sum(y_proba_data)
 
     return result
 
@@ -476,7 +494,7 @@ def numba_predict_weighted_per_instance_csr(
 
 
 @njit(cache=True)
-def numba_predict_macro_balanced_accuracy(
+def numba_predict_macro_balanced_accuracy_csr(
     y_proba_data: np.ndarray,
     y_proba_indices: np.ndarray,
     y_proba_indptr: np.ndarray,

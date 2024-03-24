@@ -22,5 +22,6 @@ intro/quick_start
 api/weighted_prediction
 api/block_coordinate
 api/frank_wolfe
+api/confusion_matrix
 api/metrics
 ```

@@ -4,9 +4,16 @@ from typing import Optional, Tuple, Union
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from .numba_csr_functions import *
-from .types import *
-from .utils import *
+from .numba_csr_functions import (
+    numba_predict_macro_balanced_accuracy_csr,
+    numba_predict_weighted_per_instance_csr,
+)
+from .types import TORCH_AVAILABLE, DenseMatrix, DType, Matrix
+from .utils import unpack_csr_matrix, zeros_like
+
+
+if TORCH_AVAILABLE:
+    import torch
 
 
 ########################################################################################
@@ -83,25 +90,27 @@ def predict_weighted_per_instance(
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
     r"""
-    Returns the weighted prediction for each instance (row) in provided matrix of conditional probabilities estimaes for labels $\eta$.
+    Returns the weighted prediction for each instance (row) in a provided
+    matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**).
     The gains vector is calculated according to:
-    $$
-        g = a \cdeot \eta + b
-    $$.
-    If k is lareger then 0, the top k labels with the highest gains are selected for each instance.
-    If k is 0, then the labels with gains higher than th are selected for each instance.
+
+    .. math::
+        g = a \cdot \eta + b
+
+    If **k** is larger than 0, the top **k** labels with the highest gains are selected for each instance.
+    If **k** is 0, then the labels with gains higher than **th** are selected for each instance.
 
     Args:
         y_proba: A 2D matrix of conditional probabilities for each label.
         k: The number of labels to predict for each instance.
-        th: The threshold for the gains. Defaults to 0.0.
-        a: The weights for the gains. Defaults to None.
-        b: The biases for the gains. Defaults to None.
-        dtype: The data type for the output matrix, if equal to None, the data type of y_proba will be used. Defaults to None.
-        return_meta: Whether to return meta data. Defaults to False.
+        th: The threshold for the gains.
+        a: The weights for the gains.
+        b: The biases for the gains.
+        dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
+        return_meta: Whether to return meta data.
 
     Returns:
-        The weighted prediction for each instance (row) in provided matrix of conditional probabilities estimaes for labels $\eta$.
+        The prediction matrix, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
 
     # Arguments validation
@@ -169,37 +178,45 @@ def predict_top_k(
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
     r"""
-    Predicts the top k labels for each instance (row) in provided matrix of conditional probabilities estimaes for labels $\eta$.
-    It is equivalent to calling predict_weighted_per_instance(y_proba, k=k, a=None, b=None, return_meta=return_meta).
+    Predicts the top **k** labels for each instance (row) in a provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**).
+    It is equivalent to calling ``predict_weighted_per_instance(y_proba, k=k, a=None, b=None, return_meta=return_meta)``.
 
     Args:
         y_proba: A 2D matrix of conditional probabilities for each label.
         k: The number of labels to predict for each instance.
-        return_meta: Whether to return meta data. Defaults to False.
+        return_meta: Whether to return metadata. Defaults to False.
 
     Returns:
-        The top k labels for each instance in the provided matrix of conditional probabilities estimaes for labels $\eta$.
+        The prediction matrix, with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
     return predict_weighted_per_instance(y_proba, k=k, return_meta=return_meta)
 
 
-def predict_optmizing_macro_recall(
+def predict_optimizing_macro_recall(
     y_proba: Matrix,
     k: int,
     priors: DenseMatrix,
     epsilon: float = 1e-6,
+    dtype: Optional[DType] = None,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
     r"""
-    Predicts the top k labels for each instance (row) in provided matrix of conditional probabilities estimaes for labels $\eta$.
-    It is equivalent to calling predict_weighted_per_instance(y_proba, k=k, a=priors, return_meta=return_meta).
+    Predicts the top **k** labels for each instance (row)
+    in a provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**).
+    The return prediction optimizes macro-averaged recall
+    for the population with the given prior probabilities of labels (**priors**).
+    It is equivalent to calling ``predict_weighted_per_instance(y_proba, k=k, a=1.0 / (priors + epsilon), return_meta=return_meta)``.
 
     Args:
         y_proba: A 2D matrix of conditional probabilities for each label.
         k: The number of labels to predict for each instance.
         priors: The prior probabilities for each label.
-        epsilon: A small value to avoid division by zero. Defaults to 1e-6.
-        return_meta: Whether to return meta data. Defaults to False.
+        epsilon: A small value to avoid division by zero when calculating inverse of priors.
+        dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
+        return_meta: Whether to return metadata.
+
+    Returns:
+        The prediction matrix, with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
@@ -210,7 +227,7 @@ def predict_optmizing_macro_recall(
     )
 
 
-def _predict_optmizing_macro_balanced_accuracy_dense(
+def _predict_optimizing_macro_balanced_accuracy_dense(
     y_proba: DenseMatrix,
     k: int,
     priors: DenseMatrix,
@@ -220,13 +237,6 @@ def _predict_optmizing_macro_balanced_accuracy_dense(
     n, m = y_proba.shape
     priors = priors + epsilon
     y_pred = zeros_like(y_proba, dtype=dtype)
-
-    # TODO: Vectorize this
-    # for i in range(n):
-    #     eta = y_proba[i, :]
-    #     g = eta / priors - (1 - eta) / (1 - priors)
-    #     top_k = np.argpartition(-g, k)[:k]
-    #     y_pred[i, top_k] = 1.0
 
     gains = y_proba / priors - (1 - y_proba) / (1 - priors)
 
@@ -246,7 +256,7 @@ def _predict_optmizing_macro_balanced_accuracy_dense(
     return y_pred
 
 
-def _predict_optmizing_macro_balanced_accuracy_csr(
+def _predict_optimizing_macro_balanced_accuracy_csr(
     y_proba: csr_matrix,
     k: int,
     priors: np.array,
@@ -256,7 +266,7 @@ def _predict_optmizing_macro_balanced_accuracy_csr(
     n, m = y_proba.shape
     priors = priors + epsilon
 
-    data, indices, indptr = numba_predict_macro_balanced_accuracy(
+    data, indices, indptr = numba_predict_macro_balanced_accuracy_csr(
         *unpack_csr_matrix(y_proba),
         n,
         m,
@@ -270,7 +280,7 @@ def _predict_optmizing_macro_balanced_accuracy_csr(
     )
 
 
-def predict_optmizing_macro_balanced_accuracy(  # (for population)
+def predict_optimizing_macro_balanced_accuracy(
     y_proba: Matrix,
     k: int,
     priors: DenseMatrix,
@@ -278,6 +288,23 @@ def predict_optmizing_macro_balanced_accuracy(  # (for population)
     dtype: Optional[DType] = None,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
+    r"""
+    Predicts labels for each instance (row)
+    in provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**).
+    Such that the prediction at **k** optimizes macro-averaged balanced accuracy
+    for the population with the given prior probabilities of labels (**priors**).
+
+    Args:
+        y_proba: A 2D matrix of conditional probabilities for each label.
+        k: The number of labels to predict for each instance.
+        priors: The prior probabilities for each label.
+        epsilon: A small value to avoid division by zero when calculating inverse of priors.
+        dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
+        return_meta: Whether to return meta data.
+
+    Returns:
+        The prediction matrix, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+    """
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
 
@@ -285,11 +312,11 @@ def predict_optmizing_macro_balanced_accuracy(  # (for population)
         meta = {"iters": 1, "time": time()}
 
     if isinstance(y_proba, DenseMatrix):
-        y_pred = _predict_optmizing_macro_balanced_accuracy_dense(
+        y_pred = _predict_optimizing_macro_balanced_accuracy_dense(
             y_proba, k, priors, epsilon=epsilon, dtype=dtype
         )
     elif isinstance(y_proba, csr_matrix):
-        y_pred = _predict_optmizing_macro_balanced_accuracy_csr(
+        y_pred = _predict_optimizing_macro_balanced_accuracy_csr(
             y_proba, k, priors, epsilon=epsilon, dtype=dtype
         )
     else:
@@ -304,49 +331,42 @@ def predict_optmizing_macro_balanced_accuracy(  # (for population)
         return y_pred
 
 
-def predict_inv_propensity_weighted_instance(
-    y_proba: Matrix,
-    k: int,
-    inv_ps: DenseMatrix,
-    return_meta: bool = False,
-) -> Union[Matrix, Tuple[Matrix, dict]]:
-    if inv_ps.shape[0] != y_proba.shape[1]:
-        raise ValueError("inv_ps must be of shape (y_proba[1],)")
-
-    return predict_weighted_per_instance(
-        y_proba, k=k, a=inv_ps, return_meta=return_meta
-    )
-
-
 def predict_log_weighted_per_instance(
     y_proba: Matrix,
     k: int,
     priors: DenseMatrix,
     epsilon: float = 1e-6,
+    dtype: Optional[DType] = None,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
+    r"""
+    Predicts the top **k** labels for each instance (row) in provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**) according to the log law weighting scheme:
+
+    .. math::
+        a = -\log \pi
+
+    where :math:`\pi` (**priors**) is the prior probability of each label, :math:`\beta` (beta) is power parameter and :math:`\epsilon` (**epsilon**) is a small value to avoid domain error.
+
+    It is equivalent to calling ``predict_weighted_per_instance(y_proba, k=k, a=-log(priors + epsilon), return_meta=return_meta)``.
+
+    Args:
+        y_proba: A 2D matrix of conditional probabilities for each label.
+        k: The number of labels to predict for each instance.
+        priors: The prior probabilities for each label.
+        epsilon: A small value to avoid domain error.
+        dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
+        return_meta: Whether to return meta data.
+
+    Result
+        The prediction matrix, with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+    """
+
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
 
     weights = -np.log(priors + epsilon)
     return predict_weighted_per_instance(
-        y_proba, k=k, a=weights, return_meta=return_meta
-    )
-
-
-def predict_sqrt_weighted_per_instance(
-    y_proba: Matrix,
-    k: int,
-    priors: DenseMatrix,
-    epsilon: float = 1e-6,
-    return_meta: bool = False,
-) -> Union[Matrix, Tuple[Matrix, dict]]:
-    if priors.shape[0] != y_proba.shape[1]:
-        raise ValueError("priors must be of shape (y_proba[1],)")
-
-    weights = 1.0 / np.sqrt(priors + epsilon)
-    return predict_weighted_per_instance(
-        y_proba, k=k, a=weights, return_meta=return_meta
+        y_proba, k=k, a=weights, dtype=dtype, return_meta=return_meta
     )
 
 
@@ -358,10 +378,31 @@ def predict_power_law_weighted_per_instance(
     epsilon: float = 1e-6,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
+    r"""
+    Predicts the top **k** labels for each instance (row) in provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**) according to the power law weighting scheme:
+
+    .. math::
+        a = (\pi + \epsilon)^{-\beta}
+
+    where :math:`\pi` (**priors**) is the prior probability of each label, :math:`\beta` (beta) is power parameter and :math:`\epsilon` (**epsilon**) is a small value to avoid division by zero.
+
+    It is equivalent to calling ``predict_weighted_per_instance(y_proba, k=k, a= (priors + epsilon) ** -beta, return_meta=return_meta)``.
+
+    Args:
+        y_proba: A 2D matrix of conditional probabilities for each label.
+        k: The number of labels to predict for each instance.
+        priors: The prior probabilities for each label.
+        beta: The power parameter.
+        epsilon: A small value to avoid division by zero when calculating inverse of priors.
+        return_meta: Whether to return meta data.
+
+    Result
+        The prediction matrix, with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+    """
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
 
-    weights = 1.0 / (priors + epsilon) ** beta
+    weights = (priors + epsilon) ** -beta
     return predict_weighted_per_instance(
         y_proba, k=k, a=weights, return_meta=return_meta
     )
@@ -378,7 +419,7 @@ def predict_optimizing_instance_precision(
     return predict_top_k(y_proba, k=k, return_meta=return_meta)
 
 
-def predict_optimizing_instance_propensity_weighted_precision(
+def predict_optimizing_instance_propensity_scored_precision(
     y_proba: Matrix,
     k: int,
     inverse_propensities: Optional[DenseMatrix] = None,
