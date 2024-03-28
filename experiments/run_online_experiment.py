@@ -2,14 +2,26 @@ import sys
 
 import click
 import numpy as np
-
 from utils import *
-from xcolumns.block_coordinate import *
-from xcolumns.find_classifier_frank_wolfe import *
-from xcolumns.metrics import *
-from xcolumns.online_block_coordinate import *
-from xcolumns.weighted_prediction import *
+from tqdm import tqdm
 
+from xcolumns.block_coordinate import *
+from xcolumns.metrics import *
+from xcolumns.weighted_prediction import *
+from xcolumns.frank_wolfe import *
+from xcolumns.metrics_on_conf_matrix import *
+from xcolumns.default_types import *
+from xcolumns.utils import *
+
+from wrappers_frank_wolfe import *
+from wrappers_online_methods import *
+from wrappers_threshold_methods import *
+from custom_utilities_methods import *
+
+
+# TODO: refactor this
+RECALCULATE_RESUTLS = False
+RECALCULATE_PREDICTION = False
 
 METRICS = {
     "mC": macro_abandonment,
@@ -22,110 +34,85 @@ METRICS = {
     "iF": instance_f1,
 }
 
+
+
 METHODS = {
-    # Instance-wise measures / baselines
-    "optimal-instance-prec": (predict_for_optimal_instance_precision, {}),
-    # "block-coord-instance-prec": (bc_instance_precision_at_k, {}),
-    "optimal-instance-ps-prec": (inv_propensity_weighted_instance, {}),
-    "power-law-with-beta=0.75": (power_law_weighted_instance, {"beta": 0.75}),
-    "power-law-with-beta=0.5": (power_law_weighted_instance, {"beta": 0.5}),
-    "power-law-with-beta=0.25": (power_law_weighted_instance, {"beta": 0.25}),
-    "log": (predict_log_weighted_per_instance, {}),
-    "optimal-macro-recall": (predict_for_optimal_macro_recall, {}),
-    #
-    # Block coordinate with default parameters - commented out because it better to use variatns with specific tolerance to stopping condition
-    # "block-coord-macro-prec": (bc_macro_precision, {}),
-    # "block-coord-macro-recall": (bc_macro_recall, {}),
+    # "online-block-coord-macro-f1": (online_bc_macro_f1, {}),
+    # "online-greedy-block-coord-macro-f1": (online_bc_macro_f1, {"greedy": True, "num_valid_sets": 1, "valid_set_size": 1}),
+    # "single-online-block-coord-macro-f1": (online_bc_macro_f1, {"num_valid_sets": 1, "valid_set_size": 1}),
+    # #"single-online-block-coord-on-true-macro-f1": (online_bc_macro_f1, {"num_valid_sets": 1, "valid_set_size": 1, "use_true_valid_bc": True}),
+    # "single-online-block-coord-with-true-c-macro-f1": (online_bc_macro_f1, {"num_valid_sets": 1, "valid_set_size": 1, "use_true_valid_c": True}),
+    # "online-block-coord-with-fw-macro-f1": (online_bc_with_fw_macro_f1, {}),
+    # "online-greedy-block-coord-with-fw-macro-f1": (online_bc_with_fw_macro_f1, {"greedy": True, "num_valid_sets": 1, "valid_set_size": 1}),
+    # "single-online-block-coord-with-fw-macro-f1": (online_bc_with_fw_macro_f1, {"num_valid_sets": 1, "valid_set_size": 1}),
+# }
+# METHODS2={
+    # "frank-wolfe-macro-f1": (fw_macro_f1, {}),
+    # "frank-wolfe-average-macro-f1": (fw_macro_f1, {"average": True}),
+    # "frank-wolfe-last-macro-f1": (fw_macro_f1, {"use_last": True}),
+
+    #"optimal-instance-prec": (predict_for_optimal_instance_precision, {}),
+    
+    # #"frank-wolfe-macro-f1-averaged-classifier-on-test": (fw_macro_f1_on_test, {"average": True}),
+    # "frank-wolfe-macro-f1-last-classifier": (fw_macro_f1, {"use_last": True}),
+
+    # #"frank-wolfe-macro-f1-averaged-classifier-on-test": (fw_macro_f1_on_test, {"average": True}),
+    # "frank-wolfe-macro-f1-last-classifier-on-test": (fw_macro_f1_on_test, {"use_last": True}),
+    
+    "default-prediction": (default_prediction, {}),
+
+    "online-gd-macro-f1": (online_gd_macro_f1, {}),
+    "online-greedy-macro-f1": (online_greedy_macro_f1, {}),
+    "online-frank-wolfe-macro-f1": (online_fw_macro_f1, {}),
+
+    "online-gd-macro-f1-x2": (online_gd_macro_f1, {"epochs": 2}),
+    #"online-gd-macro-f1-x5": (online_gd_macro_f1, {"epochs": 5}),
+    #"online-gd-macro-f1-x10": (online_gd_macro_f1, {"epochs": 10}),
+    #"online-frank-wolfe-macro-f1-x5": (online_fw_macro_f1, {"epochs": 5}),
+
+    # "frank-wolfe-macro-f1": (fw_macro_f1, {}),
+    # "frank-wolfe-macro-f1-on-test": (fw_macro_f1_on_test, {}),
+    # "frank-wolfe-macro-f1-etu": (fw_macro_f1_etu, {}),
+    
     # "block-coord-macro-f1": (bc_macro_f1, {}),
-    # "block-coord-cov": (bc_coverage, {}),
-    # Tolerance on stopping condiction experiments
-    "block-coord-macro-prec-tol=1e-3": (bc_macro_precision, {"tolerance": 1e-3}),
-    "block-coord-macro-prec-tol=1e-4": (bc_macro_precision, {"tolerance": 1e-4}),
-    "block-coord-macro-prec-tol=1e-5": (bc_macro_precision, {"tolerance": 1e-5}),
-    "block-coord-macro-prec-tol=1e-6": (bc_macro_precision, {"tolerance": 1e-6}),
-    "block-coord-macro-prec-tol=1e-7": (bc_macro_precision, {"tolerance": 1e-7}),
-    #
-    # For recall all should be the same
-    "block-coord-macro-recall-tol=1e-3": (bc_macro_recall, {"tolerance": 1e-3}),
-    "block-coord-macro-recall-tol=1e-4": (bc_macro_recall, {"tolerance": 1e-4}),
-    "block-coord-macro-recall-tol=1e-5": (bc_macro_recall, {"tolerance": 1e-5}),
-    "block-coord-macro-recall-tol=1e-6": (bc_macro_recall, {"tolerance": 1e-6}),
-    "block-coord-macro-recall-tol=1e-7": (bc_macro_recall, {"tolerance": 1e-7}),
-    "block-coord-macro-f1-tol=1e-3": (bc_macro_f1, {"tolerance": 1e-3}),
-    "block-coord-macro-f1-tol=1e-4": (bc_macro_f1, {"tolerance": 1e-4}),
-    "block-coord-macro-f1-tol=1e-5": (bc_macro_f1, {"tolerance": 1e-5}),
-    "block-coord-macro-f1-tol=1e-6": (bc_macro_f1, {"tolerance": 1e-6}),
-    "block-coord-macro-f1-tol=1e-7": (bc_macro_f1, {"tolerance": 1e-7}),
-    "block-coord-cov-tol=1e-3": (bc_coverage, {"tolerance": 1e-3}),
-    "block-coord-cov-tol=1e-4": (bc_coverage, {"tolerance": 1e-4}),
-    "block-coord-cov-tol=1e-5": (bc_coverage, {"tolerance": 1e-5}),
-    "block-coord-cov-tol=1e-6": (bc_coverage, {"tolerance": 1e-6}),
-    "block-coord-cov-tol=1e-7": (bc_coverage, {"tolerance": 1e-7}),
-    #
-    # Greedy / 1 iter variants
-    "greedy-macro-prec": (bc_macro_precision, {"init_y_pred": "greedy", "max_iter": 1}),
-    "greedy-macro-recall": (
-        bc_macro_precision,
-        {"init_y_pred": "greedy", "max_iter": 1},
-    ),
-    "greedy-macro-f1": (bc_macro_f1, {"init_y_pred": "greedy", "max_iter": 1}),
-    "greedy-cov": (bc_coverage, {"init_y_pred": "greedy", "max_iter": 1}),
-    "block-coord-macro-prec-iter=1": (bc_macro_precision, {"max_iter": 1}),
-    "block-coord-macro-recall-iter=1": (bc_macro_precision, {"max_iter": 1}),
-    "block-coord-macro-f1-iter=1": (bc_macro_f1, {"max_iter": 1}),
-    "block-coord-cov-iter=1": (bc_coverage, {"max_iter": 1}),
-    "greedy-start-block-coord-macro-prec": (
-        bc_macro_precision,
-        {"init_y_pred": "greedy"},
-    ),
-    "greedy-start-block-coord-macro-recall": (bc_macro_f1, {"init_y_pred": "greedy"}),
-    "greedy-start-block-coord-macro-f1": (bc_macro_f1, {"init_y_pred": "greedy"}),
-    "greedy-start-block-coord-cov": (bc_coverage, {"init_y_pred": "greedy"}),
+    # "greedy-macro-f1": (bc_macro_f1, {"init_y_pred": "greedy", "max_iter": 1}),
+    
+    # "find-thresholds-macro-f1-on-test": (find_thresholds_macro_f1_on_test, {}),
+    # "find-thresholds-macro-f1": (find_thresholds_macro_f1, {}),
+    # "find-thresholds-macro-f1-etu": (find_thresholds_macro_f1_etu, {}),
+
+
+    #"online-thresholds-macro-f1": (online_thresholds_macro_f1, {}),
+
+    # min tp-tn
+    # "block-coord-macro-min-tp-tn": (bc_macro_min_tp_tn, {}),
+    # "greedy-macro-min-tp-tn": (bc_macro_min_tp_tn, {"init_y_pred": "greedy", "max_iter": 1}),
+    # "online-greedy-macro-min-tp-tn": (online_greedy_macro_min_tp_tn, {}),
+
+    # "find-thresholds-macro-min-tp-tn-on-test": (find_thresholds_macro_min_tp_tn_on_test, {}),
+    # "find-thresholds-macro-min-tp-tn": (find_thresholds_macro_min_tp_tn, {}),
+    # "find-thresholds-macro-min-tp-tn-etu": (find_thresholds_macro_min_tp_tn_etu, {}),
 }
 
-# Add variants with different alpha for mixed utilities
-alphas = [
-    0.01,
-    0.05,
-    0.1,
-    0.2,
-    0.3,
-    0.4,
-    0.5,
-    0.6,
-    0.7,
-    0.8,
-    0.9,
-    0.95,
-    0.99,
-    0.995,
-    0.999,
-]
-for alpha in alphas:
-    METHODS[f"block-coord-mixed-prec-f1-alpha={alpha}-tol=1e-6"] = (
-        bc_mixed_instance_prec_macro_f1,
-        {"alpha": alpha, "tolerance": 1e-6},
-    )
-    METHODS[f"block-coord-mixed-prec-prec-alpha={alpha}-tol=1e-6"] = (
-        bc_mixed_instance_prec_macro_prec,
-        {"alpha": alpha, "tolerance": 1e-6},
-    )
-    METHODS[f"block-coord-mixed-prec-cov-alpha={alpha}-tol=1e-6"] = (
-        bc_coverage,
-        {"alpha": alpha, "tolerance": 1e-6},
-    )
-    METHODS[f"power-law-with-beta=={alpha}"] = (
-        power_law_weighted_instance,
-        {"beta": alpha},
-    )
 
 
-def calculate_and_report_metrics(y_true, y_pred, k, metrics):
+def calculate_and_report_metrics(y_true, y_preds, k, metrics):
     results = {}
     for metric, func in metrics.items():
-        value = func(y_true, y_pred)
-        results[f"{metric}@{k}"] = value
-        print(f"    {metric}@{k}: {100 * value:>5.2f}")
+        values = []
+        if not isinstance(y_preds, (list, tuple)):
+            y_preds = [y_preds]
+        for y_pred in y_preds:
+            # Check if indeed we have k predictions
+            if k > 0:
+                assert np.all(y_pred.sum(axis=1) == k)
+            value = func(y_true, y_pred)
+            values.append(value)
+        results[f"{metric}@{k}"] = np.mean(values)
+        results[f"{metric}@{k}_std"] = np.std(values)
+        print(
+            f"    {metric}@{k}: {100 * np.mean(values):>5.2f} +/- {100 * np.std(values):>5.2f}"
+        )
 
     return results
 
@@ -137,24 +124,8 @@ def calculate_and_report_metrics(y_true, y_pred, k, metrics):
 @click.option("-m", "--method", type=str, required=False, default=None)
 @click.option("-p", "--probabilities_path", type=str, required=False, default=None)
 @click.option("-l", "--labels_path", type=str, required=False, default=None)
-@click.option("-r", "--results_dir", type=str, required=False, default="results_bca3")
-@click.option(
-    "--recalculate_predictions", is_flag=True, type=bool, required=False, default=False
-)
-@click.option(
-    "--recalculate_results", is_flag=True, type=bool, required=False, default=False
-)
-def main(
-    experiment,
-    k,
-    seed,
-    method,
-    probabilities_path,
-    labels_path,
-    results_dir,
-    recalculate_predictions,
-    recalculate_results,
-):
+@click.option("-r", "--results_dir", type=str, required=False, default="results_bca4")
+def main(experiment, k, seed, method, probabilities_path, labels_path, results_dir):
     print(experiment)
 
     if method is None:
@@ -182,39 +153,18 @@ def main(
 
     train_y_true_path = None
     train_y_proba_path = None
+    valid_y_true_path = None
+    valid_y_proba_path = None
     train_y_true = None
     train_y_proba = None
-
-    y_proba_path = {
-        "path": probabilities_path,
-        "load_func": load_txt_sparse_pred,
-    }
-    y_true_path = {
-        "path": labels_path,
-        "load_func": load_txt_labels,
-    }
+    valid_y_true = None
+    valid_y_proba = None
 
     # Predefined experiments
-    if "yeast_plt" in experiment:
-        # yeast - PLT
+    if "youtube_deepwalk_plt" in experiment:
         xmlc_data_load_config["header"] = False
         y_proba_path = {
-            "path": f"predictions/yeast_top_200_{plt_loss}",
-            "load_func": load_txt_sparse_pred,
-        }
-        y_true_path = {
-            "path": "datasets/yeast/yeast_test.txt",
-            "load_func": load_txt_labels,
-        }
-        train_y_true_path = {
-            "path": "datasets/yeast/yeast_train.txt",
-            "load_func": load_txt_labels,
-        }
-
-    elif "youtube_deepwalk_plt" in experiment:
-        xmlc_data_load_config["header"] = False
-        y_proba_path = {
-            "path": f"predictions/youtube_deepwalk_top_200_{plt_loss}",
+            "path": f"predictions/youtube_deepwalk2_top_100_{plt_loss}",
             "load_func": load_txt_sparse_pred,
         }
         y_true_path = {
@@ -225,11 +175,15 @@ def main(
             "path": "datasets/youtube_deepwalk/youtube_deepwalk_train.svm",
             "load_func": load_txt_labels,
         }
+        train_y_proba_path = {
+            "path": f"predictions/youtube_deepwalk2_train_top_100_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
 
     elif "eurlex_lexglue_plt" in experiment:
         xmlc_data_load_config["header"] = False
         y_proba_path = {
-            "path": f"predictions/eurlex_lexglue_top_200_{plt_loss}",
+            "path": f"predictions/eurlex_lexglue2_top_100_{plt_loss}",
             "load_func": load_txt_sparse_pred,
         }
         y_true_path = {
@@ -240,12 +194,16 @@ def main(
             "path": "datasets/eurlex_lexglue/eurlex_lexglue_train.svm",
             "load_func": load_txt_labels,
         }
+        train_y_proba_path = {
+            "path": f"predictions/eurlex_lexglue2_train_top_100_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
 
     elif "mediamill_plt" in experiment:
         # mediamill - PLT
         xmlc_data_load_config["header"] = False
         y_proba_path = {
-            "path": f"predictions/mediamill_top_200_{plt_loss}",
+            "path": f"predictions/mediamill2_top_100_{plt_loss}",
             "load_func": load_txt_sparse_pred,
         }
         y_true_path = {
@@ -256,11 +214,15 @@ def main(
             "path": "datasets/mediamill/mediamill_train.txt",
             "load_func": load_txt_labels,
         }
+        train_y_proba_path = {
+            "path": f"predictions/mediamill2_train_top_100_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
 
     elif "flicker_deepwalk_plt" in experiment:
         xmlc_data_load_config["header"] = False
         y_proba_path = {
-            "path": f"predictions/flicker_deepwalk_top_200_{plt_loss}",
+            "path": f"predictions/flicker_deepwalk2_top_100_{plt_loss}",
             "load_func": load_txt_sparse_pred,
         }
         y_true_path = {
@@ -271,11 +233,15 @@ def main(
             "path": "datasets/flicker_deepwalk/flicker_deepwalk_train.svm",
             "load_func": load_txt_labels,
         }
+        train_y_proba_path = {
+            "path": f"predictions/flicker_deepwalk2_train_top_100_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
 
     elif "rcv1x_plt" in experiment:
         # RCV1X - PLT + XMLC repo data
         y_proba_path = {
-            "path": f"predictions/rcv1x_top_200_{plt_loss}",
+            "path": f"predictions/rcv1x2_top_100_{plt_loss}",
             "load_func": load_txt_sparse_pred,
         }
         y_true_path = {
@@ -286,11 +252,15 @@ def main(
             "path": "datasets/rcv1x/rcv1x_train.txt",
             "load_func": load_txt_labels,
         }
+        train_y_proba_path = {
+            "path": f"predictions/rcv1x2_train_top_100_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
 
     elif "eurlex_plt" in experiment:
         # Eurlex - PLT + XMLC repo data
         y_proba_path = {
-            "path": f"predictions/eurlex_top_200_{plt_loss}",
+            "path": f"predictions/eurlex2_top_100_{plt_loss}",
             "load_func": load_txt_sparse_pred,
         }
         y_true_path = {
@@ -301,11 +271,15 @@ def main(
             "path": "datasets/eurlex/eurlex_train.txt",
             "load_func": load_txt_labels,
         }
+        train_y_proba_path = {
+            "path": f"predictions/eurlex2_train_top_100_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
 
     elif "amazoncat_plt" in experiment:
         # AmazonCat - PLT + XMLC repo data
         y_proba_path = {
-            "path": f"predictions/amazonCat_top_200_{plt_loss}",
+            "path": f"predictions/amazonCat2_top_100_{plt_loss}",
             "load_func": load_txt_sparse_pred,
         }
         y_true_path = {
@@ -316,11 +290,15 @@ def main(
             "path": "datasets/amazonCat/amazonCat_train.txt",
             "load_func": load_txt_labels,
         }
+        train_y_proba_path = {
+            "path": f"predictions/amazonCat2_train_top_100_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
 
     elif "wiki10_plt" in experiment:
         # Wiki10 - PLT + XMLC repo data
         y_proba_path = {
-            "path": f"predictions/wiki10_top_200_{plt_loss}",
+            "path": f"predictions/wiki102_top_100_{plt_loss}",
             "load_func": load_txt_sparse_pred,
         }
         y_true_path = {
@@ -331,20 +309,9 @@ def main(
             "path": "datasets/wiki10/wiki10_train.txt",
             "load_func": load_txt_labels,
         }
-
-    elif "amazon_plt" in experiment:
-        # Amazon - PLT + XMLC repo data
-        y_proba_path = {
-            "path": f"predictions/amazon_top_200_{plt_loss}",
+        train_y_proba_path = {
+            "path": f"predictions/wiki102_train_top_100_{plt_loss}",
             "load_func": load_txt_sparse_pred,
-        }
-        y_true_path = {
-            "path": "datasets/amazon/amazon_test.txt",
-            "load_func": load_txt_labels,
-        }
-        train_y_true_path = {
-            "path": "datasets/amazon/amazon_train.txt",
-            "load_func": load_txt_labels,
         }
 
     elif "eurlex_lightxml" in experiment:
@@ -488,6 +455,14 @@ def main(
         with Timer():
             train_y_proba = load_cache_npz_file(**train_y_proba_path)
 
+    if valid_y_true_path is not None:
+        with Timer():
+            valid_y_true = load_cache_npz_file(**valid_y_true_path)
+
+    if valid_y_proba_path is not None:
+        with Timer():
+            valid_y_proba = load_cache_npz_file(**valid_y_proba_path)
+
     # For some sparse format this resize might be necessary
     if y_true.shape != y_proba.shape:
         if y_true.shape[0] != y_proba.shape[0]:
@@ -496,11 +471,11 @@ def main(
             )
         align_dim1(y_true, y_proba)
 
-    # Calculate marginals and propensities
+    # Calculate priors and propensities
     with Timer():
-        print("Calculating marginals and propensities")
-        marginals = labels_priors(train_y_true)
-        # marginals = labels_priors(y_true)
+        print("Calculating priors and propensities")
+        priors = labels_priors(train_y_true)
+        # priors = labels_priors(y_true)
         inv_ps = jpv_inverse_propensity(train_y_true)
 
     if "apply_sigmoid" in y_proba_path and y_proba_path["apply_sigmoid"]:
@@ -519,39 +494,48 @@ def main(
         print(f"train_y_proba: type={type(train_y_proba)}, shape={train_y_proba.shape}")
 
     # Convert to array to check if it gives the same results
-    # y_true = y_true.toarray()
-    # y_proba = y_proba.toarray()
+    y_true = y_true.toarray()
+    y_proba = y_proba.toarray()
+    train_y_true = train_y_true.toarray()
+    train_y_proba = train_y_proba.toarray()
+    y_proba_copy = y_proba.copy()
     # train_y_true = train_y_true.toarray()
 
-    output_path_prefix = f"{results_dir}/{experiment}/"
+    output_path_prefix = f"results_online2/{experiment}/"
     os.makedirs(output_path_prefix, exist_ok=True)
     for method, func in methods.items():
-        print(f"{experiment} - {method} @ {k} (seed {seed}): ")
+        print(f"{experiment} - {method} @ {k}: ")
 
         output_path = f"{output_path_prefix}{method}_k={k}_s={seed}"
         results_path = f"{output_path}_results.json"
         pred_path = f"{output_path}_pred.npz"
 
-        func[1]["return_meta"] = True  # Include meta data in results
-        # func[1]["verbose"] = True
-        if not os.path.exists(results_path) or recalculate_results:
+        func[1]["return_meta"] = True  # Include meta data in result
+        func[1]["y_true"] = y_true
+        func[1]["y_true_valid"] = train_y_true
+        func[1]["y_proba_valid"] = train_y_proba
+
+        if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
             results = {}
-            if not os.path.exists(pred_path) or recalculate_predictions:
+            if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
                 y_pred, meta = func[0](
                     y_proba,
                     k,
-                    marginals=marginals,
+                    priors=priors,
                     inv_ps=inv_ps,
                     seed=seed,
                     **func[1],
                 )
+
+                #print(y_proba[-1], y_proba_copy[-1])
+
                 results.update(meta)
                 print(f"  Iters: {meta['iters']}")
                 print(f"  Time: {meta['time']:>5.2f} s")
-                save_npz_wrapper(pred_path, y_pred)
+                #save_npz_wrapper(pred_path, y_pred)
                 save_json(results_path, results)
             else:
-                y_pred = load_npz_wrapper(pred_path)
+                #y_pred = load_npz_wrapper(pred_path)
                 results = load_json(results_path)
 
             print("  Metrics (%):")

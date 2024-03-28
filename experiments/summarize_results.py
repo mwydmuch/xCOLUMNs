@@ -72,7 +72,11 @@ def output_results(
                                         v *= 100
                                     else:
                                         v = [x * 100 for x in v]
-                                method_results[r].append(v)
+
+                                if isinstance(v, (tuple, list)):
+                                    method_results[r].extend(v)
+                                else:
+                                    method_results[r].append(v)
 
                 # print(method_results)
 
@@ -156,7 +160,8 @@ def output_results(
 
                 if output_format == "md":
                     # Write header
-                    if e_i == 0 and i == 0 and write_flags == "w":
+                    if i == 0:
+                        file.write(f"\n\n{e}:\n")
                         line = (
                             "| "
                             + " | ".join(
@@ -199,15 +204,19 @@ def output_results(
                     file.write(f"{line}\n")
 
 
+os.makedirs("summarized_results", exist_ok=True)
+
+########################################################################################
+# NeurIPS Paper (ETU+BCA)
+########################################################################################
+
 PRECISION = 4
-FORMAT = "md"
+FORMAT = "txt"
 COLUMNS = []
 SELECT_BEST = True
-ADD_STD = False
-os.makedirs("results_txt", exist_ok=True)
+ADD_STD = True
 
-# ETU+BCA paper
-K = (3, 5)
+K = (3, 5, 10)
 SEEDS = (13, 26, 42, 1993, 2023)
 for k in K:
     COLUMNS.extend(
@@ -223,12 +232,13 @@ for k in K:
         ]
     )
 
+# First draft version
 experiments = [
-    "results_bca3/eurlex_lightxml",
-    "results_bca/wiki10_lightxml",
-    "results_bca/amazoncat_lightxml",
-    "results_bca/wiki500_1000_lightxml",
-    "results_bca/amazon_1000_lightxml",
+    "results/bca_neurips/eurlex_lightxml",
+    "results/bca_neurips/wiki10_lightxml",
+    "results/bca_neurips/amazoncat_lightxml",
+    "results/bca_neurips/wiki500_1000_lightxml",
+    "results/bca_neurips/amazon_1000_lightxml",
 ]
 main_methods = {
     "/optimal-instance-prec": "\\inftopk",
@@ -243,8 +253,29 @@ main_methods = {
     "/block-coord-cov-tol=1e-7": "\\infbccov",
 }
 
+# NeurIPS version
+experiments = [
+    "results/bca_neurips/eurlex_lightxml",
+    "results/bca_neurips/wiki10_lightxml",
+    "results/bca_neurips/amazoncat_lightxml",
+    "results/bca_neurips/wiki500_1000_lightxml",
+    "results/bca_neurips/amazon_1000_lightxml",
+]
+main_methods = {
+    "/optimal-instance-prec": "\\inftopk",
+    "/optimal-instance-ps-prec": "\\infpstopk",
+    "/power-law-with-beta=0.5": "\\infpower",
+    "/log": "\\inflog",
+    # ---
+    "/block-coord-macro-prec-tol=1e-6": "\\infbcmacp",
+    # "/optimal-macro-recall": "\\infmacr",
+    "/block-coord-macro-recall-tol=1e-6": "\\infbcmacr",
+    "/block-coord-macro-f1-tol=1e-6": "\\infbcmacf",
+    "/block-coord-cov-tol=1e-6": "\\infbccov",
+}
+
 output_results(
-    "results_txt/lightxml_main_str",
+    "summarized_results/bc_lightxml_main_str",
     FORMAT,
     experiments,
     main_methods,
@@ -275,7 +306,7 @@ extended_methods = {
 }
 
 output_results(
-    "results_txt/lightxml_extended_str",
+    "summarized_results/bc_lightxml_extended_str",
     FORMAT,
     experiments,
     extended_methods,
@@ -289,11 +320,11 @@ output_results(
 
 K = (3, 5)
 experiments = [
-    "results_bca/amazoncat_lightxml",
-    "results_bca/wiki500_lightxml",
-    "results_bca/wiki500_1000_lightxml",
-    "results_bca/amazon_lightxml",
-    "results_bca/amazon_1000_lightxml",
+    "results/bca_neurips/amazoncat_lightxml",
+    "results/bca_neurips/wiki500_lightxml",
+    "results/bca_neurips/wiki500_1000_lightxml",
+    "results/bca_neurips/amazon_lightxml",
+    "results/bca_neurips/amazon_1000_lightxml",
 ]
 methods = {
     # "/greedy-macro-prec": "\\infgreedymacp",
@@ -314,7 +345,7 @@ methods = {
 }
 
 output_results(
-    "results_txt/lightxml_params_str",
+    "summarized_results/bc_lightxml_params_str",
     FORMAT,
     experiments,
     methods,
@@ -327,13 +358,23 @@ output_results(
 )
 
 
-# PU+FW paper
+########################################################################################
+# ICLR paper (PU + FW)
+########################################################################################
+
+
+PRECISION = 4
+COLUMNS = []
+SELECT_BEST = True
 ADD_STD = False
+
+
 SEEDS = (21,)
+SEEDS = (21, 42, 63, 84, 105, 126, 147, 168, 189, 210)
 experiments = [
-    "results_fw/mediamill",
-    "results_fw/flicker_deepwalk",
-    "results_fw/rcv1x",
+    "results/fw_iclr_camera_ready/mediamill",
+    "results/fw_iclr_camera_ready/flicker_deepwalk",
+    "results/fw_iclr_camera_ready/rcv1x",
 ]
 K = (3, 5, 10)
 COLUMNS = []
@@ -341,34 +382,61 @@ for k in K:
     COLUMNS.extend([f"iP@{k}", f"iR@{k}", f"mP@{k}", f"mR@{k}", f"mF@{k}"])
 methods = {
     "_pytorch_bce/frank-wolfe-macro-prec-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp$_{\\text{-top-k}}$",
-    "_pytorch_bce/frank-wolfe-macro-prec_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp$_{\\text{-rnd}}$",
+    "_pytorch_bce/frank-wolfe-macro-prec-topk_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp$_{\\text{-rnd}}$",
+    "_pytorch_bce/frank-wolfe-macro-prec-classic_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp cls",
     "_pytorch_bce/frank-wolfe-macro-recall-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr$_{\\text{-top-k}}$",
-    "_pytorch_bce/frank-wolfe-macro-recall_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr$_{\\text{-rnd}}$",
-    "_pytorch_bce/frank-wolfe-macro-f1_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf$_{\\text{-top-k}}$",
+    "_pytorch_bce/frank-wolfe-macro-recall-topk_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr$_{\\text{-rnd}}$",
+    "_pytorch_bce/frank-wolfe-macro-recall-classic_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr cls",
+    "_pytorch_bce/frank-wolfe-macro-f1-topk_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf$_{\\text{-top-k}}$",
     "_pytorch_bce/frank-wolfe-macro-f1-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf$_{\\text{-rnd}}$",
+    "_pytorch_bce/frank-wolfe-macro-f1-classic_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf cls",
 }
 
-# output_results("results_txt/fw-topk-vs-random-str", FORMAT, experiments, methods, COLUMNS, K, SEEDS, SELECT_BEST, ADD_STD, PRECISION)
+output_results(
+    "summarized_results/fw-topk-vs-random-str",
+    FORMAT,
+    experiments,
+    methods,
+    COLUMNS,
+    K,
+    SEEDS,
+    SELECT_BEST,
+    ADD_STD,
+    PRECISION,
+)
 
-experiments = ["results_fw/amazoncat"]
-SEEDS = (13,)
+experiments = ["results/fw_iclr_camera_ready/amazoncat"]
+# SEEDS = (13,)
+# SEEDS = (21, 42, 63)
 methods = {
     "_plt/frank-wolfe-macro-prec-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp$_{\\text{-top-k}}$",
-    "_plt/frank-wolfe-macro-prec_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp$_{\\text{-rnd}}$",
+    "_plt/frank-wolfe-macro-prec-topk_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp$_{\\text{-rnd}}$",
     "_plt/frank-wolfe-macro-recall-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr$_{\\text{-top-k}}$",
-    "_plt/frank-wolfe-macro-recall_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr$_{\\text{-rnd}}$",
-    "_plt/frank-wolfe-macro-f1_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf$_{\\text{-top-k}}$",
+    "_plt/frank-wolfe-macro-recall-topk_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr$_{\\text{-rnd}}$",
+    "_plt/frank-wolfe-macro-f1-topk_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf$_{\\text{-top-k}}$",
     "_plt/frank-wolfe-macro-f1-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf$_{\\text{-rnd}}$",
 }
 
-# output_results("results_txt/fw-topk-vs-random-str", FORMAT, experiments, methods, COLUMNS, K, SEEDS, SELECT_BEST, ADD_STD, PRECISION, write_flags="a")
+output_results(
+    "summarized_results/fw-topk-vs-random-str",
+    FORMAT,
+    experiments,
+    methods,
+    COLUMNS,
+    K,
+    SEEDS,
+    SELECT_BEST,
+    ADD_STD,
+    PRECISION,
+    write_flags="a",
+)
 
 
 SEEDS = (21,)
 experiments = [
-    "results_fw/mediamill",
-    "results_fw/flicker_deepwalk",
-    "results_fw/rcv1x",
+    "results/fw_iclr_camera_ready/mediamill",
+    "results/fw_iclr_camera_ready/flicker_deepwalk",
+    # "results/fw_iclr_camera_ready/rcv1x",
 ]
 methods = {
     "_pytorch_bce/frank-wolfe-macro-prec_k={}_s={}_t=0.5_r=0.0": "\\inffwmacp$_{\\text{-50/50}}$",
@@ -382,35 +450,8 @@ methods = {
     "_pytorch_bce/frank-wolfe-macro-f1_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf$_{\\text{-100/100}}$",
 }
 
-# output_results("results_txt/fw-splits-str", FORMAT, experiments, methods, COLUMNS, K, SEEDS, SELECT_BEST, ADD_STD, PRECISION)
-
-
-# Only balanced accuracy
-os.makedirs("results_md", exist_ok=True)
-
-ADD_STD = False
-FORMAT = "md"
-K = (3, 5, 10)
-COLUMNS = []
-for k in K:
-    COLUMNS.extend([f"mBA@{k}"])
-experiments = [
-    "results_fw/mediamill",
-    "results_fw/flicker_deepwalk",
-    "results_fw/rcv1x",
-]
-methods = {
-    "_pytorch_bce/fw-split-optimal-instance-prec_k={}_s={}_t=0.0_r=0.0": "Top-K",
-    "_pytorch_bce/fw-split-power-law-with-beta=0.5_k={}_s={}_t=0.0_r=0.0": "Top-K + $w^{\\text{POW}}$",
-    "_pytorch_bce/fw-split-log_k={}_s={}_t=0.0_r=0.0": "Top-K + $w^{\\text{LOG}}$",
-    "_pytorch_focal/fw-split-optimal-instance-prec_k={}_s={}_t=0.0_r=0.0": "Top-K + $\\ell_{\\text{FOCAL}}$",
-    "_pytorch_asym/fw-split-optimal-instance-prec_k={}_s={}_t=0.0_r=0.0": "Top-K + $\\ell_{\\text{ASYM}}$",
-    "_pytorch_bce/fw-split-optimal-macro-balanced-acc_k={}_s={}_t=0.0_r=0.0": "Macro-BA$_{PRIOR}$",
-    "_pytorch_bce/frank-wolfe-macro-balanced-acc_k={}_s={}_t=0.0_r=0.0": "Macro-BA$_{FW}$",
-}
-
 output_results(
-    "results_md/fw-balance-acc",
+    "summarized_results/fw-splits-str",
     FORMAT,
     experiments,
     methods,
@@ -422,18 +463,54 @@ output_results(
     PRECISION,
 )
 
-SEEDS = (13,)
-experiments = ["results_fw/amazoncat"]
+SELECT_BEST = False
+ADD_STD = False
+SEEDS = (21, 42, 63, 84, 105, 126, 147, 168, 189, 210)
+K = (3, 5, 10)
+COLUMNS = []
+for k in K:
+    COLUMNS.extend([f"iP@{k}", f"iR@{k}", f"mP@{k}", f"mR@{k}", f"mF@{k}", f"mBA@{k}"])
+experiments = [
+    "results/fw_iclr_camera_ready/mediamill",
+    "results/fw_iclr_camera_ready/flicker_deepwalk",
+    "results/fw_iclr_camera_ready/rcv1x",
+]
 methods = {
-    "_plt/fw-split-optimal-instance-prec_k={}_s={}_t=0.0_r=0.0": "Top-K",
-    "_plt/fw-split-power-law-with-beta=0.5_k={}_s={}_t=0.0_r=0.0": "Top-K + $w^{\\text{POW}}$",
-    "_plt/fw-split-log_k={}_s={}_t=0.0_r=0.0": "Top-K + $w^{\\text{LOG}}$",
-    "_plt/fw-split-optimal-macro-balanced-acc_k={}_s={}_t=0.0_r=0.0": "Macro-BA$_{PRIOR}$",
-    "_plt/frank-wolfe-macro-balanced-acc_k={}_s={}_t=0.0_r=0.0": "Macro-BA$_{FW}$",
+    # "_pytorch_bce/fw-split-optimal-instance-prec_k={}_s={}_t=0.0_r=0.0": "Top-K",
+    # "_pytorch_bce/fw-split-power-law-with-beta=0.5_k={}_s={}_t=0.0_r=0.0": "Top-K + $w^{\\text{POW}}$",
+    # "_pytorch_bce/fw-split-log_k={}_s={}_t=0.0_r=0.0": "Top-K + $w^{\\text{LOG}}$",
+    # "_pytorch_focal/fw-split-optimal-instance-prec_k={}_s={}_t=0.0_r=0.0": "Top-K + $\\ell_{\\text{FOCAL}}$",
+    # "_pytorch_asym/fw-split-optimal-instance-prec_k={}_s={}_t=0.0_r=0.0": "Top-K + $\\ell_{\\text{ASYM}}$",
+    "_pytorch_bce/fw-split-optimal-macro-balanced-acc_k={}_s={}_t=0.0_r=0.0": "\\infmacba",
+    "_pytorch_bce/frank-wolfe-macro-balanced-acc_k={}_s={}_t=0.0_r=0.0": "\\inffwmacba",
 }
 
 output_results(
-    "results_md/fw-balance-acc",
+    "summarized_results/fw-balance-acc",
+    FORMAT,
+    experiments,
+    methods,
+    COLUMNS,
+    K,
+    SEEDS,
+    SELECT_BEST,
+    ADD_STD,
+    PRECISION,
+)
+
+# SEEDS = (13,)
+# SEEDS = (21, 42, 63)
+experiments = ["results/fw_iclr_camera_ready/amazoncat"]
+methods = {
+    # "_plt/fw-split-optimal-instance-prec_k={}_s={}_t=0.0_r=0.0": "Top-K",
+    # "_plt/fw-split-power-law-with-beta=0.5_k={}_s={}_t=0.0_r=0.0": "Top-K + $w^{\\text{POW}}$",
+    # "_plt/fw-split-log_k={}_s={}_t=0.0_r=0.0": "Top-K + $w^{\\text{LOG}}$",
+    "_plt/fw-split-optimal-macro-balanced-acc_k={}_s={}_t=0.0_r=0.0": "\\infmacba",
+    "_plt/frank-wolfe-macro-balanced-acc_k={}_s={}_t=0.0_r=0.0": "\\inffwmacba",
+}
+
+output_results(
+    "summarized_results/fw-balance-acc",
     FORMAT,
     experiments,
     methods,
@@ -447,24 +524,33 @@ output_results(
 )
 
 
-SEEDS = (21,)
+ADD_STD = True
+SEEDS = (21, 42, 63, 84, 105, 126, 147, 168, 189, 210)
 K = (3, 5, 10)
 COLUMNS = []
 for k in K:
     COLUMNS.extend([f"time@{k}", f"iters@{k}"])
 experiments = [
-    "results_fw/mediamill",
-    "results_fw/flicker_deepwalk",
-    "results_fw/rcv1x",
+    "results/fw_iclr_camera_ready/mediamill",
+    "results/fw_iclr_camera_ready/flicker_deepwalk",
+    "results/fw_iclr_camera_ready/rcv1x",
 ]
 methods = {
-    "_pytorch_bce/frank-wolfe-macro-prec_k={}_s={}_t=0.0_r=0.0": "Macro-P$_{FW}$",
-    "_pytorch_bce/frank-wolfe-macro-recall_k={}_s={}_t=0.0_r=0.0": "Macro-R$_{FW}$",
-    "_pytorch_bce/frank-wolfe-macro-f1_k={}_s={}_t=0.0_r=0.0": "Macro-F1$_{FW}$",
+    # "_pytorch_bce/frank-wolfe-macro-prec-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp$_{\\text{-rnd init.}}$",
+    # "_pytorch_bce/frank-wolfe-macro-prec-topk_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp$_{\\text{-top-k init.}}$",
+    # "_pytorch_bce/frank-wolfe-macro-recall-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr$_{\\text{-rnd init.}}$",
+    # "_pytorch_bce/frank-wolfe-macro-recall-topk_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr$_{\\text{-top-k init.}}$",
+    # "_pytorch_bce/frank-wolfe-macro-f1-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf$_{\\text{-rnd init.}}$",
+    # "_pytorch_bce/frank-wolfe-macro-f1-topk_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf$_{\\text{-top-k init.}}$",
+    # "_pytorch_bce/frank-wolfe-macro-balanced-acc-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacbc$_{\\text{-rnd init.}}$",
+    # "_pytorch_bce/frank-wolfe-macro-balanced-acc-topk_k={}_s={}_t=0.0_r=0.0": "\\inffwmacbc$_{\\text{-top-k init.}}$",
+    "_pytorch_bce/frank-wolfe-macro-prec-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp",
+    "_pytorch_bce/frank-wolfe-macro-recall-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr",
+    "_pytorch_bce/frank-wolfe-macro-f1-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf",
 }
 
 output_results(
-    "results_md/fw-time-iter",
+    "summarized_results/fw-time-iter",
     FORMAT,
     experiments,
     methods,
@@ -476,16 +562,18 @@ output_results(
     PRECISION,
 )
 
-SEEDS = (13,)
-experiments = ["results_fw/amazoncat"]
+# SEEDS = (13,)
+# SEEDS = (21, 42, 63)
+experiments = ["results/fw_iclr_camera_ready/amazoncat"]
 methods = {
-    "_plt/frank-wolfe-macro-prec_k={}_s={}_t=0.0_r=0.0": "Macro-P$_{FW}$",
-    "_plt/frank-wolfe-macro-recall_k={}_s={}_t=0.0_r=0.0": "Macro-R$_{FW}$",
-    "_plt/frank-wolfe-macro-f1_k={}_s={}_t=0.0_r=0.0": "Macro-F1$_{FW}$",
+    "_plt/frank-wolfe-macro-prec-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacp",
+    "_plt/frank-wolfe-macro-recall-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacr",
+    "_plt/frank-wolfe-macro-f1-rnd_k={}_s={}_t=0.0_r=0.0": "\\inffwmacf",
+    # "_plt/frank-wolfe-macro-balanced-acc_k={}_s={}_t=0.0_r=0.0": "\\inffwmacbc",
 }
 
 output_results(
-    "results_md/fw-time-iter",
+    "summarized_results/fw-time-iter",
     FORMAT,
     experiments,
     methods,
@@ -497,6 +585,9 @@ output_results(
     PRECISION,
     write_flags="a",
 )
+
+
+exit()
 
 
 SEEDS = (21,)
@@ -567,7 +658,7 @@ output_results(
 )
 
 SEEDS = (21,)
-experiments = ["results_fw/amazoncat"]
+experiments = ["results/fw_iclr_camera_ready/amazoncat"]
 methods = {
     "_plt/fw-split-optimal-instance-prec_k={}_s={}_t=0.0_r=0.0": "Top-K",
     "_plt/fw-split-power-law-with-beta=0.5_k={}_s={}_t=0.0_r=0.0": "Top-K + $w^{\\text{POW}}$",
