@@ -179,6 +179,7 @@ def predict_top_k(
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
     r"""
     Predicts the top **k** labels for each instance (row) in a provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**).
+    This is optimal inference strategy for precision at k and nDCG at k.
     It is equivalent to calling ``predict_weighted_per_instance(y_proba, k=k, a=None, b=None, return_meta=return_meta)``.
 
     Args:
@@ -201,9 +202,9 @@ def predict_optimizing_macro_recall(
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
     r"""
-    Predicts the top **k** labels for each instance (row)
-    in a provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**).
-    The return prediction optimizes macro-averaged recall
+    Predicts the **k** labels for each instance (row)
+    in a provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**),
+    such that the prediction optimizes macro-averaged recall
     for the population with the given prior probabilities of labels (**priors**).
     It is equivalent to calling ``predict_weighted_per_instance(y_proba, k=k, a=1.0 / (priors + epsilon), return_meta=return_meta)``.
 
@@ -289,9 +290,9 @@ def predict_optimizing_macro_balanced_accuracy(
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
     r"""
-    Predicts labels for each instance (row)
-    in provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**).
-    Such that the prediction at **k** optimizes macro-averaged balanced accuracy
+    Predicts the **k** labels for each instance (row)
+    in a provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**),
+    such that the prediction at **k** optimizes macro-averaged balanced accuracy
     for the population with the given prior probabilities of labels (**priors**).
 
     Args:
@@ -386,7 +387,7 @@ def predict_power_law_weighted_per_instance(
 
     where :math:`\pi` (**priors**) is the prior probability of each label, :math:`\beta` (beta) is power parameter and :math:`\epsilon` (**epsilon**) is a small value to avoid division by zero.
 
-    It is equivalent to calling ``predict_weighted_per_instance(y_proba, k=k, a= (priors + epsilon) ** -beta, return_meta=return_meta)``.
+    It is equivalent to calling ``predict_weighted_per_instance(y_proba, k=k, a=(priors + epsilon) ** -beta, return_meta=return_meta)``.
 
     Args:
         y_proba: A 2D matrix of conditional probabilities for each label.
@@ -413,6 +414,21 @@ def predict_optimizing_instance_precision(
     k: int,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
+    r"""
+    Predicts the top **k** labels for each instance (row) in a provided matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**).
+    This is optimal inference strategy for precision at k and nDCG at k.
+
+    Args:
+        y_proba: A 2D matrix of conditional probabilities for each label.
+        k: The number of labels to predict for each instance.
+        priors: The prior probabilities for each label.
+        beta: The power parameter.
+        epsilon: A small value to avoid division by zero when calculating inverse of priors.
+        return_meta: Whether to return meta data.
+
+    Result
+        The prediction matrix, with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+    """
     if k <= 0:
         raise ValueError("k must be > 0")
 

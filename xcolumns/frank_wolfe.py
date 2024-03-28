@@ -9,7 +9,7 @@ from .confusion_matrix import calculate_confusion_matrix
 from .metrics import *
 from .numba_csr_functions import numba_predict_weighted_per_instance_csr_step
 from .types import TORCH_AVAILABLE, DefaultDataDType, DenseMatrix, DType, Matrix
-from .utils import log_info, ternary_search, uniform_search
+from .utils import log_info, log_warning, ternary_search, uniform_search
 from .weighted_prediction import predict_weighted_per_instance
 
 
@@ -275,7 +275,7 @@ def _find_best_alpha(
         raise ValueError(f"Unknown search algorithm {search_algo}")
 
 
-def find_optimal_randomized_classifier_using_frank_wolfe(
+def find_classifier_using_fw(
     y_true: Matrix,
     y_proba: Matrix,
     metric_func: Callable,
@@ -465,3 +465,89 @@ def find_optimal_randomized_classifier_using_frank_wolfe(
         )
     else:
         return rnd_classifier
+
+
+########################################################################################
+# Wrapper functions for specific metrics
+########################################################################################
+
+
+def make_frank_wolfe_wrapper(
+    metric_func: Callable,
+    metric_name: str,
+    maximize: bool = True,
+    skip_tn: bool = False,
+    warn_k_eq_0: bool = False,
+):
+    def find_classifier_for_metric_using_fw(
+        y_true: Matrix, y_proba: Matrix, k: int, **kwargs
+    ):
+        if warn_k_eq_0 and k == 0:
+            log_warning(
+                f"Warning: k=0 results in degenerated solution for {metric_name}!",
+            )
+
+        return find_classifier_using_fw(
+            y_true,
+            y_proba,
+            metric_func,
+            k,
+            maximize=maximize,
+            skip_tn=skip_tn,
+            **kwargs,
+        )
+
+    find_classifier_for_metric_using_fw.__doc__ = f"""
+    Find a randomized classifier that maximizes {metric_name} metric using Frank-Wolfe algorithm.
+    It is equivalent to calling ``find_classifier_using_fw(, y_true, y_proba, {metric_func.__name__}, k, ..., maximize={maximize}, skip_tn={skip_tn})`` function.
+    See :meth:`find_classifier_using_fw` for details.
+    """
+
+    return add_kwargs_to_signature(
+        find_classifier_for_metric_using_fw,
+        find_classifier_using_fw,
+        skip=["metric_func", "maximize", "skip_tn"],
+    )
+
+
+find_classifier_optimizing_macro_precision_using_fw = make_frank_wolfe_wrapper(
+    macro_precision, "macro-averaged precision", maximize=True, skip_tn=True
+)
+find_classifier_optimizing_macro_recall_using_fw = make_frank_wolfe_wrapper(
+    macro_recall, "macro-averaged recall", maximize=True, skip_tn=True
+)
+
+find_classifier_optimizing_macro_f1_using_fw = make_frank_wolfe_wrapper(
+    macro_f1_score, "macro-averaged F1 score", maximize=True, skip_tn=True
+)
+find_classifier_optimizing_micro_f1_using_fw = make_frank_wolfe_wrapper(
+    micro_f1_score, "micro-averaged F1 score", maximize=True, skip_tn=True
+)
+
+find_classifier_optimizing_macro_jaccard_score_using_fw = make_frank_wolfe_wrapper(
+    macro_balanced_accuracy, "macro-averaged Jaccard score", maximize=True, skip_tn=True
+)
+find_classifier_optimizing_micro_jaccard_score_using_fw = make_frank_wolfe_wrapper(
+    micro_jaccard_score, "micro-averaged Jaccard score", maximize=True, skip_tn=True
+)
+
+find_classifier_optimizing_macro_balanced_accuracy_using_fw = make_frank_wolfe_wrapper(
+    macro_balanced_accuracy, "macro-averaged balanced accuracy", maximize=True
+)
+find_classifier_optimizing_micro_balanced_accuracy_using_fw = make_frank_wolfe_wrapper(
+    micro_balanced_accuracy, "micro-averaged balanced accuracy", maximize=True
+)
+
+find_classifier_optimizing_macro_hmean_using_fw = make_frank_wolfe_wrapper(
+    macro_hmean, "macro-averaged H-mean", maximize=True
+)
+find_classifier_optimizing_micro_hmean_using_fw = make_frank_wolfe_wrapper(
+    macro_hmean, "micro-averaged H-mean", maximize=True
+)
+
+find_classifier_optimizing_macro_gmean_using_fw = make_frank_wolfe_wrapper(
+    macro_gmean, "macro-averaged G-mean", maximize=True
+)
+find_classifier_optimizing_micro_gmean_using_fw = make_frank_wolfe_wrapper(
+    macro_gmean, "micro-averaged G-mean", maximize=True
+)

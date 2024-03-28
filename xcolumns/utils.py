@@ -1,5 +1,6 @@
+import inspect
 import logging
-from typing import Callable, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -179,3 +180,32 @@ def ternary_search(
     best = (low + high) / 2
     best_val = func(best)
     return best, best_val
+
+
+########################################################################################
+# Function signature utilities
+########################################################################################
+
+
+def add_kwargs_to_signature(
+    func: Callable, func_with_kwargs: Callable, skip: Optional[List] = None
+) -> Callable:
+    if skip is None:
+        skip = []
+
+    sig_with_kwargs = inspect.signature(func_with_kwargs)
+    sig_new = inspect.signature(func)
+    func.__signature__ = sig_new.replace(
+        parameters=[
+            p
+            for p in sig_new.parameters.values()
+            if p.kind != inspect.Parameter.VAR_KEYWORD
+        ]
+        + [
+            p
+            for p in sig_with_kwargs.parameters.values()
+            if p.default != inspect.Parameter.empty and p.name not in skip
+        ]
+    )
+
+    return func

@@ -15,7 +15,7 @@ from .numba_csr_functions import (
     numba_sub_from_unnormalized_confusion_matrix_csr,
 )
 from .types import TORCH_AVAILABLE, DenseMatrix, Matrix
-from .utils import log_info, ones_like, unpack_csr_matrices, zeros_like
+from .utils import log_info, log_warning, ones_like, unpack_csr_matrices, zeros_like
 from .weighted_prediction import predict_top_k
 
 

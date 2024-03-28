@@ -4,14 +4,14 @@ from pytest import _report_data_type, _test_prediction_method_with_different_typ
 from scipy.sparse import csr_matrix
 
 from xcolumns.confusion_matrix import calculate_confusion_matrix
-from xcolumns.frank_wolfe import find_optimal_randomized_classifier_using_frank_wolfe
+from xcolumns.frank_wolfe import find_classifier_using_fw
 from xcolumns.metrics import macro_recall_on_conf_matrix
 from xcolumns.weighted_prediction import predict_optimizing_macro_recall, predict_top_k
 
 
 def _run_frank_wolfe(y_val, y_proba_val, y_test, y_proba_test, k, init_a, init_b):
     _report_data_type(y_proba_val)
-    rnd_clf, meta = find_optimal_randomized_classifier_using_frank_wolfe(
+    rnd_clf, meta = find_classifier_using_fw(
         y_val,
         y_proba_val,
         macro_recall_on_conf_matrix,
@@ -38,7 +38,7 @@ def __test_frank_wolfe_arguments(generated_test_data):
     y_proba_val = generated_test_data["y_proba_val"]
 
     for init_classifier in ["random", "top"]:
-        rnd_classifier, meta = find_optimal_randomized_classifier_using_frank_wolfe(
+        rnd_classifier, meta = find_classifier_using_fw(
             y_val,
             y_proba_val,
             macro_recall_on_conf_matrix,
@@ -49,7 +49,7 @@ def __test_frank_wolfe_arguments(generated_test_data):
         )
 
     for k in [0, 3]:
-        rnd_classifier, meta = find_optimal_randomized_classifier_using_frank_wolfe(
+        rnd_classifier, meta = find_classifier_using_fw(
             y_val,
             y_proba_val,
             macro_recall_on_conf_matrix,

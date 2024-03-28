@@ -1,4 +1,3 @@
-import inspect
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
@@ -6,6 +5,7 @@ from scipy.sparse import csr_matrix
 
 from .confusion_matrix import calculate_confusion_matrix
 from .types import DenseMatrix, Matrix, Number
+from .utils import add_kwargs_to_signature
 
 
 ########################################################################################
@@ -26,25 +26,7 @@ def check_if_y_pred_at_k(y_pred: Matrix, k: int) -> None:
         raise ValueError("y_pred must have exactly k positive labels per instance")
 
 
-def _add_kwargs_to_signature(func_org: Callable, func_new) -> Callable:
-    sig_org = inspect.signature(func_org)
-    sig_new = inspect.signature(func_new)
-    func_new.__signature__ = sig_new.replace(
-        parameters=[
-            p
-            for p in sig_new.parameters.values()
-            if p.kind != inspect.Parameter.VAR_KEYWORD
-        ]
-        + [
-            p
-            for p in sig_org.parameters.values()
-            if p.default != inspect.Parameter.empty
-        ]
-    )
-    return func_new
-
-
-def _make_macro_metric_on_conf_mat(binary_metric, name) -> Callable:
+def _make_macro_metric_on_conf_matrix(binary_metric, name) -> Callable:
     def macro_metric_on_conf_matrix(
         tp: DenseMatrix,
         fp: DenseMatrix,
@@ -60,10 +42,10 @@ def _make_macro_metric_on_conf_mat(binary_metric, name) -> Callable:
     See :meth:`{binary_metric.__name__}` for definition.
     """
 
-    return _add_kwargs_to_signature(binary_metric, macro_metric_on_conf_matrix)
+    return add_kwargs_to_signature(macro_metric_on_conf_matrix, binary_metric)
 
 
-def _make_micro_metric_on_conf_mat(binary_metric, name) -> Callable:
+def _make_micro_metric_on_conf_matrix(binary_metric, metric_name) -> Callable:
     def micro_metric_on_conf_matrix(
         tp: DenseMatrix,
         fp: DenseMatrix,
@@ -74,17 +56,17 @@ def _make_micro_metric_on_conf_mat(binary_metric, name) -> Callable:
         return binary_metric(tp.sum(), fp.sum(), fn.sum(), tn.sum(), **kwargs)
 
     micro_metric_on_conf_matrix.__doc__ = f"""
-    Calculate macro-averaged {name} from the given entries of confusion matrix:
+    Calculate macro-averaged {metric_name} from the given entries of confusion matrix:
     true positives, false positives, false negatives, and true negatives.
 
     See :meth:`{binary_metric.__name__}` for definition.
     """
 
-    return _add_kwargs_to_signature(binary_metric, micro_metric_on_conf_matrix)
+    return add_kwargs_to_signature(micro_metric_on_conf_matrix, binary_metric)
 
 
 def _make_metric_on_y_true_and_y_pred(
-    metric_on_conf_matrix, name, skip_tn=False
+    metric_on_conf_matrix, metric_name, skip_tn=False
 ) -> Callable:
     def metric_on_y_true_and_y_pred(
         y_true: Matrix,
@@ -95,12 +77,12 @@ def _make_metric_on_y_true_and_y_pred(
         return metric_on_conf_matrix(*C, **kwargs)
 
     metric_on_y_true_and_y_pred.__doc__ = f"""
-    Calculate {name} matric from the given true and predicted labels.
+    Calculate {metric_name} matric from the given true and predicted labels.
 
     See :meth:`{metric_on_conf_matrix.__name__}` for definition.
     """
 
-    return _add_kwargs_to_signature(metric_on_conf_matrix, metric_on_y_true_and_y_pred)
+    return add_kwargs_to_signature(metric_on_y_true_and_y_pred, metric_on_conf_matrix)
 
 
 ########################################################################################
@@ -223,10 +205,10 @@ def binary_precision_on_conf_matrix(
     return tp / (tp + fp + epsilon)
 
 
-macro_precision_on_conf_matrix = _make_macro_metric_on_conf_mat(
+macro_precision_on_conf_matrix = _make_macro_metric_on_conf_matrix(
     binary_precision_on_conf_matrix, "precision"
 )
-micro_precision_on_conf_matrix = _make_micro_metric_on_conf_mat(
+micro_precision_on_conf_matrix = _make_micro_metric_on_conf_matrix(
     binary_precision_on_conf_matrix, "precision"
 )
 binary_precision = _make_metric_on_y_true_and_y_pred(
@@ -265,10 +247,10 @@ def binary_recall_on_conf_matrix(
     return tp / (tp + fn + epsilon)
 
 
-macro_recall_on_conf_matrix = _make_macro_metric_on_conf_mat(
+macro_recall_on_conf_matrix = _make_macro_metric_on_conf_matrix(
     binary_recall_on_conf_matrix, "recall"
 )
-micro_recall_on_conf_matrix = _make_micro_metric_on_conf_mat(
+micro_recall_on_conf_matrix = _make_micro_metric_on_conf_matrix(
     binary_recall_on_conf_matrix, "recall"
 )
 binary_recall = _make_metric_on_y_true_and_y_pred(
@@ -329,10 +311,10 @@ def binary_f1_score_on_conf_matrix(
     return binary_fbeta_score_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=epsilon)
 
 
-macro_fbeta_score_on_conf_matrix = _make_macro_metric_on_conf_mat(
+macro_fbeta_score_on_conf_matrix = _make_macro_metric_on_conf_matrix(
     binary_fbeta_score_on_conf_matrix, "F-beta score"
 )
-micro_fbeta_score_on_conf_matrix = _make_micro_metric_on_conf_mat(
+micro_fbeta_score_on_conf_matrix = _make_micro_metric_on_conf_matrix(
     binary_fbeta_score_on_conf_matrix, "F-beta score"
 )
 binary_fbeta_score = _make_metric_on_y_true_and_y_pred(
@@ -345,10 +327,10 @@ micro_fbeta_score = _make_metric_on_y_true_and_y_pred(
     micro_fbeta_score_on_conf_matrix, "micro-averaged F-beta score", skip_tn=True
 )
 
-macro_f1_score_on_conf_matrix = _make_macro_metric_on_conf_mat(
+macro_f1_score_on_conf_matrix = _make_macro_metric_on_conf_matrix(
     binary_fbeta_score_on_conf_matrix, "F1 score"
 )
-micro_f1_score_on_conf_matrix = _make_micro_metric_on_conf_mat(
+micro_f1_score_on_conf_matrix = _make_micro_metric_on_conf_matrix(
     binary_fbeta_score_on_conf_matrix, "F1 score"
 )
 binary_f1_score = _make_metric_on_y_true_and_y_pred(
@@ -381,10 +363,10 @@ def binary_jaccard_score_on_conf_matrix(
     return tp / (tp + fp + fn + epsilon)
 
 
-macro_jaccard_score_on_conf_matrix = _make_macro_metric_on_conf_mat(
+macro_jaccard_score_on_conf_matrix = _make_macro_metric_on_conf_matrix(
     binary_jaccard_score_on_conf_matrix, "Jaccard score"
 )
-micro_jaccard_score_on_conf_matrix = _make_micro_metric_on_conf_mat(
+micro_jaccard_score_on_conf_matrix = _make_micro_metric_on_conf_matrix(
     binary_jaccard_score_on_conf_matrix, "Jaccard score"
 )
 binary_jaccard_score = _make_metric_on_y_true_and_y_pred(
@@ -399,7 +381,7 @@ micro_jaccard_score = _make_metric_on_y_true_and_y_pred(
 
 
 ########################################################################################
-# Ballanced accuracy
+# Balanced accuracy
 ########################################################################################
 
 
@@ -418,10 +400,10 @@ def binary_balanced_accuracy_on_conf_matrix(
     return (tpr + tnr) / 2
 
 
-macro_balanced_accuracy_on_conf_matrix = _make_macro_metric_on_conf_mat(
+macro_balanced_accuracy_on_conf_matrix = _make_macro_metric_on_conf_matrix(
     binary_balanced_accuracy_on_conf_matrix, "balanced accuracy"
 )
-micro_balanced_accuracy_on_conf_matrix = _make_micro_metric_on_conf_mat(
+micro_balanced_accuracy_on_conf_matrix = _make_micro_metric_on_conf_matrix(
     binary_balanced_accuracy_on_conf_matrix, "balanced accuracy"
 )
 binary_balanced_accuracy = _make_metric_on_y_true_and_y_pred(
@@ -455,10 +437,10 @@ def binary_gmean_on_conf_matrix(
     return (tpr * tnr) ** 0.5
 
 
-macro_gmean_on_conf_matrix = _make_macro_metric_on_conf_mat(
+macro_gmean_on_conf_matrix = _make_macro_metric_on_conf_matrix(
     binary_gmean_on_conf_matrix, "G-mean"
 )
-micro_gmean_on_conf_matrix = _make_micro_metric_on_conf_mat(
+micro_gmean_on_conf_matrix = _make_micro_metric_on_conf_matrix(
     binary_gmean_on_conf_matrix, "G-mean"
 )
 binary_gmean = _make_metric_on_y_true_and_y_pred(
@@ -492,10 +474,10 @@ def binary_hmean_on_conf_matrix(
     return (2 * tpr * tnr) / (tpr + tnr + 1e-6)
 
 
-macro_hmean_on_conf_matrix = _make_macro_metric_on_conf_mat(
+macro_hmean_on_conf_matrix = _make_macro_metric_on_conf_matrix(
     binary_hmean_on_conf_matrix, "H-mean"
 )
-micro_hmean_on_conf_matrix = _make_micro_metric_on_conf_mat(
+micro_hmean_on_conf_matrix = _make_micro_metric_on_conf_matrix(
     binary_hmean_on_conf_matrix, "H-mean"
 )
 binary_hmean = _make_metric_on_y_true_and_y_pred(

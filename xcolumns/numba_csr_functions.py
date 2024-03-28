@@ -355,15 +355,15 @@ def numba_resize(arr, new_size, fill) -> np.ndarray:
 
 @njit(cache=True)
 def numba_set_gains_csr(
-    y_pred_data,
-    y_pred_indices,
-    y_pred_indptr,
-    gains_data,
-    gains_indices,
-    i,
-    k,
-    th,
-    is_insert=True,
+    y_pred_data: np.ndarray,
+    y_pred_indices: np.ndarray,
+    y_pred_indptr: np.ndarray,
+    gains_data: np.ndarray,
+    gains_indices: np.ndarray,
+    i: int,
+    k: int,
+    th: float,
+    is_insert: bool = True,
 ) -> CSRMatrixAsTuple:
     """
     Sets top k gains or gains > th for the i-th instance in the y_pred csr matrix.
