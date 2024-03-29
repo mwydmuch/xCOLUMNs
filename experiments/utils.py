@@ -28,6 +28,15 @@ def align_dim1(a, b):
         b.resize((b.shape[0], new_size))
 
 
+def align_dim1_new(a, b):
+    if a.shape[1] != b.shape[1]:
+        print("  Fixing shapes ...")
+        new_size = max(a.shape[1], b.shape[1])
+        a = np.resize(a, (a.shape[0], new_size))
+        b = np.resize(b, (b.shape[0], new_size))
+    return a, b
+
+
 def loprint(array):
     print(array.shape, array.dtype, array.min(), array.max(), array.mean(), array.std())
 
@@ -285,13 +294,13 @@ def save_npz_wrapper(path: Union[str, Path], data: csr_matrix, **kwargs):
 
 
 # Store data (serialize)
-def save_pickle(path, data):
+def save_pickle(path, data, **kwargs):
     with open(path, "wb") as handle:
         pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 # Load data (deserialize)
-def load_pickle(path):
+def load_pickle(path, **kwargs):
     with open(path, "rb") as handle:
         unserialized_data = pickle.load(handle)
     return unserialized_data

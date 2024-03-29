@@ -42,7 +42,7 @@ def frank_wolfe_wrapper(
     **kwargs,
 ):
     rnd_classifier, meta = call_function_with_supported_kwargs(
-        find_optimal_randomized_classifier_using_frank_wolfe,
+        find_classifier_using_fw,
         Y_val,
         pred_val,
         utility_func,
@@ -120,7 +120,7 @@ def frank_wolfe_macro_f1(
         Y_val,
         pred_val,
         pred_test,
-        macro_fmeasure_on_conf_matrix,
+        macro_f1_score_on_conf_matrix,
         k=k,
         seed=seed,
         **kwargs,
@@ -147,7 +147,7 @@ def frank_wolfe_mixed_instance_prec_macro_f1(
     def mixed_utility_fn(tp, fp, fn, tn):
         return (1 - alpha) * precision_at_k_on_conf_matrix(
             tp, fp, fn, tn, k
-        ) + alpha * macro_fmeasure_on_conf_matrix(tp, fp, fn, tn)
+        ) + alpha * macro_f1_score_on_conf_matrix(tp, fp, fn, tn)
 
     return frank_wolfe_wrapper(
         Y_val, pred_val, pred_test, mixed_utility_fn, k=k, seed=seed, **kwargs
