@@ -27,7 +27,7 @@ if TORCH_AVAILABLE:
         )
         return value, tp_grad, fp_grad, fn_grad, tn_grad
 
-    def _predict_using_randomized_classifier_torch(
+    def _predict_using_randomized_weighted_classifier_torch(
         y_proba: torch.Tensor,
         k: int,
         classifiers_a: torch.Tensor,
@@ -64,7 +64,7 @@ if TORCH_AVAILABLE:
 ########################################################################################
 
 
-def _predict_using_randomized_classifier_np(
+def _predict_using_randomized_weighted_classifier_np(
     y_proba: np.ndarray,
     k: int,
     classifiers_a: np.ndarray,
@@ -92,7 +92,7 @@ def _predict_using_randomized_classifier_np(
     return y_pred
 
 
-def _predict_using_randomized_classifier_csr(
+def _predict_using_randomized_weighted_classifier_csr(
     y_proba: csr_matrix,
     k: int,
     classifiers_a: np.ndarray,
@@ -140,7 +140,7 @@ def _predict_using_randomized_classifier_csr(
     return csr_matrix((y_pred_data, y_pred_indices, y_pred_indptr), shape=(n, m))
 
 
-def predict_using_randomized_classifier(
+def predict_using_randomized_weighted_classifier(
     y_proba: Matrix,
     k: int,
     classifiers_a: DenseMatrix,
@@ -149,6 +149,41 @@ def predict_using_randomized_classifier(
     dtype: Optional[DType] = None,
     seed: Optional[int] = None,
 ) -> Matrix:
+    r"""
+    Returns the prediction of randomized weighted classifier for each instance (row) in a provided
+    matrix of conditional probabilities estimates of labels :math:`\boldsymbol{H}`, (**y_proba**),
+    where each element :math:`\eta_{ij} = P(y_j|x_i)`
+    is the probability of the label :math:`j` for the instance :math:`i`.
+    A randomized weighted classifier is a set of weighted classifiers (**classifiers_a**, and **classifiers_b**),
+    one classifier is randomly selected and used for prediction for every instance according to the provided probabilities (**classifiers_proba**).
+
+    The gains vector :math:`\boldsymbol{g}` is calculated for each instance :math:`i` as follows:
+
+    .. math::
+        c &= \text{choose random classifier index} \\
+        \boldsymbol{g} &= \boldsymbol{a}_c \odot \boldsymbol{\eta}_i + \boldsymbol{b}_c
+
+    If **k** is larger than 0, the top **k** labels with the highest gains are selected for the instance.
+    If **k** is 0, then the labels with gains higher than 0 are selected for the instance.
+
+    Args:
+        y_proba: A 2D matrix of conditional probabilities for each label.
+        k: The number of labels to predict for each instance.
+        classifiers_a: The matrix of coeficients :math:`\boldsymbol{a}` used for calculating gains.
+                       Each row represents a coeficents of a single classifier.
+                       The number of rows needs to be equal to the number of rows of **classifiers_b** and size of **classifiers_proba**.
+                       The number of columns needs to be equal to the number of columns of **y_proba**.
+        classifiers_b: The matrix of constants :math:`\boldsymbol{a}` used for calculating gains.
+                       Each row represents a constants of a single classifier.
+                       The number of rows needs to be equal to the number of rows of **classifiers_b** and size of **classifiers_proba**.
+                       The number of columns needs to be equal to the number of columns of **y_proba**.
+        classifiers_proba: The vector of probabilities of selection for each classifier.
+        dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
+        seed: The seed for the random selection of classifiers.
+
+    Returns:
+        The binary prediction matrix: the shape and type of the matrix is the same as **y_proba**.
+    """
     # Validate arguments
 
     # y_proba
@@ -191,7 +226,7 @@ def predict_using_randomized_classifier(
         )
 
     if isinstance(y_proba, np.ndarray):
-        y_pred = _predict_using_randomized_classifier_np(
+        y_pred = _predict_using_randomized_weighted_classifier_np(
             y_proba,
             k,
             classifiers_a,
@@ -201,7 +236,7 @@ def predict_using_randomized_classifier(
             seed=seed,
         )
     elif isinstance(y_proba, csr_matrix):
-        y_pred = _predict_using_randomized_classifier_csr(
+        y_pred = _predict_using_randomized_weighted_classifier_csr(
             y_proba,
             k,
             classifiers_a,
@@ -211,7 +246,7 @@ def predict_using_randomized_classifier(
             seed=seed,
         )
     elif TORCH_AVAILABLE and isinstance(y_proba, torch.Tensor):
-        y_pred = _predict_using_randomized_classifier_torch(
+        y_pred = _predict_using_randomized_weighted_classifier_torch(
             y_proba,
             k,
             classifiers_a,
@@ -225,15 +260,71 @@ def predict_using_randomized_classifier(
 
 
 class RandomizedWeightedClassifier:
+    """
+    The class represents a randomized classifier that is a set of weighted classifiers, that are randomly selected for each instance according to the provided probabilities.
+    """
+
     def __init__(self, k: int, a: DenseMatrix, b: DenseMatrix, p: DenseMatrix):
+        r"""
+        Creates a new instance of RandomizedWeightedClassifier.
+
+        Args:
+            k: The number of labels that this classifier predicts for each instance.
+            a: The matrix of coeficients :math:`\boldsymbol{a}` used for calculating gains.
+               Each row represents a coeficents of a single classifier.
+               The number of rows needs to be equal to the number of rows of **classifiers_b** and size of **classifiers_proba**.
+            b: The matrix of constants :math:`\boldsymbol{a}` used for calculating gains.
+               Each row represents a constants of a single classifier.
+               The number of rows needs to be equal to the number of rows of **classifiers_b** and size of **classifiers_proba**.
+            p: The vector of probabilities of selection for each classifier.
+        """
+
+        # Validate arguments
+        if not isinstance(k, int):
+            raise ValueError("k must be an integer")
+
+        if (
+            not isinstance(a, DenseMatrix)
+            or not isinstance(b, DenseMatrix)
+            or not isinstance(p, DenseMatrix)
+        ):
+            raise ValueError("a, b, and p must be ndarray")
+
+        if a.shape != b.shape or a.shape[0] != p.shape[0]:
+            raise ValueError(
+                "a, b must have the same shape and the number of rows must be equal to the number of rows of p"
+            )
+
         self.k = k
         self.a = a
         self.b = b
         self.p = p
 
-    def predict(self, y_proba: Matrix, seed: Optional[int] = None) -> Matrix:
-        return predict_using_randomized_classifier(
-            y_proba, self.k, self.a, self.b, self.p, seed=seed
+    def predict(
+        self, y_proba: Matrix, dtype: Optional[DType] = None, seed: Optional[int] = None
+    ) -> Matrix:
+        r"""
+        Returns the weighted prediction for each instance (row) in a provided
+        matrix of conditional probabilities estimates of labels :math:`\boldsymbol{\eta}` (**y_proba**)
+        using a randomized classifier.
+
+        Args:
+            y_proba: A 2D matrix of conditional probabilities for each label.
+            dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
+            seed: The seed for the random selection of classifiers.
+
+        Returns:
+            The binary prediction matrix: the shape and type of the matrix is the same as **y_proba**.
+        """
+
+        # Additional arguments checks with nicer error messages
+        if y_proba.shape[1] != self.a.shape[1] or y_proba.shape[1] != self.b.shape[1]:
+            raise ValueError(
+                f"This classifier support the input matrix with {self.a.shape[1]} columns (labels), got {y_proba.shape[1]}"
+            )
+
+        return predict_using_randomized_weighted_classifier(
+            y_proba, self.k, self.a, self.b, self.p, dtype=dtype, seed=seed
         )
 
 
@@ -294,6 +385,39 @@ def find_classifier_using_fw(
 ) -> Union[
     RandomizedWeightedClassifier, Tuple[RandomizedWeightedClassifier, Dict[str, Any]]
 ]:
+    r"""
+    Finds a randomized classifier that optimizes the given metric using the Frank-Wolfe algorithm
+    on provided training dataset of true labels **y_true** and corresponding conditional probabilities **y_proba**.
+
+    The algorithm iteratively calculates the gradient of the metric with respect to the confusion matrix and updates the randomized classfuer accordingly.
+
+    See for more details:
+    > [Erik Schultheis, Wojciech Kotłowski, Marek Wydmuch, Rohit Babbar, Strom Borman, Krzysztof Dembczyński. Consistent algorithms for multi-label classification with macro-at-k metrics. ICLR 2024.](https://arxiv.org/abs/2401.16594)
+
+    Args:
+        y_true: A 2D matrix of true labels of set that will be used to find the optimal classifier.
+        y_proba: A 2D matrix of conditional probabilities that will be used to find the optimal classifier.
+        metric_func: The metric function defined on confusion matrix to optimize.
+        k: The budget of labels to predict for each instance.
+           If equal to 0, this means that there is no budget constraint.
+        max_iters: The maximum number of iterations.
+        init_classifier: The initial classifier, can be either "random", "top", or an initial weighted classifier with provided vectors of coeficients :math:`\boldsymbol{a}` and constants :math:`\boldsymbol{b}`.
+        maximize: Whether to maximize or minimize the metric.
+        search_for_best_alpha: Whether to search for the best alpha (step size) in each iteration or to use standard Frank-Wolfe step size :math:`2/(i + 1)`, where :math:`i` is an iteration number.
+                               Setting slows down the algorithm, but may help to find better solution if the metric is not convex.
+        alpha_search_algo: The algorithm for searching for the best alpha, can be either "uniform" or "ternary".
+                           "Ternary" should be only used if the metric is unimodal.
+        alpha_eps: The stopping condition, if the alpha is smaller than this value, the algorithm stops.
+        alpha_uniform_search_step: The step size for uniform search of alpha.
+        skip_tn: Whether to skip the calculation of True Negatives in the confusion matrix, if the metric does not use the True Negatives, this can speed up the calculation, especially when using sparse matrices.
+        seed: The seed for the random selection of classifiers.
+        verbose: Whether to print additional information.
+        return_meta: Whether to return meta data.
+
+    Returns:
+        The :class:`RandomizedWeightedClassifier`. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction, the number of iterations, and step sizes for each iteration and calculated metric values for each weighted classifier.
+    """
+
     log_info(
         "Starting searching for optimal randomized classifier using Frank-Wolfe algorithm ...",
         verbose,
@@ -468,11 +592,11 @@ def find_classifier_using_fw(
 
 
 ########################################################################################
-# Wrapper functions for specific metrics
+# Wrapper functions of Frank Wolfe algorithm for specific metrics
 ########################################################################################
 
 
-def make_frank_wolfe_wrapper(
+def _make_frank_wolfe_wrapper(
     metric_func: Callable,
     metric_name: str,
     maximize: bool = True,
@@ -499,8 +623,8 @@ def make_frank_wolfe_wrapper(
 
     find_classifier_for_metric_using_fw.__doc__ = f"""
     Find a randomized classifier that maximizes {metric_name} metric using Frank-Wolfe algorithm.
-    It is equivalent to calling ``find_classifier_using_fw(, y_true, y_proba, {metric_func.__name__}, k, ..., maximize={maximize}, skip_tn={skip_tn})`` function.
-    See :meth:`find_classifier_using_fw` for details.
+    It is equivalent to calling ``find_classifier_using_fw(y_true, y_proba, {metric_func.__name__}, k, ..., maximize={maximize}, skip_tn={skip_tn})`` function.
+    See :meth:`find_classifier_using_fw` for more details and a description of arguments.
     """
 
     return add_kwargs_to_signature(
@@ -510,44 +634,48 @@ def make_frank_wolfe_wrapper(
     )
 
 
-find_classifier_optimizing_macro_precision_using_fw = make_frank_wolfe_wrapper(
-    macro_precision, "macro-averaged precision", maximize=True, skip_tn=True
+find_classifier_optimizing_macro_precision_using_fw = _make_frank_wolfe_wrapper(
+    macro_precision,
+    "macro-averaged precision",
+    maximize=True,
+    skip_tn=True,
+    warn_k_eq_0=True,
 )
-find_classifier_optimizing_macro_recall_using_fw = make_frank_wolfe_wrapper(
-    macro_recall, "macro-averaged recall", maximize=True, skip_tn=True
+find_classifier_optimizing_macro_recall_using_fw = _make_frank_wolfe_wrapper(
+    macro_recall, "macro-averaged recall", maximize=True, skip_tn=True, warn_k_eq_0=True
 )
 
-find_classifier_optimizing_macro_f1_using_fw = make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_f1_using_fw = _make_frank_wolfe_wrapper(
     macro_f1_score, "macro-averaged F1 score", maximize=True, skip_tn=True
 )
-find_classifier_optimizing_micro_f1_using_fw = make_frank_wolfe_wrapper(
+find_classifier_optimizing_micro_f1_using_fw = _make_frank_wolfe_wrapper(
     micro_f1_score, "micro-averaged F1 score", maximize=True, skip_tn=True
 )
 
-find_classifier_optimizing_macro_jaccard_score_using_fw = make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_jaccard_score_using_fw = _make_frank_wolfe_wrapper(
     macro_balanced_accuracy, "macro-averaged Jaccard score", maximize=True, skip_tn=True
 )
-find_classifier_optimizing_micro_jaccard_score_using_fw = make_frank_wolfe_wrapper(
+find_classifier_optimizing_micro_jaccard_score_using_fw = _make_frank_wolfe_wrapper(
     micro_jaccard_score, "micro-averaged Jaccard score", maximize=True, skip_tn=True
 )
 
-find_classifier_optimizing_macro_balanced_accuracy_using_fw = make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_balanced_accuracy_using_fw = _make_frank_wolfe_wrapper(
     macro_balanced_accuracy, "macro-averaged balanced accuracy", maximize=True
 )
-find_classifier_optimizing_micro_balanced_accuracy_using_fw = make_frank_wolfe_wrapper(
+find_classifier_optimizing_micro_balanced_accuracy_using_fw = _make_frank_wolfe_wrapper(
     micro_balanced_accuracy, "micro-averaged balanced accuracy", maximize=True
 )
 
-find_classifier_optimizing_macro_hmean_using_fw = make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_hmean_using_fw = _make_frank_wolfe_wrapper(
     macro_hmean, "macro-averaged H-mean", maximize=True
 )
-find_classifier_optimizing_micro_hmean_using_fw = make_frank_wolfe_wrapper(
+find_classifier_optimizing_micro_hmean_using_fw = _make_frank_wolfe_wrapper(
     macro_hmean, "micro-averaged H-mean", maximize=True
 )
 
-find_classifier_optimizing_macro_gmean_using_fw = make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_gmean_using_fw = _make_frank_wolfe_wrapper(
     macro_gmean, "macro-averaged G-mean", maximize=True
 )
-find_classifier_optimizing_micro_gmean_using_fw = make_frank_wolfe_wrapper(
+find_classifier_optimizing_micro_gmean_using_fw = _make_frank_wolfe_wrapper(
     macro_gmean, "micro-averaged G-mean", maximize=True
 )

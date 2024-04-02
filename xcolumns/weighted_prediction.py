@@ -91,26 +91,32 @@ def predict_weighted_per_instance(
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
     r"""
     Returns the weighted prediction for each instance (row) in a provided
-    matrix of conditional probabilities estimates of labels :math:`\eta` (**y_proba**).
-    The gains vector is calculated according to:
+    matrix of conditional probabilities estimates of labels :math:`\boldsymbol{H}`, (**y_proba**),
+    where each element :math:`\eta_{ij} = P(y_j|x_i)`
+    is the probability of the label :math:`j` for the instance :math:`i`,
+    The gains vector :math:`\boldsymbol{g}` is calculated for each instance :math:`i` as follows:
 
     .. math::
-        g = a \cdot \eta + b
+        \boldsymbol{g} = \boldsymbol{a} \odot \boldsymbol{\eta}_i + \boldsymbol{b}
 
-    If **k** is larger than 0, the top **k** labels with the highest gains are selected for each instance.
-    If **k** is 0, then the labels with gains higher than **th** are selected for each instance.
+    If **k** is larger than 0, the top **k** labels with the highest gains are selected for the instance.
+    If **k** is 0, then the labels with gains higher than **th** are selected for the instance.
 
     Args:
         y_proba: A 2D matrix of conditional probabilities for each label.
         k: The number of labels to predict for each instance.
-        th: The threshold for the gains.
-        a: The weights for the gains.
-        b: The biases for the gains.
-        dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
+        th: The single number threshold or a vector of thresholds for the gains. Only used if **k** is 0.
+        a: The vector of coeficients :math:`\boldsymbol{a}` used for calculating gains.
+           It needs to be a size of number of columns of **y_proba**.
+           If equal to None, then :math:`\boldsymbol{a} = \boldsymbol{1}`.
+        b: The vector of constants :math:`\boldsymbol{b}` used for calculating gains.
+           It needs to be a size of number of columns of **y_proba**.
+           If equal to None, then :math:`\boldsymbol{b} = \boldsymbol{0}`.
+        dtype: The data type for the output matrix. If equal to None, the data type of **y_proba** will be used.
         return_meta: Whether to return meta data.
 
     Returns:
-        The prediction matrix, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+        The binary prediction matrix: the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
 
     # Arguments validation
@@ -188,7 +194,7 @@ def predict_top_k(
         return_meta: Whether to return metadata. Defaults to False.
 
     Returns:
-        The prediction matrix, with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+        The binary prediction matrix: with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
     return predict_weighted_per_instance(y_proba, k=k, return_meta=return_meta)
 
@@ -217,7 +223,7 @@ def predict_optimizing_macro_recall(
         return_meta: Whether to return metadata.
 
     Returns:
-        The prediction matrix, with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+        The binary prediction matrix: with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
@@ -304,7 +310,7 @@ def predict_optimizing_macro_balanced_accuracy(
         return_meta: Whether to return meta data.
 
     Returns:
-        The prediction matrix, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+        The binary prediction matrix: the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
@@ -359,7 +365,7 @@ def predict_log_weighted_per_instance(
         return_meta: Whether to return meta data.
 
     Result
-        The prediction matrix, with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+        The binary prediction matrix: with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
 
     if priors.shape[0] != y_proba.shape[1]:
@@ -398,7 +404,7 @@ def predict_power_law_weighted_per_instance(
         return_meta: Whether to return meta data.
 
     Result
-        The prediction matrix, with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+        The binary prediction matrix: with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
     if priors.shape[0] != y_proba.shape[1]:
         raise ValueError("priors must be of shape (y_proba[1],)")
@@ -427,7 +433,7 @@ def predict_optimizing_instance_precision(
         return_meta: Whether to return meta data.
 
     Result
-        The prediction matrix, with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
+        The binary prediction matrix: with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
     if k <= 0:
         raise ValueError("k must be > 0")
@@ -442,6 +448,8 @@ def predict_optimizing_instance_propensity_scored_precision(
     propensities: Optional[DenseMatrix] = None,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
+    """ """
+
     if inverse_propensities is not None:
         if inverse_propensities.shape[0] != y_proba.shape[1]:
             raise ValueError("inverse_propensities must be of shape (y_proba[1],)")
