@@ -135,7 +135,7 @@ class OnlineFrankWolfe(OnlineMethod):
                 y_pred.data.fill(1.0)
 
         else:
-            y_pred[i] = predict_using_randomized_classifier(
+            y_pred[i] = predict_using_randomized_weighted_classifier(
                 y_proba[i],
                 self.classifiers_a,
                 self.classifiers_b,
@@ -169,7 +169,7 @@ class OnlineFrankWolfe(OnlineMethod):
             self.updates.append(len(self.seen_so_far))
 
     def predict_batch(self, y_proba, y_pred, batch):
-        y_pred[batch] = predict_using_randomized_classifier(
+        y_pred[batch] = predict_using_randomized_weighted_classifier(
             y_proba[batch],
             self.classifiers_a,
             self.classifiers_b,

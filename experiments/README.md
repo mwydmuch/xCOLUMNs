@@ -28,8 +28,10 @@ pip install -r requirements.txt
 - `predictions/` - the scripts expect to find probability estimes from different models (e.g. LightXML) in this directory,
 - `results/` - the scripts save the results of different inference methods in this directory using json format,
 - `notebooks/` - contains jupyter notebooks used for additional analysis and visualization of the results,
-- `run_neurips_bc_experiment.py` - script for running the experiments using Block Coordinate Ascent (BCA) inference method from the NeurIPS 2023 paper,
-- `run_all_neurips_bc_experiments.sh` - script for running all the experiments from the NeurIPS 2023 paper,
+- `run_neurips_2023_bca_experiment.py` - script for running the experiments using Block Coordinate Ascent (BCA) inference method from the NeurIPS 2023 paper,
+- `run_all_neurips_2023_bca_experiments.sh` - script for running all the experiments from the NeurIPS 2023 paper,
+- `run_iclr_2024_bca_experiment.py` - script for running the experiments using Frank Wolfe algorithm (FW) inference method from the ICLR 2024 paper,
+- `run_all_iclr_2024_bca_experiments.sh` - script for running all the experiments from the ICLR 2024 paper,
 - `summarize_results.py` - script that creates tables data from the results of the experiments.
 
 
@@ -39,4 +41,12 @@ To replicate the experiments from the NeurIPS 2023 paper titled "Generalized tes
 - Download standard (BOW) versions of the datasets (Eurlex-4K, AmazonCat-13K, Wiki10-31K, Wikipedia-500K, Amazon-670K) from [here](https://drive.google.com/drive/folders/1fI8ZqiEPqdLeDhUi7wVk8-jhSpvBtNxh?usp=drive_link) or [XMLC Repository](http://manikvarma.org/downloads/XC/XMLRepository.html), unpack, and place them in the `datasets/` directory.
 - Download LightXML predictions from [here](https://drive.google.com/drive/folders/1bcOUYCjcePnlZHU4yW8TigWAiuGI-36T?usp=drive_link) and place them in the `predictions/lighxml` directory.
 
-Now you can use `run_neurips_bc_experiment.py` script to run the specific experiment. Of just run `run_all_neurips_bc_experiments.sh` to run all the experiments. The results of every separate experiment (single run of a single method of specified dataset) will be saved in the `results/` directory as a json files.
+Now you can use `run_neurips_2023_bca_experiment.py` script to run the specific experiment. Of just run `run_all_neurips_2023_bca_experiments.sh` to run all the experiments. The results of every separate experiment (single run of a single method of specified dataset) will be saved in the `results/bca_neurips` directory as a json files.
+
+
+## Reproducing the Frank Wolfe (FW) experiments from the ICLR 2024 paper
+
+To replicate the experiments from the ICLR 2023 paper titled "Consistent algorithms for multi-label classification with macro-at-k metrics," you need to download the following datasets:
+- TODO: Upload and provide the link to the datasets.
+
+Now you can use `run_iclr_2024_fw_experiment.py` script to run the specific experiment. Of just run `run_all_iclr_2024_fw_experiments.sh` to run all the experiments. The results of every separate experiment (single run of a single method of specified dataset) will be saved in the `results/fw_iclr` directory as a json files.

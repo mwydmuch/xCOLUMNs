@@ -43,14 +43,14 @@ def frank_wolfe_wrapper(
     y_preds = []
     if use_last:
         print("  using last classifier")
-        y_pred = predict_using_randomized_classifier(
+        y_pred = predict_using_randomized_weighted_classifier(
             y_proba, k, classifiers_a[-1:], classifiers_b[-1:], np.array([1])
         )
         y_preds.append(y_pred)
     elif not average:
         print(f"  predicting with randomized classfier {pred_repeat} times")
         for i in range(pred_repeat):
-            y_pred = predict_using_randomized_classifier(
+            y_pred = predict_using_randomized_weighted_classifier(
                 y_proba,
                 k,
                 classifiers_a,
@@ -70,7 +70,7 @@ def frank_wolfe_wrapper(
         avg_classifiers_b = avg_classifiers_b.reshape(1, -1)
         avg_classifiers_a /= classifiers_proba.sum()
         avg_classifiers_b /= classifiers_proba.sum()
-        y_pred = predict_using_randomized_classifier(
+        y_pred = predict_using_randomized_weighted_classifier(
             y_proba, k, avg_classifiers_a, avg_classifiers_b, np.array([1])
         )
         y_preds.append(y_pred)

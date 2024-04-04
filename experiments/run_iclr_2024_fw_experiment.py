@@ -62,7 +62,7 @@ def frank_wolfe_wrapper(
             y_preds.append(y_pred)
     elif pred_strategy == "last":
         print("  using last classifier")
-        y_pred = predict_using_randomized_classifier(
+        y_pred = predict_using_randomized_weighted_classifier(
             pred_test,
             rnd_classifier.a[-1:],
             rnd_classifier.a[-1:],
@@ -592,8 +592,7 @@ class PytorchModel(ModelWrapper):
 @click.option("-s", "--seed", type=int, required=True)
 @click.option("-m", "--method", type=str, required=False, default=None)
 @click.option("-t", "--testsplit", type=float, required=False, default=0)
-@click.option("-r", "--reg", type=float, required=False, default=0)
-def main(experiment, k, seed, method, testsplit, reg):
+def main(experiment, k, seed, method, testsplit):
     print(experiment)
 
     if method is None:
@@ -947,9 +946,7 @@ def main(experiment, k, seed, method, testsplit, reg):
     for method, func in methods.items():
         print(f"{experiment} - {method} @ {k}: ")
 
-        output_path = (
-            f"{output_path_prefix}{method}_k={k}_s={seed}_t={testsplit}_r={reg}"
-        )
+        output_path = f"{output_path_prefix}{method}_k={k}_s={seed}_t={testsplit}"
         results_path = f"{output_path}_results.json"
         pred_path = f"{output_path}_pred.pkl"
 
@@ -967,7 +964,6 @@ def main(experiment, k, seed, method, testsplit, reg):
                     priors=marginals,
                     inv_ps=inv_ps,
                     seed=seed,
-                    reg=reg,
                     **func[1],
                 )
                 results.update(meta)

@@ -227,7 +227,7 @@ def calculate_and_report_metrics(y_true, y_pred, k, metrics):
 @click.option("-m", "--method", type=str, required=False, default=None)
 @click.option("-p", "--probabilities_path", type=str, required=False, default=None)
 @click.option("-l", "--labels_path", type=str, required=False, default=None)
-@click.option("-r", "--results_dir", type=str, required=False, default="results_bc")
+@click.option("-r", "--results_dir", type=str, required=False, default="results/")
 @click.option(
     "--recalculate_predictions", is_flag=True, type=bool, required=False, default=False
 )
