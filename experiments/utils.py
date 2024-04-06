@@ -13,12 +13,28 @@ from tqdm import tqdm
 from xcolumns.utils import construct_csr_matrix
 
 
+def call_function_with_supported_kwargs(func, *args, **kwargs):
+    selected_kwargs = {
+        k: v for k, v in kwargs.items() if k in func.__code__.co_varnames
+    }
+    return func(*args, **selected_kwargs)
+
+
 def align_dim1(a, b):
     if a.shape[1] != b.shape[1]:
         print("  Fixing shapes ...")
         new_size = max(a.shape[1], b.shape[1])
         a.resize((a.shape[0], new_size))
         b.resize((b.shape[0], new_size))
+
+
+def align_dim1_new(a, b):
+    if a.shape[1] != b.shape[1]:
+        print("  Fixing shapes ...")
+        new_size = max(a.shape[1], b.shape[1])
+        a = np.resize(a, (a.shape[0], new_size))
+        b = np.resize(b, (b.shape[0], new_size))
+    return a, b
 
 
 def loprint(array):
@@ -278,13 +294,13 @@ def save_npz_wrapper(path: Union[str, Path], data: csr_matrix, **kwargs):
 
 
 # Store data (serialize)
-def save_pickle(path, data):
+def save_pickle(path, data, **kwargs):
     with open(path, "wb") as handle:
         pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 # Load data (deserialize)
-def load_pickle(path):
+def load_pickle(path, **kwargs):
     with open(path, "rb") as handle:
         unserialized_data = pickle.load(handle)
     return unserialized_data
