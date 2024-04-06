@@ -291,6 +291,8 @@ def predict_using_bc_with_0approx(
     Predicts for the provided probability matrix using block coordinate ascent/descent with 0-th order approximation of ETU objective
     optimizing a given metric, that decomposes into a sum/mean of binary metrics.
 
+
+
     """
 
     log_info(
@@ -602,8 +604,98 @@ def predict_optimizing_coverage_using_bc(
 
 
 ########################################################################################
-# Wrapper functions for BCA for specific metrics
+# Wrapper functions for BC algorithm for specific metrics
 ########################################################################################
+
+
+def make_bc_wrapper(
+    binary_metric_func: Callable,
+    metric_name: str,
+    maximize: bool = True,
+    metric_aggregation: str = "mean",
+    skip_tn: bool = False,
+    warn_k_eq_0: bool = False,
+):
+    """
+    Factory function that creates a wrapper function for predicting for a given test set
+    optimizing a given metric using using block coordinate ascent/descent method (:func:`predict_using_bc_with_0approx`).
+
+    Args:
+        metric_func: The metric function to optimize.
+        metric_name: The name of the metric that will be used in docstring.
+        maximize: Whether to maximize the metric.
+        metric_aggregation: The aggregation function for the metric. Either "mean" or "sum".
+        skip_tn: Whether to skip the calculation of True Negatives in the confusion matrix.
+        warn_k_eq_0: Whether to warn if the budget **k** equal to 0 leads to degenerated solution.
+
+    Returns:
+        The wrapper function.
+    """
+
+    def predict_optimizing_metric_using_bc(y_proba: Matrix, k: int, **kwargs):
+        if warn_k_eq_0 and k == 0:
+            log_warning(
+                f"Warning: k=0 results in degenerated solution for {metric_name}!",
+            )
+
+        return predict_using_bc_with_0approx(
+            y_proba,
+            binary_metric_func,
+            k,
+            metric_aggregation=metric_aggregation,
+            maximize=maximize,
+            skip_tn=skip_tn,
+            **kwargs,
+        )
+
+    predict_optimizing_metric_using_bc.__doc__ = f"""
+    Find a randomized classifier that maximizes {metric_name} metric using Frank-Wolfe algorithm.
+    It is equivalent to calling ``find_classifier_using_fw(y_true, y_proba, {binary_metric_func.__name__}, k, ..., metric_aggregation={metric_aggregation}, maximize={maximize}, skip_tn={skip_tn})`` function.
+    See :meth:`predict_using_bc_with_0approx` for more details and a description of arguments.
+    """
+
+    return add_kwargs_to_signature(
+        predict_optimizing_metric_using_bc,
+        predict_using_bc_with_0approx,
+        skip=["metric_func", "metric_aggregation", "maximize", "skip_tn"],
+    )
+
+
+predict_optimizing_macro_precision_using_bc = make_bc_wrapper(
+    binary_precision_on_conf_matrix,
+    "macro-averaged precision",
+    metric_aggregation="mean",
+    maximize=True,
+    skip_tn=True,
+    warn_k_eq_0=True,
+)
+predict_optimizing_macro_recall_using_bc = make_bc_wrapper(
+    binary_recall_on_conf_matrix,
+    "macro-averaged recall",
+    metric_aggregation="mean",
+    maximize=True,
+    skip_tn=True,
+    warn_k_eq_0=True,
+)
+predict_optimizing_macro_f1_score_using_bc = make_bc_wrapper(
+    binary_f1_score_on_conf_matrix,
+    "macro-averaged F1 score",
+    metric_aggregation="mean",
+    maximize=True,
+    skip_tn=True,
+)
+find_classifier_optimizing_macro_jaccard_score_using_fw = make_bc_wrapper(
+    macro_balanced_accuracy, "macro-averaged Jaccard score", maximize=True, skip_tn=True
+)
+find_classifier_optimizing_macro_balanced_accuracy_using_fw = make_bc_wrapper(
+    macro_balanced_accuracy, "macro-averaged balanced accuracy", maximize=True
+)
+find_classifier_optimizing_macro_hmean_using_fw = make_bc_wrapper(
+    macro_hmean, "macro-averaged H-mean", maximize=True
+)
+find_classifier_optimizing_macro_gmean_using_fw = make_bc_wrapper(
+    macro_gmean, "macro-averaged G-mean", maximize=True
+)
 
 
 def predict_optimizing_instance_precision_using_bc(
@@ -667,7 +759,7 @@ def predict_optimizing_macro_precision_using_bc(
     )
 
 
-def predict_optimizing_macro_recall_using_bc(
+def predict_optimizing_macro_recall_using_bc2(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     tolerance: float = 1e-6,

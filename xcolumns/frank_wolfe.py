@@ -391,9 +391,6 @@ def find_classifier_using_fw(
 
     The algorithm iteratively calculates the gradient of the metric with respect to the confusion matrix and updates the randomized classfuer accordingly.
 
-    See for more details:
-    > [Erik Schultheis, Wojciech Kotłowski, Marek Wydmuch, Rohit Babbar, Strom Borman, Krzysztof Dembczyński. Consistent algorithms for multi-label classification with macro-at-k metrics. ICLR 2024.](https://arxiv.org/abs/2401.16594)
-
     Args:
         y_true: A 2D matrix of true labels of set that will be used to find the optimal classifier.
         y_proba: A 2D matrix of conditional probabilities that will be used to find the optimal classifier.
@@ -596,13 +593,28 @@ def find_classifier_using_fw(
 ########################################################################################
 
 
-def _make_frank_wolfe_wrapper(
+def make_frank_wolfe_wrapper(
     metric_func: Callable,
     metric_name: str,
     maximize: bool = True,
     skip_tn: bool = False,
     warn_k_eq_0: bool = False,
 ):
+    """
+    Factory function that creates a wrapper function for finding a randomized classifier
+    that optimizes a given metric using the Frank-Wolfe algorithm (:func:`find_classifier_using_fw`).
+
+    Args:
+        metric_func: The metric function to optimize.
+        metric_name: The name of the metric that will be used in docstring.
+        maximize: Whether to maximize the metric.
+        skip_tn: Whether to skip the calculation of True Negatives in the confusion matrix.
+        warn_k_eq_0: Whether to warn if the budget **k** equal to 0 leads to degenerated solution.
+
+    Returns:
+        The wrapper function.
+    """
+
     def find_classifier_for_metric_using_fw(
         y_true: Matrix, y_proba: Matrix, k: int, **kwargs
     ):
@@ -634,48 +646,48 @@ def _make_frank_wolfe_wrapper(
     )
 
 
-find_classifier_optimizing_macro_precision_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_precision_using_fw = make_frank_wolfe_wrapper(
     macro_precision,
     "macro-averaged precision",
     maximize=True,
     skip_tn=True,
     warn_k_eq_0=True,
 )
-find_classifier_optimizing_macro_recall_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_recall_using_fw = make_frank_wolfe_wrapper(
     macro_recall, "macro-averaged recall", maximize=True, skip_tn=True, warn_k_eq_0=True
 )
 
-find_classifier_optimizing_macro_f1_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_f1_score_using_fw = make_frank_wolfe_wrapper(
     macro_f1_score, "macro-averaged F1 score", maximize=True, skip_tn=True
 )
-find_classifier_optimizing_micro_f1_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_micro_f1_score_using_fw = make_frank_wolfe_wrapper(
     micro_f1_score, "micro-averaged F1 score", maximize=True, skip_tn=True
 )
 
-find_classifier_optimizing_macro_jaccard_score_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_jaccard_score_using_fw = make_frank_wolfe_wrapper(
     macro_balanced_accuracy, "macro-averaged Jaccard score", maximize=True, skip_tn=True
 )
-find_classifier_optimizing_micro_jaccard_score_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_micro_jaccard_score_using_fw = make_frank_wolfe_wrapper(
     micro_jaccard_score, "micro-averaged Jaccard score", maximize=True, skip_tn=True
 )
 
-find_classifier_optimizing_macro_balanced_accuracy_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_balanced_accuracy_using_fw = make_frank_wolfe_wrapper(
     macro_balanced_accuracy, "macro-averaged balanced accuracy", maximize=True
 )
-find_classifier_optimizing_micro_balanced_accuracy_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_micro_balanced_accuracy_using_fw = make_frank_wolfe_wrapper(
     micro_balanced_accuracy, "micro-averaged balanced accuracy", maximize=True
 )
 
-find_classifier_optimizing_macro_hmean_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_hmean_using_fw = make_frank_wolfe_wrapper(
     macro_hmean, "macro-averaged H-mean", maximize=True
 )
-find_classifier_optimizing_micro_hmean_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_micro_hmean_using_fw = make_frank_wolfe_wrapper(
     macro_hmean, "micro-averaged H-mean", maximize=True
 )
 
-find_classifier_optimizing_macro_gmean_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_macro_gmean_using_fw = make_frank_wolfe_wrapper(
     macro_gmean, "macro-averaged G-mean", maximize=True
 )
-find_classifier_optimizing_micro_gmean_using_fw = _make_frank_wolfe_wrapper(
+find_classifier_optimizing_micro_gmean_using_fw = make_frank_wolfe_wrapper(
     macro_gmean, "micro-averaged G-mean", maximize=True
 )

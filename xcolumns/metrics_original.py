@@ -4,6 +4,9 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 
+# Original implementation of metrics used in some experiments
+
+
 def _predicted_positives(  # q in the paper
     y_pred: Union[np.ndarray, csr_matrix], axis: int = None, epsilon: float = 1e-9
 ):
