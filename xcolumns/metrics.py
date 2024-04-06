@@ -51,8 +51,9 @@ def make_macro_metric_on_conf_matrix(binary_metric, name) -> Callable:
         fp: DenseMatrix,
         fn: DenseMatrix,
         tn: DenseMatrix,
+        **kwargs,
     ) -> Number:
-        return binary_metric(tp, fp, fn, tn).mean()
+        return binary_metric(tp, fp, fn, tn, **kwargs).mean()
 
     macro_metric_on_conf_matrix.__doc__ = f"""
     Calculates macro-averaged {name} from the given entries of confusion matrix:

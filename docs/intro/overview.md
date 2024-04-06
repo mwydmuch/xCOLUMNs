@@ -36,7 +36,7 @@ macro-averaged F-score, Jaccard score, macro-averged precision and recall at k e
 So far, all the algorithms implemented in xCOLUMNs require providing the definition of the target function and marginal conditional probabilities (or their estimates) of labels - $P(y_{j} = 1 | x)$
 for each label $j$ and each instance $x$ resulting in matrix that we denote as $H$ (large $\eta$) and in the names as **`y_proba`** argument of different methods.
 The estimates of label probabilities can be easily obtained from many different classification models, such as logistic regression, neural networks, etc.
-In this sense xCOLUMNs implements plug-in inference methods, that can be used on top of any probablity estimatation model.
+In this sense xCOLUMNs implements plug-in inference methods, that can be used on top of any probability estimatation model.
 
 
 ## What methods are implemented in xCOLUMNs?

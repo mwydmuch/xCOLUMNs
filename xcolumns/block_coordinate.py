@@ -291,8 +291,7 @@ def predict_using_bc_with_0approx(
     Predicts for the provided probability matrix using block coordinate ascent/descent with 0-th order approximation of ETU objective
     optimizing a given metric, that decomposes into a sum/mean of binary metrics.
 
-
-
+    TODO: Add more details
     """
 
     log_info(
@@ -518,7 +517,9 @@ def predict_optimizing_coverage_using_bc(
     verbose: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, Dict[str, Any]]]:
     """
-    An efficient implementation of the block coordinate-descent for coverage
+    An efficient implementation of the block coordinate-descent for coverage.
+
+    TODO: Add more details
     """
     log_info(
         f"Starting optimization of ETU coverage@{k} metric using block coordinate ascent algorithm ...",
@@ -684,16 +685,16 @@ predict_optimizing_macro_f1_score_using_bc = make_bc_wrapper(
     maximize=True,
     skip_tn=True,
 )
-find_classifier_optimizing_macro_jaccard_score_using_fw = make_bc_wrapper(
+predict_optimizing_macro_jaccard_score_using_fw = make_bc_wrapper(
     macro_balanced_accuracy, "macro-averaged Jaccard score", maximize=True, skip_tn=True
 )
-find_classifier_optimizing_macro_balanced_accuracy_using_fw = make_bc_wrapper(
+predict_optimizing_macro_balanced_accuracy_using_fw = make_bc_wrapper(
     macro_balanced_accuracy, "macro-averaged balanced accuracy", maximize=True
 )
-find_classifier_optimizing_macro_hmean_using_fw = make_bc_wrapper(
+predict_optimizing_macro_hmean_using_fw = make_bc_wrapper(
     macro_hmean, "macro-averaged H-mean", maximize=True
 )
-find_classifier_optimizing_macro_gmean_using_fw = make_bc_wrapper(
+predict_optimizing_macro_gmean_using_fw = make_bc_wrapper(
     macro_gmean, "macro-averaged G-mean", maximize=True
 )
 
@@ -721,98 +722,6 @@ def predict_optimizing_instance_precision_using_bc(
         binary_metric_func=instance_precision_with_specific_k,
         k=k,
         metric_aggregation="sum",
-        tolerance=tolerance,
-        init_y_pred=init_y_pred,
-        max_iter=max_iter,
-        shuffle_order=shuffle_order,
-        verbose=verbose,
-        return_meta=return_meta,
-    )
-
-
-def predict_optimizing_macro_precision_using_bc(
-    y_proba: Union[np.ndarray, csr_matrix],
-    k: int,
-    tolerance: float = 1e-6,
-    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iter: int = 100,
-    shuffle_order: bool = True,
-    verbose: bool = False,
-    return_meta: bool = False,
-):
-    """
-    This function is a wrapper for using block coordinate ascent with macro precision as the target metric.
-    See `predict_using_bc_with_0approx` for more details and a description of parameters.
-    """
-    return predict_using_bc_with_0approx(
-        y_proba,
-        binary_metric_func=binary_precision_on_conf_matrix,
-        k=k,
-        metric_aggregation="mean",
-        skip_tn=True,
-        tolerance=tolerance,
-        init_y_pred=init_y_pred,
-        max_iter=max_iter,
-        shuffle_order=shuffle_order,
-        verbose=verbose,
-        return_meta=return_meta,
-    )
-
-
-def predict_optimizing_macro_recall_using_bc2(
-    y_proba: Union[np.ndarray, csr_matrix],
-    k: int,
-    tolerance: float = 1e-6,
-    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iter: int = 100,
-    shuffle_order: bool = True,
-    verbose: bool = False,
-    return_meta: bool = False,
-):
-    """
-    This function is a wrapper for using block coordinate ascent with macro recall as the target metric.
-    See `predict_using_bc_with_0approx` for more details and a description of parameters.
-    """
-    return predict_using_bc_with_0approx(
-        y_proba,
-        binary_metric_func=binary_recall_on_conf_matrix,
-        k=k,
-        metric_aggregation="mean",
-        skip_tn=True,
-        tolerance=tolerance,
-        init_y_pred=init_y_pred,
-        max_iter=max_iter,
-        shuffle_order=shuffle_order,
-        verbose=verbose,
-        return_meta=return_meta,
-    )
-
-
-def predict_optimizing_macro_fmeasure_using_bc(
-    y_proba: Union[np.ndarray, csr_matrix],
-    k: int,
-    beta: float = 1,
-    tolerance: float = 1e-6,
-    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iter: int = 100,
-    shuffle_order: bool = True,
-    verbose: bool = False,
-    return_meta: bool = False,
-):
-    """
-    This function is a wrapper for using block coordinate ascent with macro f-measure as the target metric.
-    See `predict_using_bc_with_0approx` for more details and a description of parameters.
-    """
-
-    def binary_fmeasure_on_conf_matrix_with_specific_beta(tp, fp, fn, tn):
-        return binary_fbeta_score_on_conf_matrix(tp, fp, fn, tn, beta=beta)
-
-    return predict_using_bc_with_0approx(
-        y_proba,
-        binary_metric_func=binary_fmeasure_on_conf_matrix_with_specific_beta,
-        k=k,
-        metric_aggregation="mean",
-        skip_tn=True,
         tolerance=tolerance,
         init_y_pred=init_y_pred,
         max_iter=max_iter,

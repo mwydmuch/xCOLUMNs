@@ -1,4 +1,5 @@
 [![PyPI version](https://badge.fury.io/py/xcolumns.svg)](https://badge.fury.io/py/xcolumns)
+[![Documentation Status](https://readthedocs.org/projects/xcolumns/badge/?version=latest)](https://xcolumns.readthedocs.io/en/latest/?badge=latest)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
