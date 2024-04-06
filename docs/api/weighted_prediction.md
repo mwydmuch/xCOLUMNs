@@ -8,10 +8,10 @@ The main function of the module is [**predict_weighted_per_instance**](#xcolumns
 .. autofunction:: xcolumns.weighted_prediction.predict_weighted_per_instance
 ```
 
----
 
+## Prediction strategies based on weighted predictions
 
-Based on this function the module provides few additional functions for calculating the predictions
+Based on [**predict_weighted_per_instance**](#xcolumns.weighted_prediction.predict_weighted_per_instance) function the module provides few additional functions for calculating the predictions
 that are optimal for some specific metrics or arbitrary upweight labels with smaller prior probabilities.
 
 ```{eval-rst}

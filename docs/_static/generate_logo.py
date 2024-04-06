@@ -55,14 +55,15 @@ def create_logo_image(grid, filled_color, column_gradients, cell_size):
     draw = ImageDraw.Draw(img)
 
     # Create a gradient for each column
-    for i in range(len(grid[0])):
-        gradient_image = create_gradient(
-            cell_size[0],
-            image_height,
-            column_gradients[i % len(column_gradients)],
-            pi / 2,
-        )
-        img.paste(gradient_image, (i * cell_size[0], 0), gradient_image)
+    if column_gradients is not None:
+        for i in range(len(grid[0])):
+            gradient_image = create_gradient(
+                cell_size[0],
+                image_height,
+                column_gradients[i % len(column_gradients)],
+                pi / 2,
+            )
+            img.paste(gradient_image, (i * cell_size[0], 0), gradient_image)
 
     for i, row in enumerate(grid):
         # Define the starting and ending y coordinates for the row
@@ -146,7 +147,7 @@ if __name__ == "__main__":
     )
 
     # Logo with the same number of filled cells in each row (k=13)
-    grid = """
+    logo_grid = """
 ....................................
 .....XXX.XXX.X.......X...X.X..X..XX.
 .....X...X.X.X.....X.XX.XX.XX.X.X...
@@ -156,6 +157,20 @@ if __name__ == "__main__":
 .X.X.X...XXX.X...X.X.X...X.X..X.....
 .X.X.XXX.....XXX.XXX.X........X.....
 ....................................
+""".strip().split(
+        "\n"
+    )
+
+    favicon_grid = """
+.........
+.....XXX.
+.....X...
+.....X...
+.X.X.X...
+..X..X...
+.X.X.X...
+.X.X.XXX.
+.........
 """.strip().split(
         "\n"
     )
@@ -171,8 +186,19 @@ if __name__ == "__main__":
     )
 
     # Generate the gradient image
-    logo_image = create_logo_image(grid, filled_color, columns_gradients, cell_size)
-
-    # Save the image or display it
+    logo_image = create_logo_image(
+        logo_grid, filled_color, columns_gradients, cell_size
+    )
     logo_image.save("xCOLUMNs_logo.png")  # Save the image as 'xCOLUMNs_logo.png'
-    logo_image.show()  # Show the image
+
+    # Generate the gradient image
+    logo_image = create_logo_image(logo_grid, filled_color, None, cell_size)
+    logo_image.save(
+        "xCOLUMNs_logo_nobg.png"
+    )  # Save the image as 'xCOLUMNs_logo_nobg.png'
+
+    # Generate the favicon image
+    favicon_image = create_logo_image(
+        favicon_grid, filled_color, columns_gradients, cell_size
+    )
+    favicon_image.save("favicon.png")  # Save the image as 'favicon.png'

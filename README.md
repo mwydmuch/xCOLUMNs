@@ -1,9 +1,10 @@
+[![PyPI version](https://badge.fury.io/py/xcolumns.svg)](https://badge.fury.io/py/xcolumns)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![PyPI version](https://badge.fury.io/py/xcolumns.svg)](https://badge.fury.io/py/xcolumns)
+
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mwydmuch/xCOLUMNs/master/xCOLUMNs_logo.png" width="500px"/>
+  <img src="https://raw.githubusercontent.com/mwydmuch/xCOLUMNs/master/docs/_static/xCOLUMNs_logo.png" width="500px"/>
 </p>
 
 # x **Consistent Optimization of Label-wise Utilities in Multi-label classificatioN** s
@@ -16,9 +17,9 @@ The library provides an efficient implementation of the different optimization m
 All the methods operate on conditional probability estimates of the labels, which are the output of the multi-label classification models.
 Based on these estimates, the methods aim to find the optimal prediction for a given test set or to find the optimal population classifier as a plug-in rule on top of the conditional probability estimator.
 This makes the library very flexible and allows to use it with any multi-label classification model that provides conditional probability estimates.
-The library directly supports numpy arrays, PyTorch tensors (work in progress), and sparse CSR matrices from scipy as input/output data types.
+The library directly supports numpy arrays, PyTorch tensors, and sparse CSR matrices from scipy as input/output data types.
 
-For more details, please see our short usage guide, the documentation (work in progress), and/or the papers that describe the methods implemented in the library.
+For more details, please see our short usage guide, the documentation, and/or the papers that describe the methods implemented in the library.
 
 
 ## Quick start
@@ -34,7 +35,7 @@ It should work on all major platforms (Linux, macOS, Windows) and with Python 3.
 
 ### Usage
 
-We provide a short usage guide for the library in [short_usage_guide.ipynb]() notebook.
+We provide a short usage guide for the library in [short_usage_guide.ipynb](https://github.com/mwydmuch/xCOLUMNs/blob/master/short_usage_guide.ipynb) notebook.
 You can also check the documentation for more details.
 
 
@@ -68,9 +69,9 @@ The method was first introduced and described in the paper:
 
 The repository is organized as follows:
 - `docs/` - Sphinx documentation (work in progress)
-- `experiments/` - a code for reproducing experiments from the papers, see the README file in the directory for details
+- `experiments/` - a code for reproducing experiments from the papers, see the README.md file in the directory for details
 - `xcolumns/` - Python package with the library
-- `tests/` - some tests for the library (work in progress, the coverage is very limited at the moment)
+- `tests/` - tests for the library (the coverage is bit limited at the moment, but these test should guarantee that the main components of the library works as expected)
 
 
 ## Development and contributing

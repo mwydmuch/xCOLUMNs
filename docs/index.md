@@ -4,6 +4,10 @@ firstpage:
 lastpage:
 ---
 
+<p align="center">
+  <img src="_static/xCOLUMNs_logo.png" width="500px"/>
+</p>
+
 # Welcome to xCOLUMNs documentation!
 
 

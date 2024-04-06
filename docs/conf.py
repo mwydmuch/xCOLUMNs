@@ -16,7 +16,7 @@ import sys
 
 # -- Project information -----------------------------------------------------
 
-project = "xcolumns"
+project = "xCOLUMNs"
 copyright = "2023-2024 Marek Wydmuch, Erik Schultheis, Wojciech Kotłowski, Rohit Babbar, Krzysztof Dembczyński"
 author = "Marek Wydmuch"
 
@@ -27,13 +27,16 @@ author = "Marek Wydmuch"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.mathjax",
+    "sphinx.ext.viewcode",
     "sphinx.ext.autosectionlabel",
     "myst_parser",
+    "sphinx_rtd_theme",
 ]
 
 # Make sure the target is unique
@@ -47,6 +50,23 @@ templates_path = ["_templates"]
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
+
+# MyST parser options
+myst_enable_extensions = [
+    "amsmath",
+    "attrs_inline",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "fieldlist",
+    "html_admonition",
+    "html_image",
+    "replacements",
+    "smartquotes",
+    "strikethrough",
+    "substitution",
+    "tasklist",
+]
 
 # Napoleon settings
 # napoleon_use_ivar = True
@@ -94,11 +114,23 @@ master_doc = "index"
 import sphinx_rtd_theme
 
 
-html_theme = "sphinx_rtd_theme"
-
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
-
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
+
+html_theme = "sphinx_rtd_theme"
+html_logo = "_static/xCOLUMNs_logo_nobg.png"
+html_favicon = "_static/favicon.png"
+html_show_sourcelink = True
+html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+html_theme_options = {
+    "logo_only": True,
+    "display_version": True,
+    "collapse_navigation": True,
+    "sticky_navigation": True,
+    "navigation_depth": 4,
+    "includehidden": True,
+    "titles_only": False,
+}
+html_context = {}
