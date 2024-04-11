@@ -1,10 +1,6 @@
 # Overview of xCOLUMNs library
 
-xCOLUMNs stands for x**Consistent Optimization of Label-wise Utilities in Multi-label classificatioN**s.
-It is a small Python library that aims to implement different methods for the optimization of a general family of
-metrics that can be defined on multi-label classification matrices.
-These include, but are not limited to, label-wise metrics (see below for details).
-The library provides an efficient implementation of the different optimization methods that easily scale to the extreme multi-label classification (XMLC) - problems with a very large number of labels and instances.
+
 
 
 ## What is multi-label classification?
@@ -43,9 +39,12 @@ In this sense xCOLUMNs implements plug-in inference methods, that can be used on
 
 The aim of xCOLUMNs is to provide methods for the optimization of the general family of label-wise utilities. Currently, the following methods are implemented:
 
-- Prediction for provided test set using **Block Coordinate Ascent/Descent (BC)** method, described in [1].
-- Search for optimal population classifier using **Frank-Wolfe (FW)** method, described in [2].
+- Weighted instance-wise prediction that include optimal infernece strategies for some metrics. Implemented in [`xcolumns.weighted_prediction`](../api/weighted_prediction) module.
 
-[1] [Erik Schultheis, Marek Wydmuch, Wojciech Kotłowski, Rohit Babbar, Krzysztof Dembczyński. Generalized test utilities for long-tail performance in extreme multi-label classification. NeurIPS 2023.](https://arxiv.org/abs/2311.05081)
+- Prediction for provided label-wise metric and test set using **Block Coordinate Ascent/Descent (BC)** method. Implemented in [`xcolumns.block_coordinate`](../api/block_coordinate) module. It was first introduced and described in:
+> [Erik Schultheis, Marek Wydmuch, Wojciech Kotłowski, Rohit Babbar, Krzysztof Dembczyński. Generalized test utilities for long-tail performance in extreme multi-label classification. NeurIPS 2023.](https://arxiv.org/abs/2311.05081)
 
-[2] [Erik Schultheis, Wojciech Kotłowski, Marek Wydmuch, Rohit Babbar, Strom Borman, Krzysztof Dembczyński. Consistent algorithms for multi-label classification with macro-at-k metrics. ICLR 2024.](https://arxiv.org/abs/2401.16594)
+- Search for optimal population classifier for provided metric defined on mulit-label confusion matrix using **Frank-Wolfe (FW)** method and provided training set. Implemented in [`xcolumns.frank_wolfe`](../api/frank_wolfe) module. It was first introduced and described in:
+> [Erik Schultheis, Wojciech Kotłowski, Marek Wydmuch, Rohit Babbar, Strom Borman, Krzysztof Dembczyński. Consistent algorithms for multi-label classification with macro-at-k metrics. ICLR 2024.](https://arxiv.org/abs/2401.16594)
+
+The library also implements a set of methods for calculating the metrics based on both the confusion matrix and the true and predicted labels. Implemented in [`xcolumns.confusion_matrix`](../api/confusion_matrix) and [`xcolumns.metrics`](../api/metrics) modules.

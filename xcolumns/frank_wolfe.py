@@ -386,10 +386,12 @@ def find_classifier_using_fw(
     RandomizedWeightedClassifier, Tuple[RandomizedWeightedClassifier, Dict[str, Any]]
 ]:
     r"""
-    Finds a randomized classifier that optimizes the given metric using the Frank-Wolfe algorithm
+    Finds a randomized classifier that optimizes the given metric under Population Utility (PU) objective using the Frank-Wolfe algorithm
     on provided training dataset of true labels **y_true** and corresponding conditional probabilities **y_proba**.
 
-    The algorithm iteratively calculates the gradient of the metric with respect to the confusion matrix and updates the randomized classfuer accordingly.
+    The algorithm iteratively calculates the gradient of the metric with respect to the confusion matrix and updates the randomized classifier accordingly.
+    The step size is determined by the Frank-Wolfe algorithm, that can be either the standard step size :math:`2/(i + 1)` or can be searched for the best step size using the provided search algorithm.
+    The algorithm stops if the step size is smaller than the provided epsilon **alpha_eps** or the maximum number of iterations **max_iters** is reached.
 
     Args:
         y_true: A 2D matrix of true labels of set that will be used to find the optimal classifier.
@@ -412,7 +414,7 @@ def find_classifier_using_fw(
         return_meta: Whether to return meta data.
 
     Returns:
-        The :class:`RandomizedWeightedClassifier`. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction, the number of iterations, and step sizes for each iteration and calculated metric values for each weighted classifier.
+        The randomized classifier: returned as :class:`RandomizedWeightedClassifier` If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction, the number of iterations, and step sizes for each iteration and calculated metric values for each weighted classifier.
     """
 
     log_info(

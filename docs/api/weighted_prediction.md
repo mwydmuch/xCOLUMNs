@@ -1,7 +1,7 @@
-# Weighted predictions
+# Weighted predictions (`xcolumns.weighted_prediction`)
 
 `xcolumns.weighted_prediction` module provides the methods for calculating the weighted prediction for each instance based on the conditional probabilities of labels.
-The main function of the module is [**predict_weighted_per_instance**](#xcolumns.weighted_prediction.predict_weighted_per_instance).
+The main function of the module is {func}`predict_weighted_per_instance() <xcolumns.weighted_prediction.predict_weighted_per_instance>`.
 
 
 ```{eval-rst}
@@ -11,7 +11,7 @@ The main function of the module is [**predict_weighted_per_instance**](#xcolumns
 
 ## Prediction strategies based on weighted predictions
 
-Based on [**predict_weighted_per_instance**](#xcolumns.weighted_prediction.predict_weighted_per_instance) function the module provides few additional functions for calculating the predictions
+Based on {func}`predict_weighted_per_instance() <xcolumns.weighted_prediction.predict_weighted_per_instance>` function the module provides few additional functions for calculating the predictions
 that are optimal for some specific metrics or arbitrary upweight labels with smaller prior probabilities.
 
 ```{eval-rst}

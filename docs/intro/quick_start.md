@@ -16,4 +16,4 @@ However, the PyTorch is not a required dependency, so you need to install it sep
 
 ## Usage
 
-We provide a short usage guide for the library in [short_usage_guide.ipynb](https://github.com/mwydmuch/xCOLUMNs/blob/master/short_usage_guide.ipynb) notebook.
+We provide a short usage guide (with examples) for the library in [short_usage_guide.ipynb](https://github.com/mwydmuch/xCOLUMNs/blob/master/short_usage_guide.ipynb) notebook.

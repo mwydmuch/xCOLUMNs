@@ -59,7 +59,7 @@ def make_macro_metric_on_conf_matrix(binary_metric, name) -> Callable:
     Calculates macro-averaged {name} from the given entries of confusion matrix:
     true positives, false positives, false negatives, and true negatives.
 
-    See :meth:`{binary_metric.__name__}` for definition.
+    See :func:`{binary_metric.__name__}` for definition.
     """
 
     return add_kwargs_to_signature(macro_metric_on_conf_matrix, binary_metric)
@@ -90,7 +90,7 @@ def make_micro_metric_on_conf_matrix(binary_metric, metric_name) -> Callable:
     Calculates macro-averaged {metric_name} from the given entries of confusion matrix:
     true positives, false positives, false negatives, and true negatives.
 
-    See :meth:`{binary_metric.__name__}` for definition.
+    See :func:`{binary_metric.__name__}` for definition.
     """
 
     return add_kwargs_to_signature(micro_metric_on_conf_matrix, binary_metric)
@@ -124,7 +124,7 @@ def make_metric_on_y_true_and_y_pred(
     metric_on_y_true_and_y_pred.__doc__ = f"""
     Calculates {metric_name} matric from the given true and predicted labels.
 
-    See :meth:`{metric_on_conf_matrix.__name__}` for definition.
+    See :func:`{metric_on_conf_matrix.__name__}` for definition.
     """
 
     return add_kwargs_to_signature(metric_on_y_true_and_y_pred, metric_on_conf_matrix)

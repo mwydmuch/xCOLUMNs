@@ -40,13 +40,13 @@ We provide a short usage guide for the library in [short_usage_guide.ipynb](http
 You can also check the documentation for more details.
 
 
-## Methods, usage, and how to cite
+## Methods implemented in xCOLUMNs
 
 The library implements the following methods:
 
 ### Instance-wise weighted prediction
 
-The library implements a set of methods for instance-wise weighted prediction, that include optimal prediction strategies for different metrics, such as:
+The library implements a set of methods for instance-wise weighted prediction, that include optimal infernece strategies for some metrics, such as:
 - Precision at k
 - Propensity-scored precision at k
 - Macro-averaged recall at k
@@ -55,12 +55,14 @@ The library implements a set of methods for instance-wise weighted prediction, t
 
 ### Optimization of prediction for a given test set using Block Coordinate Ascent/Descent (BCA/BCD)
 
-The method aims to optimize the prediction for a given test set using the block coordinate ascent/descent algorithm.
+The method aims to optimize the prediction for a given metrics and test set using the block coordinate ascent/descent algorithm.
 
 The method was first introduced and described in the paper:
 > [Erik Schultheis, Marek Wydmuch, Wojciech Kotłowski, Rohit Babbar, Krzysztof Dembczyński. Generalized test utilities for long-tail performance in extreme multi-label classification. NeurIPS 2023.](https://arxiv.org/abs/2311.05081)
 
-### Finding optimal population classifier via Frank-Wolfe (FW)
+### Finding optimal population classifier using Frank-Wolfe (FW)
+
+The method finds the optimal population classifier for given metric using the Frank-Wolfe optimization algorithm on the provided training set.
 
 The method was first introduced and described in the paper:
 > [Erik Schultheis, Wojciech Kotłowski, Marek Wydmuch, Rohit Babbar, Strom Borman, Krzysztof Dembczyński. Consistent algorithms for multi-label classification with macro-at-k metrics. ICLR 2024.](https://arxiv.org/abs/2401.16594)
@@ -69,9 +71,9 @@ The method was first introduced and described in the paper:
 ## Repository structure
 
 The repository is organized as follows:
-- `docs/` - Sphinx documentation (work in progress)
-- `experiments/` - a code for reproducing experiments from the papers, see the README.md file in the directory for details
-- `xcolumns/` - Python package with the library
+- `docs/` - Sphinx documentation
+- `experiments/` - a code for reproducing experiments from the papers, see the README.md file in the directory for more details
+- `xcolumns/` - the library source code
 - `tests/` - tests for the library (the coverage is bit limited at the moment, but these test should guarantee that the main components of the library works as expected)
 
 
