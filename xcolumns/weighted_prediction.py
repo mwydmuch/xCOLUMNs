@@ -103,14 +103,15 @@ def predict_weighted_per_instance(
     If **k** is 0, then the labels with gains higher than **th** are selected for the instance.
 
     Args:
-        y_proba: A 2D matrix of conditional probabilities for each label.
+        y_proba: A 2D matrix of conditional probabilities for each label of shape (n, m).
         k: The number of labels to predict for each instance.
         th: The single number threshold or a vector of thresholds for the gains. Only used if **k** is 0.
-        a: The vector of coeficients :math:`\boldsymbol{a}` used for calculating gains.
-           It needs to be a size of number of columns of **y_proba**.
+            If a vector, it needs to be a size of number of columns of **y_proba** (m).
+        a: The vector of slopes (coefficients) :math:`\boldsymbol{a}` used for calculating gains.
+           It needs to be a size of number of columns of **y_proba** (m).
            If equal to None, then :math:`\boldsymbol{a} = \boldsymbol{1}`.
-        b: The vector of constants :math:`\boldsymbol{b}` used for calculating gains.
-           It needs to be a size of number of columns of **y_proba**.
+        b: The vector of intercepts (constants) :math:`\boldsymbol{b}` used for calculating gains.
+           It needs to be a size of number of columns of **y_proba** (m).
            If equal to None, then :math:`\boldsymbol{b} = \boldsymbol{0}`.
         dtype: The data type for the output matrix. If equal to None, the data type of **y_proba** will be used.
         return_meta: Whether to return meta data.

@@ -167,16 +167,16 @@ def predict_using_randomized_weighted_classifier(
     If **k** is 0, then the labels with gains higher than 0 are selected for the instance.
 
     Args:
-        y_proba: A 2D matrix of conditional probabilities for each label.
+        y_proba: A 2D matrix of conditional probabilities for each label of shape (n, m).
         k: The number of labels to predict for each instance.
-        classifiers_a: The matrix of coeficients :math:`\boldsymbol{a}` used for calculating gains.
-                       Each row represents a coeficents of a single classifier.
+        classifiers_a: The matrix of slopes (coefficients) :math:`\boldsymbol{A}` used for calculating gains.
+                       Each row represents slopes :math:`\boldsymbol{a}_c` of a single classifier.
                        The number of rows needs to be equal to the number of rows of **classifiers_b** and size of **classifiers_proba**.
-                       The number of columns needs to be equal to the number of columns of **y_proba**.
-        classifiers_b: The matrix of constants :math:`\boldsymbol{a}` used for calculating gains.
-                       Each row represents a constants of a single classifier.
+                       The number of columns needs to be equal to the number of columns of **y_proba** (m).
+        classifiers_b: The matrix of intercepts (constants) :math:`\boldsymbol{B}` used for calculating gains.
+                       Each row represents intercepts :math:`\boldsymbol{b}_c` of a single classifier.
                        The number of rows needs to be equal to the number of rows of **classifiers_b** and size of **classifiers_proba**.
-                       The number of columns needs to be equal to the number of columns of **y_proba**.
+                       The number of columns needs to be equal to the number of columns of **y_proba** (m).
         classifiers_proba: The vector of probabilities of selection for each classifier.
         dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
         seed: The seed for the random selection of classifiers.
@@ -270,11 +270,11 @@ class RandomizedWeightedClassifier:
 
         Args:
             k: The number of labels that this classifier predicts for each instance.
-            a: The matrix of coeficients :math:`\boldsymbol{a}` used for calculating gains.
-               Each row represents a coeficents of a single classifier.
+            a: The matrix of slopes (coefficients) :math:`\boldsymbol{A}` used for calculating gains.
+               Each row represents slopes :math:`\boldsymbol{a}_c` of a single classifier.
                The number of rows needs to be equal to the number of rows of **classifiers_b** and size of **classifiers_proba**.
-            b: The matrix of constants :math:`\boldsymbol{a}` used for calculating gains.
-               Each row represents a constants of a single classifier.
+            b: The matrix of intercepts (constants) :math:`\boldsymbol{B}` used for calculating gains.
+               Each row represents intercepts :math:`\boldsymbol{b}_c` of a single classifier.
                The number of rows needs to be equal to the number of rows of **classifiers_b** and size of **classifiers_proba**.
             p: The vector of probabilities of selection for each classifier.
         """
@@ -376,7 +376,7 @@ def find_classifier_using_fw(
     maximize=True,
     search_for_best_alpha: bool = True,
     alpha_search_algo: str = "uniform",  # or "ternary"
-    alpha_eps: float = 0.001,
+    alpha_tolerance: float = 0.001,
     alpha_uniform_search_step: float = 0.001,
     skip_tn=False,
     seed=None,
@@ -391,12 +391,15 @@ def find_classifier_using_fw(
 
     The algorithm iteratively calculates the gradient of the metric with respect to the confusion matrix and updates the randomized classifier accordingly.
     The step size is determined by the Frank-Wolfe algorithm, that can be either the standard step size :math:`2/(i + 1)` or can be searched for the best step size using the provided search algorithm.
-    The algorithm stops if the step size is smaller than the provided epsilon **alpha_eps** or the maximum number of iterations **max_iters** is reached.
+    The algorithm stops if the step size is smaller than the provided epsilon **alpha_tolerance** or the maximum number of iterations **max_iters** is reached.
 
     Args:
         y_true: A 2D matrix of true labels of set that will be used to find the optimal classifier.
         y_proba: A 2D matrix of conditional probabilities that will be used to find the optimal classifier.
         metric_func: The metric function defined on confusion matrix to optimize.
+                     It needs to take four arguments that are vectors of:
+                     True Positives, False Positives, False Negatives, True Negatives for each label and return a scalar value
+                     (``metric_func(tp, fp, fn, tn)``).
         k: The budget of labels to predict for each instance.
            If equal to 0, this means that there is no budget constraint.
         max_iters: The maximum number of iterations.
@@ -406,7 +409,7 @@ def find_classifier_using_fw(
                                Setting slows down the algorithm, but may help to find better solution if the metric is not convex.
         alpha_search_algo: The algorithm for searching for the best alpha, can be either "uniform" or "ternary".
                            "Ternary" should be only used if the metric is unimodal.
-        alpha_eps: The stopping condition, if the alpha is smaller than this value, the algorithm stops.
+        alpha_tolerance: The stopping condition, if the new alpha is smaller than value of **alpha_tolerance** the algorithm stops.
         alpha_uniform_search_step: The step size for uniform search of alpha.
         skip_tn: Whether to skip the calculation of True Negatives in the confusion matrix, if the metric does not use the True Negatives, this can speed up the calculation, especially when using sparse matrices.
         seed: The seed for the random selection of classifiers.
@@ -415,6 +418,9 @@ def find_classifier_using_fw(
 
     Returns:
         The randomized classifier: returned as :class:`RandomizedWeightedClassifier` If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction, the number of iterations, and step sizes for each iteration and calculated metric values for each weighted classifier.
+
+    Example:
+
     """
 
     log_info(
@@ -422,7 +428,7 @@ def find_classifier_using_fw(
         verbose,
     )
 
-    alpha_eps = alpha_uniform_search_step
+    alpha_tolerance = alpha_uniform_search_step
 
     # Validate y_true and y_proba
     if type(y_true) != type(y_proba) and isinstance(y_true, Matrix):
@@ -542,7 +548,7 @@ def find_classifier_using_fw(
                 fn_i,
                 tn_i,
                 search_algo=alpha_search_algo,
-                eps=alpha_eps,
+                eps=alpha_tolerance,
                 uniform_search_step=alpha_uniform_search_step,
             )
         else:
@@ -559,8 +565,10 @@ def find_classifier_using_fw(
             verbose,
         )
 
-        if alpha < alpha_eps:
-            log_info(f"  Stopping because alpha is smaller than {alpha_eps}", verbose)
+        if alpha < alpha_tolerance:
+            log_info(
+                f"  Stopping because alpha is smaller than {alpha_tolerance}", verbose
+            )
             # Truncate unused classifiers
             classifiers_a = classifiers_a[:i]
             classifiers_b = classifiers_b[:i]

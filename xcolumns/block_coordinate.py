@@ -278,7 +278,7 @@ def predict_using_bc_with_0approx(
     k: int,
     metric_aggregation: str = "mean",  # "mean" or "sum"
     maximize=True,
-    eps: float = 1e-6,
+    tolerance: float = 1e-6,
     init_y_pred: Union[str, Matrix] = "random",  # "random", "top", "greedy", Matrix
     max_iter: int = 100,
     shuffle_order: bool = True,
@@ -287,21 +287,31 @@ def predict_using_bc_with_0approx(
     seed: Optional[int] = None,
     verbose: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, Dict[str, Any]]]:
-    """
-    Predicts for the provided probability matrix using block coordinate ascent/descent
-    with 0-th order approximation of Expected Test Utlity (ETU) objective
-    optimizing a given metric, that decomposes into a sum/mean of binary metrics.
+    r"""
+    Predicts for each instance (row) in a provided
+    matrix of conditional probabilities estimates of labels :math:`\boldsymbol{H}`, (**y_proba**),
+    where each element :math:`\eta_{ij} = P(y_j|x_i)`
+    is the probability of the label :math:`j` for the instance :math:`i`.
+    It uses block coordinate ascent/descent with 0-th order approximation of Expected Test Utlity (ETU) objective
+    optimizing a given metric, that decomposes into a sum/mean of binary metrics for each label:
+
+    .. math::
+        \text{metric}(\boldsymbol{C}) = \sum_{j=1}^{m} \text{or} \prod_{j=1}^{m} \text{binary_metric}(\text{TP}_j, \text{FP}_j, \text{FN}_j, \text{TN}_j)
 
     The algorithm iterate over instances. It changes the predictions for the one that optimizes the metric the most for one instance at a time.
-    The algorithm stops when the improvement of the metric is smaller than the given **eps** or the maximum number of iterations **max_iters** is reached.
+    The algorithm stops when the improvement of the metric is smaller than the given **tolerance** or the maximum number of iterations **max_iters** is reached.
 
     Args:
         y_proba: The matrix of predicted probabilities of shape (n, m).
         binary_metric_func: The binary metric function or a list of binary metric functions.
-        k: The budget of positive labels per instance.
-        metric_aggregation: The aggregation function for the metric. Either "mean" or "sum".
+                            It needs to take four arguments that are vectors of:
+                            True Positives, False Positives, False Negatives, True Negatives for each label, and return a vector of metric values for each label.
+                            (``binary_metric_func(tp, fp, fn, tn)``).
+                            If a list of functions is provided, the metric is calculated as a sum of the metrics calculated by each function.
+        k: The budget of positive labels per instance. If **k** is 0, the algorithm optimizes for the metric without any budget constraint.
+        metric_aggregation: The aggregation function for the binary metric(s), that forms the final metrics (objectite). Either "mean" or "sum".
         maximize: Whether to maximize the metric.
-        eps: Defines the stopping condition, it if the expected improvement of the metric is smaller than **eps** the algorithm stops.
+        tolerance: Defines the stopping condition, if the expected improvement of the metric is smaller than **tolerance** the algorithm stops.
         init_y_pred: The initial prediction matrix. It can be either "random", "top", "greedy" or a matrix of shape (n, m).
         max_iter: The maximum number of iterations.
         shuffle_order: Whether to shuffle the order of instances in each iteration.
@@ -312,6 +322,26 @@ def predict_using_bc_with_0approx(
 
     Returns:
         The predicted labels matrix of shape (n, m): the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction, the number of iterations, and expected performance at each iteration.
+
+    Example:
+        Example of maximizng macro-averaged F1 score using block coordinate ascent algorithm:
+
+        .. code-block:: python
+
+            from xcolumns.block_coordinate import predict_using_bc_with_0approx
+            y_proba = some_model.predict_proba(X_test) # Marginal probabilities of labels, matrix of shape (n, m)
+
+            # Define the binary metric function to optimize (eg. F1-score)
+            def my_binary_f1_score_on_conf_matrix(tp, fp, fn, tn):
+                return 2 * tp / (2 * tp + fp + fn + 1e-9)
+
+            y_pred = predict_using_bc_with_0approx(
+                y_proba,
+                my_binary_f1_score_on_conf_matrix,
+                k=3,                                # The udget of positive labels per instance
+                metric_aggregation='mean',          # The aggregation function for the binary metric, here mean results in macro-averaged F1-score
+                maximize=True                       # Maximize the metric
+            ) # Returns the predicted labels matrix of shape (n, m)
     """
 
     log_info(
@@ -357,10 +387,10 @@ def predict_using_bc_with_0approx(
         # Recalculate expected conf matrices to prevent numerical errors from accumulating too much
         # In this variant they will be all np.matrix with shape (1, m)
         if greedy:
-            Etp = zeros_like(y_proba, shape=(m,))  # np.zeros(m, dtype=DefaultDataDType)
-            Efp = zeros_like(y_proba, shape=(m,))  # np.zeros(m, dtype=DefaultDataDType)
-            Efn = zeros_like(y_proba, shape=(m,))  # np.zeros(m, dtype=DefaultDataDType)
-            Etn = zeros_like(y_proba, shape=(m,))  # np.zeros(m, dtype=DefaultDataDType)
+            Etp = zeros_like(y_proba, shape=(m,))
+            Efp = zeros_like(y_proba, shape=(m,))
+            Efn = zeros_like(y_proba, shape=(m,))
+            Etn = zeros_like(y_proba, shape=(m,))
         else:
             log_info("    Calculating expected confusion matrix ...", verbose)
             Etp, Efp, Efn, Etn = calculate_confusion_matrix(
@@ -409,9 +439,11 @@ def predict_using_bc_with_0approx(
             f"    Iteration {j}/{max_iter} finished, expected metric value: {old_utility} -> {new_utility}",
             verbose,
         )
-        if abs(new_utility - old_utility) < eps:
+        if (
+            abs(new_utility - old_utility) < tolerance
+        ):  # abs is used to handle maximization/minimization cases
             log_info(
-                f"  Stopping because improvement of expected metric value is smaller than {eps}",
+                f"  Stopping because improvement of expected metric value is smaller than {tolerance}",
                 verbose,
             )
             break
@@ -529,7 +561,7 @@ def predict_optimizing_coverage_using_bc(
     y_proba: Matrix,
     k: int,
     alpha: float = 1,
-    eps: float = 1e-6,
+    tolerance: float = 1e-6,
     init_y_pred: Union[
         str, np.ndarray, csr_matrix
     ] = "random",  # "random", "topk", "random", or csr_matrix
@@ -613,9 +645,9 @@ def predict_optimizing_coverage_using_bc(
             f"    Iteration {j}/{max_iter} finished, expected coverage: {old_cov} -> {new_cov}",
             verbose,
         )
-        if new_cov <= old_cov + eps:
+        if new_cov <= old_cov + tolerance:
             log_info(
-                f"  Stopping because improvement of expected coverage is smaller than {eps}",
+                f"  Stopping because improvement of expected coverage is smaller than {tolerance}",
                 verbose,
             )
             break
@@ -725,7 +757,7 @@ predict_optimizing_macro_gmean_using_fw = make_bc_wrapper(
 def predict_optimizing_instance_precision_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
-    eps: float = 1e-6,
+    tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
     max_iter: int = 100,
     shuffle_order: bool = True,
@@ -745,7 +777,7 @@ def predict_optimizing_instance_precision_using_bc(
         binary_metric_func=instance_precision_with_specific_k,
         k=k,
         metric_aggregation="sum",
-        eps=eps,
+        tolerance=tolerance,
         init_y_pred=init_y_pred,
         max_iter=max_iter,
         shuffle_order=shuffle_order,
@@ -758,7 +790,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_precision_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     alpha: float = 1,
-    eps: float = 1e-6,
+    tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
     max_iter: int = 100,
     shuffle_order: bool = True,
@@ -783,7 +815,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_precision_using_bc(
         k=k,
         metric_aggregation="sum",
         skip_tn=True,
-        eps=eps,
+        tolerance=tolerance,
         init_y_pred=init_y_pred,
         max_iter=max_iter,
         shuffle_order=shuffle_order,
@@ -796,7 +828,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_recall_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     alpha: float = 1,
-    eps: float = 1e-6,
+    tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
     max_iter: int = 100,
     shuffle_order: bool = True,
@@ -821,7 +853,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_recall_using_bc(
         k=k,
         metric_aggregation="sum",
         skip_tn=True,
-        eps=eps,
+        tolerance=tolerance,
         init_y_pred=init_y_pred,
         max_iter=max_iter,
         shuffle_order=shuffle_order,
@@ -834,7 +866,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     alpha: float = 1,
-    eps: float = 1e-6,
+    tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
     max_iter: int = 100,
     shuffle_order: bool = True,
@@ -859,7 +891,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc(
         binary_metric_func=mixed_utility_fn,
         metric_aggregation="sum",
         skip_tn=True,
-        eps=eps,
+        tolerance=tolerance,
         init_y_pred=init_y_pred,
         max_iter=max_iter,
         shuffle_order=shuffle_order,

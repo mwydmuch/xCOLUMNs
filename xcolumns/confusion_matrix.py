@@ -137,7 +137,19 @@ class ConfusionMatrix:
         return self
 
     def normalize(self) -> "ConfusionMatrix":
-        pass  # TODO
+        """
+        Normalize the confusion matrix, resulting the rates instead of counts.
+
+        Returns:
+            The normalized confusion matrix.
+        """
+        entries_sum = self.tp + self.fp + self.fn + self.tn
+        return ConfusionMatrix(
+            self.tp / entries_sum,
+            self.fp / entries_sum,
+            self.fn / entries_sum,
+            self.tn / entries_sum,
+        )
 
 
 ########################################################################################
@@ -201,6 +213,8 @@ def _calculate_conf_mat_entry(
     normalize: bool = False,
     axis: int = 0,
 ) -> DenseMatrix:
+    """ """
+
     if isinstance(y_true, DenseMatrix) and isinstance(y_pred, DenseMatrix):
         func = func_for_dense
     elif isinstance(y_true, csr_matrix) and isinstance(y_pred, csr_matrix):
