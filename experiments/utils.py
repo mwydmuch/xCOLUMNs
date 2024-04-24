@@ -14,9 +14,11 @@ from xcolumns.utils import construct_csr_matrix
 
 
 def call_function_with_supported_kwargs(func, *args, **kwargs):
-    selected_kwargs = {
-        k: v for k, v in kwargs.items() if k in func.__code__.co_varnames
-    }
+    if hasattr(func, "__signature__"):
+        params = func.__signature__.parameters
+    else:
+        params = func.__code__.co_varnames
+    selected_kwargs = {k: v for k, v in kwargs.items() if k in params}
     return func(*args, **selected_kwargs)
 
 

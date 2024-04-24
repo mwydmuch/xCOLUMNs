@@ -277,12 +277,12 @@ def predict_using_bc_with_0approx(
     binary_metric_func: Union[Callable, List[Callable]],
     k: int,
     metric_aggregation: str = "mean",  # "mean" or "sum"
-    maximize=True,
+    maximize: bool = True,
     tolerance: float = 1e-6,
     init_y_pred: Union[str, Matrix] = "random",  # "random", "top", "greedy", Matrix
-    max_iter: int = 100,
+    max_iters: int = 100,
     shuffle_order: bool = True,
-    skip_tn=False,
+    skip_tn: bool = False,
     return_meta: bool = False,
     seed: Optional[int] = None,
     verbose: bool = False,
@@ -313,7 +313,7 @@ def predict_using_bc_with_0approx(
         maximize: Whether to maximize the metric.
         tolerance: Defines the stopping condition, if the expected improvement of the metric is smaller than **tolerance** the algorithm stops.
         init_y_pred: The initial prediction matrix. It can be either "random", "top", "greedy" or a matrix of shape (n, m).
-        max_iter: The maximum number of iterations.
+        max_iters: The maximum number of iterations.
         shuffle_order: Whether to shuffle the order of instances in each iteration.
         skip_tn: Whether to skip the calculation of True Negatives in the confusion matrix, if the metric does not use the True Negatives, this can speed up the calculation, especially when using sparse matrices.
         return_meta: Whether to return the meta information.
@@ -345,7 +345,13 @@ def predict_using_bc_with_0approx(
     """
 
     log_info(
-        f"Starting optimization of ETU metric using block coordinate {'ascent' if maximize else 'descent'} algorithm ...",
+        f"Starting optimization of ETU metric using block coordinate {'ascent (maximization)' if maximize else 'descent (minimization)'} algorithm ...",
+        verbose,
+    )
+    if k > 0:
+        log_info(f"  Budget k: {k}", verbose)
+    log_info(
+        f"  Tolerance (stopping condition): {tolerance}, max iterations: {max_iters}",
         verbose,
     )
 
@@ -378,8 +384,8 @@ def predict_using_bc_with_0approx(
     # Initialize the instance order and set seed for shuffling
     rng = np.random.default_rng(seed)
     order = np.arange(n)
-    for j in range(1, max_iter + 1):
-        log_info(f"  Starting iteration {j}/{max_iter} ...", verbose)
+    for j in range(1, max_iters + 1):
+        log_info(f"  Starting iteration {j}/{max_iters} ...", verbose)
 
         if shuffle_order:
             rng.shuffle(order)
@@ -436,7 +442,7 @@ def predict_using_bc_with_0approx(
         meta["utilities"].append(new_utility)
 
         log_info(
-            f"    Iteration {j}/{max_iter} finished, expected metric value: {old_utility} -> {new_utility}",
+            f"    Iteration {j}/{max_iters} finished, expected metric value: {old_utility} -> {new_utility}",
             verbose,
         )
         if (
@@ -565,7 +571,7 @@ def predict_optimizing_coverage_using_bc(
     init_y_pred: Union[
         str, np.ndarray, csr_matrix
     ] = "random",  # "random", "topk", "random", or csr_matrix
-    max_iter: int = 100,
+    max_iters: int = 100,
     shuffle_order: bool = True,
     return_meta: bool = False,
     seed: Optional[int] = None,
@@ -614,8 +620,8 @@ def predict_optimizing_coverage_using_bc(
     # Initialize the instance order and set seed for shuffling
     rng = np.random.default_rng(seed)
     order = np.arange(n)
-    for j in range(1, max_iter + 1):
-        log_info(f"  Starting iteration {j}/{max_iter} ...", verbose)
+    for j in range(1, max_iters + 1):
+        log_info(f"  Starting iteration {j}/{max_iters} ...", verbose)
 
         if shuffle_order:
             rng.shuffle(order)
@@ -642,7 +648,7 @@ def predict_optimizing_coverage_using_bc(
         meta["utilities"].append(new_cov)
 
         log_info(
-            f"    Iteration {j}/{max_iter} finished, expected coverage: {old_cov} -> {new_cov}",
+            f"    Iteration {j}/{max_iters} finished, expected coverage: {old_cov} -> {new_cov}",
             verbose,
         )
         if new_cov <= old_cov + tolerance:
@@ -759,7 +765,7 @@ def predict_optimizing_instance_precision_using_bc(
     k: int,
     tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iter: int = 100,
+    max_iters: int = 100,
     shuffle_order: bool = True,
     verbose: bool = False,
     return_meta: bool = False,
@@ -779,7 +785,7 @@ def predict_optimizing_instance_precision_using_bc(
         metric_aggregation="sum",
         tolerance=tolerance,
         init_y_pred=init_y_pred,
-        max_iter=max_iter,
+        max_iters=max_iters,
         shuffle_order=shuffle_order,
         verbose=verbose,
         return_meta=return_meta,
@@ -792,7 +798,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_precision_using_bc(
     alpha: float = 1,
     tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iter: int = 100,
+    max_iters: int = 100,
     shuffle_order: bool = True,
     verbose: bool = False,
     return_meta: bool = False,
@@ -817,7 +823,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_precision_using_bc(
         skip_tn=True,
         tolerance=tolerance,
         init_y_pred=init_y_pred,
-        max_iter=max_iter,
+        max_iters=max_iters,
         shuffle_order=shuffle_order,
         verbose=verbose,
         return_meta=return_meta,
@@ -830,7 +836,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_recall_using_bc(
     alpha: float = 1,
     tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iter: int = 100,
+    max_iters: int = 100,
     shuffle_order: bool = True,
     verbose: bool = False,
     return_meta: bool = False,
@@ -855,7 +861,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_recall_using_bc(
         skip_tn=True,
         tolerance=tolerance,
         init_y_pred=init_y_pred,
-        max_iter=max_iter,
+        max_iters=max_iters,
         shuffle_order=shuffle_order,
         verbose=verbose,
         return_meta=return_meta,
@@ -868,7 +874,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc(
     alpha: float = 1,
     tolerance: float = 1e-6,
     init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iter: int = 100,
+    max_iters: int = 100,
     shuffle_order: bool = True,
     verbose: bool = False,
     return_meta: bool = False,
@@ -893,7 +899,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc(
         skip_tn=True,
         tolerance=tolerance,
         init_y_pred=init_y_pred,
-        max_iter=max_iter,
+        max_iters=max_iters,
         shuffle_order=shuffle_order,
         verbose=verbose,
         return_meta=return_meta,

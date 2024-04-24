@@ -373,13 +373,13 @@ def find_classifier_using_fw(
     k: int,
     max_iters: int = 100,
     init_classifier: Union[str, Tuple[DenseMatrix, DenseMatrix]] = "random",  # or "top"
-    maximize=True,
+    maximize: bool = True,
     search_for_best_alpha: bool = True,
     alpha_search_algo: str = "uniform",  # or "ternary"
     alpha_tolerance: float = 0.001,
     alpha_uniform_search_step: float = 0.001,
-    skip_tn=False,
-    seed=None,
+    skip_tn: bool = False,
+    seed: Optional[int] = None,
     verbose: bool = False,
     return_meta: bool = False,
 ) -> Union[
@@ -420,15 +420,21 @@ def find_classifier_using_fw(
         The randomized classifier: returned as :class:`RandomizedWeightedClassifier` If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction, the number of iterations, and step sizes for each iteration and calculated metric values for each weighted classifier.
 
     Example:
-
+        TODO
     """
 
     log_info(
         "Starting searching for optimal randomized classifier using Frank-Wolfe algorithm ...",
         verbose,
     )
-
-    alpha_tolerance = alpha_uniform_search_step
+    log_info(
+        f"  Optimization direction: {'maximize' if maximize else 'minimize'}, {f'budget k: {k}' if k > 0 else ''}",
+        verbose,
+    )
+    log_info(
+        f"  Tolerance (stopping condition): {alpha_tolerance}, max iterations: {max_iters}",
+        verbose,
+    )
 
     # Validate y_true and y_proba
     if type(y_true) != type(y_proba) and isinstance(y_true, Matrix):

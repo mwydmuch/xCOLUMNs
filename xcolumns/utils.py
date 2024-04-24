@@ -6,7 +6,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from .numba_csr_functions import *
-from .types import TORCH_AVAILABLE, DenseMatrix, DType
+from .types import TORCH_AVAILABLE, DenseMatrix, DType, Matrix
 
 
 if TORCH_AVAILABLE:
@@ -49,7 +49,9 @@ def log_error(msg: str, verbose: bool):
 ########################################################################################
 
 
-def zeros_like(a: DenseMatrix, shape=None, dtype: DType = None) -> DenseMatrix:
+def zeros_like(
+    a: Matrix, shape: Tuple[int, ...] = None, dtype: DType = None
+) -> DenseMatrix:
     if isinstance(a, np.ndarray):
         return np.zeros_like(a, shape=shape, dtype=dtype)
     elif isinstance(a, csr_matrix):
@@ -67,11 +69,22 @@ def zeros_like(a: DenseMatrix, shape=None, dtype: DType = None) -> DenseMatrix:
         raise ValueError(f"Unsupported type {type(a)}")
 
 
-def ones_like(a: DenseMatrix, dtype: DType = None) -> DenseMatrix:
+def ones_like(
+    a: DenseMatrix, shape: Tuple[int, ...] = None, dtype: DType = None
+) -> DenseMatrix:
     if isinstance(a, np.ndarray):
-        return np.ones_like(a, dtype=dtype)
+        return np.ones_like(a, shape=shape, dtype=dtype)
+    elif isinstance(a, csr_matrix):
+        return np.ones(
+            shape if shape is not None else a.shape,
+            dtype=dtype if dtype is not None else a.dtype,
+        )
     elif TORCH_AVAILABLE and isinstance(a, torch.Tensor):
-        return torch.ones_like(a, dtype=dtype)
+        return torch.ones(
+            shape if shape is not None else a.shape,
+            dtype=dtype if dtype is not None else a.dtype,
+            device=a.device,
+        )
     else:
         raise ValueError(f"Unsupported type {type(a)}")
 
@@ -79,6 +92,12 @@ def ones_like(a: DenseMatrix, dtype: DType = None) -> DenseMatrix:
 ########################################################################################
 # Functions for generating matrices with random prediction at k
 ########################################################################################
+
+
+def random_at_k_like(
+    a: DenseMatrix, shape: Tuple[int, int], k: int, seed: Optional[int] = None
+):
+    pass
 
 
 def random_at_k_np(

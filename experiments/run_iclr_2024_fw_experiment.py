@@ -23,12 +23,6 @@ from xcolumns.metrics_original import *
 from xcolumns.weighted_prediction import *
 
 
-# TODO: refactor this
-RECALCULATE_RESUTLS = False
-RECALCULATE_PREDICTION = False
-RETRAIN_MODEL = False
-
-
 def frank_wolfe_wrapper(
     Y_val,
     pred_val,
@@ -592,7 +586,25 @@ class PytorchModel(ModelWrapper):
 @click.option("-s", "--seed", type=int, required=True)
 @click.option("-m", "--method", type=str, required=False, default=None)
 @click.option("-t", "--testsplit", type=float, required=False, default=0)
-def main(experiment, k, seed, method, testsplit):
+@click.option("-r", "--results_dir", type=str, required=False, default="results_fw/")
+@click.option(
+    "--recalculate_predictions", is_flag=True, type=bool, required=False, default=False
+)
+@click.option(
+    "--recalculate_results", is_flag=True, type=bool, required=False, default=False
+)
+@click.option("--retrain_model", is_flag=True, type=bool, required=False, default=False)
+def main(
+    experiment,
+    k,
+    seed,
+    method,
+    testsplit,
+    results_dir,
+    recalculate_predictions,
+    recalculate_results,
+    retrain_model,
+):
     print(experiment)
 
     if method is None:
@@ -894,7 +906,7 @@ def main(experiment, k, seed, method, testsplit):
             model = PytorchModel(model_path, model_seed, loss="asym")
 
     if isinstance(model, ModelWrapper):
-        if not os.path.exists(model_path) or RETRAIN_MODEL:
+        if not os.path.exists(model_path) or retrain_model:
             with Timer():
                 model.fit(X_train, Y_train, X_test, Y_test)
         # else:
@@ -907,7 +919,7 @@ def main(experiment, k, seed, method, testsplit):
             top_k = 100
         print("Predicting for validation set ...")
         val_pred_path = f"models_and_predictions/{experiment}_seed={model_seed}_split={1 - testsplit}_top_k={top_k}_pred_val.pkl"
-        if not os.path.exists(val_pred_path) or RETRAIN_MODEL:
+        if not os.path.exists(val_pred_path) or retrain_model:
             with Timer():
                 pred_val = model.predict_proba(X_val, top_k=top_k)
                 align_dim1(Y_train, pred_val)
@@ -920,7 +932,7 @@ def main(experiment, k, seed, method, testsplit):
 
         print("Predicting for test set ...")
         test_pred_path = f"models_and_predictions/{experiment}_seed={model_seed}_split={1 - testsplit}_top_k={top_k}_pred_test.pkl"
-        if not os.path.exists(test_pred_path) or RETRAIN_MODEL:
+        if not os.path.exists(test_pred_path) or retrain_model:
             with Timer():
                 pred_test = model.predict_proba(X_test, top_k=top_k)
                 align_dim1(Y_train, pred_test)
@@ -941,7 +953,7 @@ def main(experiment, k, seed, method, testsplit):
         pred_test = sp.csr_matrix(pred_test)
 
     print("Calculating metrics ...")
-    output_path_prefix = f"results_fw/{experiment}/"
+    output_path_prefix = f"{results_dir}/{experiment}/"
     os.makedirs(output_path_prefix, exist_ok=True)
     for method, func in methods.items():
         print(f"{experiment} - {method} @ {k}: ")
@@ -950,9 +962,9 @@ def main(experiment, k, seed, method, testsplit):
         results_path = f"{output_path}_results.json"
         pred_path = f"{output_path}_pred.pkl"
 
-        if not os.path.exists(results_path) or RECALCULATE_RESUTLS:
+        if not os.path.exists(results_path) or recalculate_results:
             results = {}
-            if not os.path.exists(pred_path) or RECALCULATE_PREDICTION:
+            if not os.path.exists(pred_path) or recalculate_predictions:
                 # results["test_log_loss"] = log_loss(Y_test, pred_test)
                 # results["val_log_loss"] = log_loss(Y_val, pred_val)
 

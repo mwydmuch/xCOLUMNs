@@ -27,7 +27,7 @@ METHODS = {
     "optimal-instance-prec": (predict_optimizing_instance_precision, {}),
     # "block-coord-instance-prec": (bc_instance_precision_at_k, {}), # This is the same as optimal-instance-prec but using block coordinate, for sanity-check purposes only
     "optimal-instance-ps-prec": (
-        predict_optimizing_instance_propensity_weighted_precision,
+        predict_optimizing_instance_propensity_scored_precision,
         {},
     ),
     "power-law-with-beta=0.75": (
@@ -136,34 +136,34 @@ METHODS = {
     # Greedy / 1 iter variants
     "greedy-macro-prec": (
         predict_optimizing_macro_precision_using_bc,
-        {"init_y_pred": "greedy", "max_iter": 1},
+        {"init_y_pred": "greedy", "max_iters": 1},
     ),
     "greedy-macro-recall": (
         predict_optimizing_macro_precision_using_bc,
-        {"init_y_pred": "greedy", "max_iter": 1},
+        {"init_y_pred": "greedy", "max_iters": 1},
     ),
     "greedy-macro-f1": (
         predict_optimizing_macro_f1_score_using_bc,
-        {"init_y_pred": "greedy", "max_iter": 1},
+        {"init_y_pred": "greedy", "max_iters": 1},
     ),
     "greedy-cov": (
         predict_optimizing_coverage_using_bc,
-        {"init_y_pred": "greedy", "max_iter": 1},
+        {"init_y_pred": "greedy", "max_iters": 1},
     ),
     #
     "block-coord-macro-prec-iter=1": (
         predict_optimizing_macro_precision_using_bc,
-        {"max_iter": 1},
+        {"max_iters": 1},
     ),
     "block-coord-macro-recall-iter=1": (
         predict_optimizing_macro_precision_using_bc,
-        {"max_iter": 1},
+        {"max_iters": 1},
     ),
     "block-coord-macro-f1-iter=1": (
         predict_optimizing_macro_f1_score_using_bc,
-        {"max_iter": 1},
+        {"max_iters": 1},
     ),
-    "block-coord-cov-iter=1": (predict_optimizing_coverage_using_bc, {"max_iter": 1}),
+    "block-coord-cov-iter=1": (predict_optimizing_coverage_using_bc, {"max_iters": 1}),
     #
     # Similar results to the above
     # "greedy-start-block-coord-macro-prec": (predict_optimizing_macro_precision_using_bc, {"init_y_pred": "greedy"},),
@@ -227,7 +227,7 @@ def calculate_and_report_metrics(y_true, y_pred, k, metrics):
 @click.option("-m", "--method", type=str, required=False, default=None)
 @click.option("-p", "--probabilities_path", type=str, required=False, default=None)
 @click.option("-l", "--labels_path", type=str, required=False, default=None)
-@click.option("-r", "--results_dir", type=str, required=False, default="results/")
+@click.option("-r", "--results_dir", type=str, required=False, default="results_bc/")
 @click.option(
     "--recalculate_predictions", is_flag=True, type=bool, required=False, default=False
 )

@@ -1,3 +1,4 @@
+from math import log
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
@@ -15,14 +16,14 @@ from .utils import add_kwargs_to_signature
 
 def check_if_y_pred_at_k(y_pred: Matrix, k: int) -> bool:
     """
-    Check if y_pred is a binary matrix with exactly k positive labels per instance.
+    Checks if y_pred is a binary matrix with exactly k positive labels per instance.
 
     Args:
-        y_pred: binary matrix
-        k: number of positive labels required per instance
+        y_pred: The binary labels matrix.
+        k: Number of positive labels required per instance.
 
     Returns:
-        bool: True if y_pred is a binary matrix with exactly k positive labels per instance
+        True if y_pred is a binary matrix with exactly k positive labels per instance.
     """
 
     if (isinstance(y_pred, DenseMatrix) and ((y_pred == 0) & (y_pred == 1)).any()) or (
@@ -36,14 +37,15 @@ def check_if_y_pred_at_k(y_pred: Matrix, k: int) -> bool:
 
 def make_macro_metric_on_conf_matrix(binary_metric, name) -> Callable:
     """
-    Factory function to create a macro-averaged metric from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn)
+    This is a factory function to create a macro-averaged metric
+    from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn).
 
     Args:
         binary_metric: binary metric defined on confusion matrix
         name: name of the metric to be used in the docstring
 
     Returns:
-        macro_metric_on_conf_matrix: macro-averaged metric defined on confusion matrix
+        The function calculating the macro-averaged metric defined on a confusion matrix.
     """
 
     def macro_metric_on_conf_matrix(
@@ -65,16 +67,19 @@ def make_macro_metric_on_conf_matrix(binary_metric, name) -> Callable:
     return add_kwargs_to_signature(macro_metric_on_conf_matrix, binary_metric)
 
 
-def make_micro_metric_on_conf_matrix(binary_metric, metric_name) -> Callable:
+def make_micro_metric_on_conf_matrix(
+    binary_metric: Callable, metric_name: str
+) -> Callable:
     """
-    Factory function to create a micro-averaged metric from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn)
+    This is a factory function to create a micro-averaged metric
+    from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn).
 
     Args:
         binary_metric: binary metric defined on confusion matrix
         name: name of the metric to be used in the docstring
 
     Returns:
-        macro_metric_on_conf_matrix: macro-averaged metric defined on confusion matrix
+        The function calculating the micro-averaged metric defined on a confusion matrix.
     """
 
     def micro_metric_on_conf_matrix(
@@ -97,10 +102,10 @@ def make_micro_metric_on_conf_matrix(binary_metric, metric_name) -> Callable:
 
 
 def make_metric_on_y_true_and_y_pred(
-    metric_on_conf_matrix, metric_name, skip_tn=False
+    metric_on_conf_matrix: Callable, metric_name: str, skip_tn: bool = False
 ) -> Callable:
     """
-    Factory function to create
+    This is a factory function to create
     a metric calculated on true and predicted labels: metric(y_true, y_pred)
     from metric calculated on confusion matrix: metric(tp, fp, fn, tn).
 
@@ -110,7 +115,7 @@ def make_metric_on_y_true_and_y_pred(
         skip_tn: whether to skip true negatives
 
     Returns:
-        metric_on_y_true_and_y_pred: metric calculated on true and predicted labels
+        Function etric calculated on true and predicted labels
     """
 
     def metric_on_y_true_and_y_pred(
@@ -128,6 +133,122 @@ def make_metric_on_y_true_and_y_pred(
     """
 
     return add_kwargs_to_signature(metric_on_y_true_and_y_pred, metric_on_conf_matrix)
+
+
+########################################################################################
+# Label counts / priors / propensities
+########################################################################################
+
+
+def label_counts(y: Matrix) -> DenseMatrix:
+    """
+    Counts number of occurrences of each label.
+
+    Args:
+        y: The binary labels matrix.
+
+    Returns:
+        An vector the count of label occurrences.
+    """
+    if len(y.shape) > 2:
+        raise ValueError("y must be a binary matrix")
+
+    counts = y.sum(axis=0)
+
+    return counts
+
+
+def label_priors(y: Matrix) -> DenseMatrix:
+    """
+    Calculates prior probablity of each label.
+
+    Args:
+        y: The binary labels matrix.
+
+    Returns:
+        An vector the label priors.
+    """
+    counts = label_counts(y)
+    priors = counts / y.shape[0]
+
+    return priors
+
+
+def inverse_label_priors(y: Matrix) -> DenseMatrix:
+    """
+    Calculates inverse of prior probablity of each label.
+
+    Args:
+        y: The binary labels matrix.
+
+    Returns:
+        An vector the inverse label priors.
+    """
+    return 1.0 / label_priors(y)
+
+
+def jpv_propensities(y: Matrix, a: float = 0.55, b: float = 1.5) -> DenseMatrix:
+    """
+    Calculates propensity of labels using an empirical model proposed in Jain et al. 2016.
+    Propensity :math:`p_j` of label :math:`j` is calculated as:
+
+    .. math::
+
+        c = (\\log n - 1)(b + 1)^a \\,, \\
+        p_j = \\frac{1}{1 + c(n_l + b)^{-a}} \\,,
+
+    where :math:`n` is total number of data points, :math:`n_j` is total number of data points for
+    and :math:`a` and :math:`b` are dataset specific parameters.
+
+    Args:
+        y: The binary labels matrix.
+        a: A dataset specific parameter, typical values:
+            - 0.5: ``WikiLSHTC-325K`` and ``WikipediaLarge-500K``
+            - 0.6: ``Amazon-670K`` and ``Amazon-3M``
+            - 0.55: otherwise
+        b: Dataset specific parameter, typical values:
+            - 0.4: ``WikiLSHTC-325K`` and ``WikipediaLarge-500K``
+            - 2.6: ``Amazon-670K`` and ``Amazon-3M``
+            - 1.5: otherwise
+
+    Returns:
+        An vector the label propensities.
+    """
+    return 1.0 / jpv_inverse_propensities(y, a, b)
+
+
+def jpv_inverse_propensities(y: Matrix, a: float = 0.55, b: float = 1.5) -> DenseMatrix:
+    """
+    Calculate inverse propensities of labels an empirical model proposed in Jain et al. 2016.
+    Inverse propensity :math:`q_j` of label :math:`j` is calculated as:
+
+    .. math::
+
+        c = (\\log n - 1)(b + 1)^a \\,, \\
+        q_j = 1 + c(n_j + b)^{-A} \\,,
+
+    where :math:`n` is total number of data points, :math:`n_j` is total number of data points for
+    and :math:`a` and :math:`b` are dataset specific parameters.
+
+    Args:
+        y: The binary labels matrix.
+        a: A dataset specific parameter, typical values:
+            - 0.5: ``WikiLSHTC-325K`` and ``WikipediaLarge-500K``
+            - 0.6: ``Amazon-670K`` and ``Amazon-3M``
+            - 0.55: otherwise
+        b: Dataset specific parameter, typical values:
+            - 0.4: ``WikiLSHTC-325K`` and ``WikipediaLarge-500K``
+            - 2.6: ``Amazon-670K`` and ``Amazon-3M``
+            - 1.5: otherwise
+
+    Returns:
+        An vector the inverse label propensities.
+    """
+    n = y.shape[0]
+    counts = label_counts(y)
+    C = (log(n) - 1) * (b + 1) ** a
+    inv_ps = 1 + C * (counts + b) ** -a
+    return inv_ps
 
 
 ########################################################################################
