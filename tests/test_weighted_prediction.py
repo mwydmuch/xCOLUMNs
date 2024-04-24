@@ -3,12 +3,14 @@ from pytest import _report_data_type, _test_prediction_method_with_different_typ
 from scipy.sparse import csr_matrix
 
 from xcolumns.confusion_matrix import calculate_confusion_matrix
+from xcolumns.metrics import jpv_inverse_propensities, label_priors
 from xcolumns.utils import *
 from xcolumns.weighted_prediction import (
     predict_log_weighted_per_instance,
     predict_optimizing_instance_precision,
     predict_optimizing_instance_propensity_scored_precision,
     predict_optimizing_macro_balanced_accuracy,
+    predict_optimizing_macro_recall,
     predict_power_law_weighted_per_instance,
     predict_weighted_per_instance,
 )
@@ -79,16 +81,19 @@ def test_prediction_optizming_macro_balanced_accuracy(generated_test_data):
     )
 
 
-# def test_wrapper_methods(generated_test_data):
-#     y_test = generated_test_data["y_test"]
-#     y_proba_test = generated_test_data["y_proba_test"]
+def test_wrapper_methods(generated_test_data):
+    y_test = generated_test_data["y_test"]
+    y_proba_test = generated_test_data["y_proba_test"]
 
-#     priors = y_test.mean(axis=0)
+    priors = label_priors(y_test)
+    inverse_propensities = jpv_inverse_propensities(y_test)
 
-#     for func in [
-#         predict_log_weighted_per_instance,
-#         predict_power_law_weighted_per_instance,
-#         predict_optimizing_instance_propensity_scored_precision,
-#         predict_optimizing_instance_precision,
-#     ]:
-#         func(y_proba_test, k=3)
+    y_pred = predict_optimizing_instance_precision(y_proba_test, k=3)
+    y_pred = predict_log_weighted_per_instance(y_proba_test, k=3, priors=priors)
+    y_pred = predict_power_law_weighted_per_instance(
+        y_proba_test, k=3, priors=priors, beta=0.5
+    )
+    y_pred = predict_optimizing_instance_propensity_scored_precision(
+        y_proba_test, k=3, inverse_propensities=inverse_propensities
+    )
+    y_pred = predict_optimizing_macro_recall(y_proba_test, k=3, priors=priors)
