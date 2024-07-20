@@ -8,7 +8,14 @@ from scipy.sparse import csr_matrix
 from .confusion_matrix import calculate_confusion_matrix
 from .metrics import *
 from .numba_csr_functions import numba_predict_weighted_per_instance_csr_step
-from .types import TORCH_AVAILABLE, DefaultDataDType, DenseMatrix, DType, Matrix
+from .types import (
+    TORCH_AVAILABLE,
+    TORCH_FLOAT_TYPE,
+    DefaultDataDType,
+    DenseMatrix,
+    DType,
+    Matrix,
+)
 from .utils import log_info, log_warning, ternary_search, uniform_search
 from .weighted_prediction import predict_weighted_per_instance
 
@@ -17,6 +24,12 @@ if TORCH_AVAILABLE:
     import torch
 
     def _metric_func_with_gradient_torch(metric_func, tp, fp, fn, tn):
+        if not isinstance(tp, torch.Tensor):
+            tp = torch.tensor(tp, dtype=TORCH_FLOAT_TYPE)
+            fp = torch.tensor(fp, dtype=TORCH_FLOAT_TYPE)
+            fn = torch.tensor(fn, dtype=TORCH_FLOAT_TYPE)
+            tn = torch.tensor(tn, dtype=TORCH_FLOAT_TYPE)
+
         tp.requires_grad_(True)
         fp.requires_grad_(True)
         fn.requires_grad_(True)
@@ -366,6 +379,9 @@ def _find_best_alpha(
         raise ValueError(f"Unknown search algorithm {search_algo}")
 
 
+DEFAULT_REG = 1e-6
+
+
 def find_classifier_using_fw(
     y_true: Matrix,
     y_proba: Matrix,
@@ -382,6 +398,14 @@ def find_classifier_using_fw(
     seed: Optional[int] = None,
     verbose: bool = False,
     return_meta: bool = False,
+    # reg_C: Tuple[float, float, float, float] = (0, 0, 0, 0),
+    # reg_C: Tuple[float, float, float, float] = (1e-6, 1e-6, 1e-6, 1e-6),
+    reg_C: Tuple[float, float, float, float] = (
+        DEFAULT_REG,
+        DEFAULT_REG,
+        DEFAULT_REG,
+        DEFAULT_REG,
+    ),
 ) -> Union[
     RandomizedWeightedClassifier, Tuple[RandomizedWeightedClassifier, Dict[str, Any]]
 ]:
@@ -508,8 +532,17 @@ def find_classifier_using_fw(
     )
 
     tp, fp, fn, tn = calculate_confusion_matrix(
-        y_true, y_pred_i, normalize=True, skip_tn=skip_tn
+        y_true, y_pred_i, normalize=False, skip_tn=skip_tn
     )
+    reg_n = y_true.shape[0] + sum(reg_C)
+    tp += reg_C[0]
+    fp += reg_C[1]
+    fn += reg_C[2]
+    tn += reg_C[3]
+    tp /= reg_n
+    fp /= reg_n
+    fn /= reg_n
+    tn /= reg_n
     utility_i = metric_func(tp, fp, fn, tn)
 
     if return_meta:
@@ -538,8 +571,16 @@ def find_classifier_using_fw(
             y_proba, k, th=0.0, a=classifiers_a[i], b=classifiers_b[i]
         )
         tp_i, fp_i, fn_i, tn_i = calculate_confusion_matrix(
-            y_true, y_pred_i, normalize=True, skip_tn=skip_tn
+            y_true, y_pred_i, normalize=False, skip_tn=skip_tn
         )
+        tp_i += reg_C[0]
+        fp_i += reg_C[1]
+        fn_i += reg_C[2]
+        tn_i += reg_C[3]
+        tp_i /= reg_n
+        fp_i /= reg_n
+        fn_i /= reg_n
+        tn_i /= reg_n
         utility_i = metric_func(tp_i, fp_i, fn_i, tn_i)
 
         if search_for_best_alpha:

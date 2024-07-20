@@ -2,6 +2,9 @@ import sys
 
 import click
 import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
 from custom_utilities_methods import *
 from napkinxc.datasets import load_libsvm_file
 from scipy.sparse import csr_matrix, vstack
@@ -33,7 +36,32 @@ def main(
     valid_y_true = None
 
     # Predefined datasets
-    if "youtube_deepwalk" in dataset:
+    multiclass = False
+    if "news20" in dataset:
+        xmlc_data_load_config["header"] = False
+        test_y_true_path = "datasets/news20/news20_test.svm"
+        train_y_true_path = "datasets/news20/news20_train.svm"
+        multiclass = True
+
+    elif "ledgar" in dataset:
+        xmlc_data_load_config["header"] = False
+        test_y_true_path = "datasets/ledgar/ledgar_test.svm"
+        train_y_true_path = "datasets/ledgar/ledgar_train.svm"
+        multiclass = True
+
+    elif "cal101" in dataset:
+        xmlc_data_load_config["header"] = False
+        test_y_true_path = "datasets/FLAT_CAL101/FLAT_CAL101.test"
+        train_y_true_path = "datasets/FLAT_CAL101/FLAT_CAL101.train"
+        multiclass = True
+
+    elif "cal256" in dataset:
+        xmlc_data_load_config["header"] = False
+        test_y_true_path = "datasets/FLAT_CAL256/FLAT_CAL256.test"
+        train_y_true_path = "datasets/FLAT_CAL256/FLAT_CAL256.train"
+        multiclass = True
+
+    elif "youtube_deepwalk" in dataset:
         xmlc_data_load_config["header"] = False
         test_y_true_path = "datasets/youtube_deepwalk/youtube_deepwalk_test.svm"
         train_y_true_path = "datasets/youtube_deepwalk/youtube_deepwalk_train.svm"
@@ -78,39 +106,65 @@ def main(
         raise RuntimeError(f"No matching dataset: {dataset}")
 
     # Create binary files for faster loading
-    train_X, train_Y = load_libsvm_file(
-        train_y_true_path, labels_format="csr_matrix", sort_indices=True
-    )
-    test_X, test_Y = load_libsvm_file(
-        test_y_true_path, labels_format="csr_matrix", sort_indices=True
-    )
+
+    from sklearn.datasets import load_svmlight_file
+
+    if multiclass:
+        train_X, train_Y = load_svmlight_file(train_y_true_path)
+        test_X, test_Y = load_svmlight_file(test_y_true_path)
+
+        if train_X.shape != test_X.shape:
+            align_dim1(train_X, test_X)
+
+        assert train_X.shape[1] == test_X.shape[1]
+        # assert train_Y.shape[1] == test_Y.shape[1]
+        assert train_X.shape[0] == train_Y.shape[0]
+        assert test_X.shape[0] == test_Y.shape[0]
+
+        X = vstack([train_X, test_X], format="csr")
+        Y = np.hstack([train_Y, test_Y])
+
+        train_n = train_X.shape[0]
+        test_n = test_X.shape[0]
+        n = X.shape[0]
+        d = X.shape[1]
+        m = int(Y.max() + 1)
+        print(f"n: {n}, d: {d}, m: {m}")
+
+    else:
+        train_X, train_Y = load_libsvm_file(
+            train_y_true_path, labels_format="csr_matrix", sort_indices=True
+        )
+        test_X, test_Y = load_libsvm_file(
+            test_y_true_path, labels_format="csr_matrix", sort_indices=True
+        )
+
+        if train_X.shape != test_X.shape:
+            align_dim1(train_X, test_X)
+
+        if train_Y.shape != test_Y.shape:
+            align_dim1(train_Y, test_Y)
+
+        assert train_X.shape[1] == test_X.shape[1]
+        assert train_Y.shape[1] == test_Y.shape[1]
+        assert train_X.shape[0] == train_Y.shape[0]
+        assert test_X.shape[0] == test_Y.shape[0]
+
+        X = vstack([train_X, test_X], format="csr")
+        Y = vstack([train_Y, test_Y], format="csr")
+
+        n = X.shape[0]
+        d = X.shape[1]
+        m = Y.shape[1]
+        print(f"n: {n}, d: {d}, m: {m}")
 
     # print(train_X[0], train_Y[0])
     # print(test_X[0], test_Y[0])
-
-    if train_X.shape != test_X.shape:
-        align_dim1(train_X, test_X)
-
-    if train_Y.shape != test_Y.shape:
-        align_dim1(train_Y, test_Y)
 
     # train_X = train_X.toarray()
     # test_X = test_X.toarray()
     # train_Y = train_Y.toarray()
     # test_Y = test_Y.toarray()
-
-    assert train_X.shape[1] == test_X.shape[1]
-    assert train_Y.shape[1] == test_Y.shape[1]
-    assert train_X.shape[0] == train_Y.shape[0]
-    assert test_X.shape[0] == test_Y.shape[0]
-
-    X = vstack([train_X, test_X], format="csr")
-    Y = vstack([train_Y, test_Y], format="csr")
-
-    n = X.shape[0]
-    d = X.shape[1]
-    m = Y.shape[1]
-    print(f"n: {n}, d: {d}, m: {m}")
 
     # order = np.arange(n)
     # np.random.shuffle(order)
@@ -124,26 +178,33 @@ def main(
     if method != "linear_adam":
         raise RuntimeError(f"No matching method: {method}")
 
-    import torch
-    import torch.nn as nn
-    import torch.optim as optim
-
     # Define a simple linear model with a single output
     class LinearModel(nn.Module):
-        def __init__(self, input_dim, output_dim):
+        def __init__(self, input_dim, output_dim, output_activation="sigmoid"):
             super().__init__()
+            print(f"input_dim: {input_dim}, output_dim: {output_dim}")
             self.linear = nn.Linear(input_dim, output_dim)
+            if output_activation == "softmax":
+                self.output_activation = lambda x: torch.softmax(x, dim=0)
+            elif output_activation == "sigmoid":
+                self.output_activation = torch.sigmoid
 
         def forward(self, x):
             x = self.linear(x)
-            x = torch.sigmoid(x)  # Sigmoid activation to output probabilities
+            x = self.output_activation(x)
             return x
 
     # Initialize the model
-    model = LinearModel(input_dim=d, output_dim=m)
+    if multiclass:
+        model = LinearModel(input_dim=d, output_dim=m, output_activation="softmax")
 
-    # Define the loss function (Binary Cross Entropy)
-    criterion = nn.BCELoss()
+        # Define the loss function (Cross Entropy)
+        criterion = nn.CrossEntropyLoss()
+    else:
+        model = LinearModel(input_dim=d, output_dim=m)
+
+        # Define the loss function (Binary Cross Entropy)
+        criterion = nn.BCELoss()
 
     # Define the optimizer (Stochastic Gradient Descent)
     optimizer = optim.Adam(model.parameters(), weight_decay=0.00001, lr=0.005)
@@ -157,6 +218,9 @@ def main(
     epochs = 1
     all_outputs = []
     p_at_1 = 0
+
+    # if multiclass:
+    #     Y = Y.indices # Convert to multiclass
 
     # Training loop
     for _ in range(epochs):
@@ -180,7 +244,10 @@ def main(
         #     torch.tensor(Y.data, dtype=torch.float32),
         #     torch.Size(Y.shape))
 
-        torch_Y = torch.tensor(Y.toarray(), dtype=torch.float32)
+        if multiclass:
+            torch_Y = torch.tensor(Y, dtype=torch.int64)
+        else:
+            torch_Y = torch.tensor(Y.toarray(), dtype=torch.float32)
 
         t = trange(n, desc="Loss")
         for i in t:
@@ -189,7 +256,11 @@ def main(
             # x = torch.tensor(X[i].toarray(), dtype=torch.float32)
             x = torch_X[i]
             outputs = model(x)
-            p_at_1 += Y[i, torch.argmax(outputs)]
+
+            if multiclass:
+                p_at_1 += Y[i] == torch.argmax(outputs)
+            else:
+                p_at_1 += Y[i, torch.argmax(outputs)]
 
             # Compute and print loss
             # y = torch.tensor(Y[i].toarray(), dtype=torch.float32)

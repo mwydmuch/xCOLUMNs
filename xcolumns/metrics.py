@@ -257,12 +257,12 @@ def jpv_inverse_propensities(y: Matrix, a: float = 0.55, b: float = 1.5) -> Dens
 
 
 def binary_accuracy_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray],
-    fn: Union[Number, np.ndarray],
-    tn: Union[Number, np.ndarray],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix],
+    fn: Union[Number, DenseMatrix],
+    tn: Union[Number, DenseMatrix],
     normalize: bool = True,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary accuracy from the given entries of confusion matrix:
     true positives, false positives, false negatives, and true negatives.
@@ -279,12 +279,12 @@ def binary_accuracy_on_conf_matrix(
 
 
 def binary_0_1_loss_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray],
-    fn: Union[Number, np.ndarray],
-    tn: Union[Number, np.ndarray],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix],
+    fn: Union[Number, DenseMatrix],
+    tn: Union[Number, DenseMatrix],
     normalize: bool = True,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary 0/1 from the given entries of confusion matrix:
     true positives, false positives, false negatives, and true negatives.
@@ -354,12 +354,12 @@ hamming_loss = make_metric_on_y_true_and_y_pred(
 
 
 def binary_precision_at_k_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray, None],
-    fn: Union[Number, np.ndarray, None],
-    tn: Union[Number, np.ndarray, None],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix, None],
+    fn: Union[Number, DenseMatrix, None],
+    tn: Union[Number, DenseMatrix, None],
     k: int,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary precision at k based on the given entries of confusion matrix:
     true positives, false positives, false negatives, and true negatives.
@@ -397,12 +397,12 @@ precision_at_k = make_metric_on_y_true_and_y_pred(
 
 
 def binary_precision_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray],
-    fn: Union[Number, np.ndarray, None],
-    tn: Union[Number, np.ndarray, None],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix],
+    fn: Union[Number, DenseMatrix, None],
+    tn: Union[Number, DenseMatrix, None],
     epsilon: float = 1e-6,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary precision
     from the given entries of confusion matrix:
@@ -441,12 +441,12 @@ micro_precision = make_metric_on_y_true_and_y_pred(
 
 
 def binary_recall_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray, None],
-    fn: Union[Number, np.ndarray],
-    tn: Union[Number, np.ndarray, None],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix, None],
+    fn: Union[Number, DenseMatrix],
+    tn: Union[Number, DenseMatrix, None],
     epsilon: float = 1e-6,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary recall
     from the given entries of confusion matrix:
@@ -485,13 +485,13 @@ micro_recall = make_metric_on_y_true_and_y_pred(
 
 
 def binary_fbeta_score_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray],
-    fn: Union[Number, np.ndarray],
-    tn: Union[Number, np.ndarray, None],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix],
+    fn: Union[Number, DenseMatrix],
+    tn: Union[Number, DenseMatrix, None],
     beta: float = 1.0,
     epsilon: float = 1e-6,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     r"""
     Compute the binary F-beta score.
     from the given true positives, false positives, false negatives and true negatives.
@@ -519,12 +519,12 @@ def binary_fbeta_score_on_conf_matrix(
 
 
 def binary_f1_score_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray],
-    fn: Union[Number, np.ndarray],
-    tn: Union[Number, np.ndarray, None],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix],
+    fn: Union[Number, DenseMatrix],
+    tn: Union[Number, DenseMatrix, None],
     epsilon: float = 1e-6,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     """
     Calculates binary F1 score, also known as balanced F-score or F-measure
     from the given true positives, false positives, false negatives and true negatives.
@@ -572,12 +572,12 @@ micro_f1_score = make_metric_on_y_true_and_y_pred(
 
 
 def binary_jaccard_score_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray],
-    fn: Union[Number, np.ndarray],
-    tn: Union[Number, np.ndarray, None],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix],
+    fn: Union[Number, DenseMatrix],
+    tn: Union[Number, DenseMatrix, None],
     epsilon: float = 1e-6,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     r"""
     Calculates Jaccard score
     from the given entries of confusion matrix:
@@ -616,12 +616,12 @@ micro_jaccard_score = make_metric_on_y_true_and_y_pred(
 
 
 def binary_balanced_accuracy_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray],
-    fn: Union[Number, np.ndarray],
-    tn: Union[Number, np.ndarray],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix],
+    fn: Union[Number, DenseMatrix],
+    tn: Union[Number, DenseMatrix],
     epsilon: float = 1e-6,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     r"""
     Calculates ballanced accuracy
     from the given entries of confusion matrix:
@@ -662,12 +662,12 @@ micro_balanced_accuracy = make_metric_on_y_true_and_y_pred(
 
 
 def binary_gmean_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray],
-    fn: Union[Number, np.ndarray],
-    tn: Union[Number, np.ndarray],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix],
+    fn: Union[Number, DenseMatrix],
+    tn: Union[Number, DenseMatrix],
     epsilon: float = 1e-6,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     r"""
     Calculates G-mean (geometric mean)
     from the given entries of confusion matrix:
@@ -708,12 +708,12 @@ micro_gmean = make_metric_on_y_true_and_y_pred(
 
 
 def binary_hmean_on_conf_matrix(
-    tp: Union[Number, np.ndarray],
-    fp: Union[Number, np.ndarray],
-    fn: Union[Number, np.ndarray],
-    tn: Union[Number, np.ndarray],
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix],
+    fn: Union[Number, DenseMatrix],
+    tn: Union[Number, DenseMatrix],
     epsilon: float = 1e-6,
-) -> Union[Number, np.ndarray]:
+) -> Union[Number, DenseMatrix]:
     r"""
     Calculates H-mean (harmonic mean)
     from the given entries of confusion matrix:

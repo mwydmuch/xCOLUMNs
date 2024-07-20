@@ -11,9 +11,12 @@ permissions:
 
 jobs:
   pre-commit:
+    name: Run pre-commit checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - uses: actions/setup-python@v4
       - run: python -m pip install pre-commit
       - run: python -m pre_commit --version

@@ -1,3 +1,4 @@
+import autograd.numpy as anp
 import numpy as np
 import torch
 
@@ -7,6 +8,26 @@ from xcolumns.metrics import *
 from xcolumns.types import *
 from xcolumns.utils import *
 from xcolumns.weighted_prediction import *
+
+
+def comp_log(x):
+    if isinstance(x, np.ndarray):
+        return np.log(x)
+    elif isinstance(x, torch.Tensor):
+        return torch.log(x)
+    elif isinstance(x, anp.numpy_boxes.ArrayBox):
+        return anp.log(x)
+
+
+def comp_exp(x):
+    if isinstance(x, np.ndarray):
+        return np.exp(x)
+    elif isinstance(x, torch.Tensor):
+        return torch.exp(x)
+    elif isinstance(x, anp.numpy_boxes.ArrayBox):
+        return anp.exp(x)
+    else:
+        return np.exp(x)
 
 
 def no_support(y_true):
@@ -30,32 +51,81 @@ def macro_min_tp_tn(y_true, y_pred):
     )
 
 
-def multi_class_hmean_on_conf_matrix(
+def multiclass_hmean_on_conf_matrix(
     tp: Union[Number, np.ndarray],
     fp: Union[Number, np.ndarray],
     fn: Union[Number, np.ndarray],
     tn: Union[Number, np.ndarray],
 ):
-    tpr = (tp + fn) / (tp + 1e-6)
-    return tpr.shape[0] / tpr.sum()
+    vals = (tp + fn) / (tp + 1e-9)
+    vals = vals.sum() ** -1 * vals.shape[0]
+    return vals
 
 
-def multi_class_hmean(y_true, y_pred):
-    return multi_class_hmean_on_conf_matrix(*calculate_confusion_matrix(y_true, y_pred))
+def multiclass_hmean(y_true, y_pred):
+    return multiclass_hmean_on_conf_matrix(*calculate_confusion_matrix(y_true, y_pred))
 
 
-def multi_class_gmean_on_conf_matrix(
+def multiclass_qmean_on_conf_matrix(
     tp: Union[Number, np.ndarray],
     fp: Union[Number, np.ndarray],
     fn: Union[Number, np.ndarray],
     tn: Union[Number, np.ndarray],
 ):
-    tpr = tp / (tp + fn + 1e-6)
-    return tpr.prod() ** (1 / tpr.shape[0])
+    vals = ((fn) / (tp + fn + 1e-9)) ** 2
+    vals = vals.sum() / vals.shape[0]
+    vals = 1.0 - vals**0.5
+    return vals
 
 
-def multi_class_gmean(y_true, y_pred):
-    return multi_class_gmean_on_conf_matrix(*calculate_confusion_matrix(y_true, y_pred))
+def multiclass_qmean(y_true, y_pred):
+    return multiclass_qmean_on_conf_matrix(*calculate_confusion_matrix(y_true, y_pred))
+
+
+# import warnings
+# warnings.filterwarnings("error")
+
+
+def log_multiclass_gmean_on_conf_matrix(
+    tp: Union[Number, np.ndarray],
+    fp: Union[Number, np.ndarray],
+    fn: Union[Number, np.ndarray],
+    tn: Union[Number, np.ndarray],
+):
+    vals = (tp) / (tp + fn + 1e-9)
+    vals = comp_log(vals)
+    vals = vals.sum()
+    return vals
+
+
+def multiclass_gmean_on_conf_matrix(
+    tp: Union[Number, np.ndarray],
+    fp: Union[Number, np.ndarray],
+    fn: Union[Number, np.ndarray],
+    tn: Union[Number, np.ndarray],
+):
+    vals = (tp) / (tp + fn + 1e-9)
+    vals = (vals.prod()) ** (1.0 / tp.shape[0])
+    return vals
+
+
+# multiclass_gmean_on_conf_matrix = log_multiclass_gmean_on_conf_matrix
+# multiclass_gmean_on_conf_matrix = true_multiclass_gmean_on_conf_matrix
+
+
+def true_multiclass_gmean_on_conf_matrix(
+    tp: Union[Number, np.ndarray],
+    fp: Union[Number, np.ndarray],
+    fn: Union[Number, np.ndarray],
+    tn: Union[Number, np.ndarray],
+):
+    vals = (tp) / (tp + fn + 1e-9)
+    vals = (vals.prod()) ** (1.0 / tp.shape[0])
+    return vals
+
+
+def multiclass_gmean(y_true, y_pred):
+    return multiclass_gmean_on_conf_matrix(*calculate_confusion_matrix(y_true, y_pred))
 
 
 def bc_macro_min_tp_tn(

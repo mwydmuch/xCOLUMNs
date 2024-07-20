@@ -397,6 +397,11 @@ def predict_using_bc_with_0approx(
             Efp = zeros_like(y_proba, shape=(m,))
             Efn = zeros_like(y_proba, shape=(m,))
             Etn = zeros_like(y_proba, shape=(m,))
+
+            # Etp += 0.1
+            # Efp += 0.1
+            # Efn += 0.1
+            # Etn += 0.1
         else:
             log_info("    Calculating expected confusion matrix ...", verbose)
             Etp, Efp, Efn, Etn = calculate_confusion_matrix(

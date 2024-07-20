@@ -15,7 +15,7 @@ def frank_wolfe_wrapper(
     utility_func,
     k: int = 5,
     seed: int = 0,
-    pred_repeat=10,
+    pred_repeat=1,
     average=False,
     use_last=False,
     y_true_valid=None,
@@ -672,6 +672,69 @@ def fw_macro_gmean_etu(
         macro_gmean_on_conf_matrix,
         y_true_valid=y_proba,
         y_proba_valid=y_proba,
+        k=k,
+        seed=seed,
+        y_true=y_true,
+        **kwargs,
+    )
+
+
+def fw_multiclass_gmean(
+    y_proba,
+    k: int = 5,
+    seed: int = 0,
+    y_true_valid=None,
+    y_proba_valid=None,
+    y_true=None,
+    **kwargs,
+):
+    return frank_wolfe_wrapper(
+        y_proba,
+        log_multiclass_gmean_on_conf_matrix,
+        y_true_valid=y_true_valid,
+        y_proba_valid=y_proba_valid,
+        k=k,
+        seed=seed,
+        y_true=y_true,
+        **kwargs,
+    )
+
+
+def fw_multiclass_qmean(
+    y_proba,
+    k: int = 5,
+    seed: int = 0,
+    y_true_valid=None,
+    y_proba_valid=None,
+    y_true=None,
+    **kwargs,
+):
+    return frank_wolfe_wrapper(
+        y_proba,
+        multiclass_qmean_on_conf_matrix,
+        y_true_valid=y_true_valid,
+        y_proba_valid=y_proba_valid,
+        k=k,
+        seed=seed,
+        y_true=y_true,
+        **kwargs,
+    )
+
+
+def fw_multiclass_hmean(
+    y_proba,
+    k: int = 5,
+    seed: int = 0,
+    y_true_valid=None,
+    y_proba_valid=None,
+    y_true=None,
+    **kwargs,
+):
+    return frank_wolfe_wrapper(
+        y_proba,
+        multiclass_hmean_on_conf_matrix,
+        y_true_valid=y_true_valid,
+        y_proba_valid=y_proba_valid,
         k=k,
         seed=seed,
         y_true=y_true,
