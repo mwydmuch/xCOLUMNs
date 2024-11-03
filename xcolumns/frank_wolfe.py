@@ -379,9 +379,6 @@ def _find_best_alpha(
         raise ValueError(f"Unknown search algorithm {search_algo}")
 
 
-DEFAULT_REG = 1e-6
-
-
 def find_classifier_using_fw(
     y_true: Matrix,
     y_proba: Matrix,
@@ -398,14 +395,7 @@ def find_classifier_using_fw(
     seed: Optional[int] = None,
     verbose: bool = False,
     return_meta: bool = False,
-    # reg_C: Tuple[float, float, float, float] = (0, 0, 0, 0),
-    # reg_C: Tuple[float, float, float, float] = (1e-6, 1e-6, 1e-6, 1e-6),
-    reg_C: Tuple[float, float, float, float] = (
-        DEFAULT_REG,
-        DEFAULT_REG,
-        DEFAULT_REG,
-        DEFAULT_REG,
-    ),
+    reg_C: float = 1e-6,
 ) -> Union[
     RandomizedWeightedClassifier, Tuple[RandomizedWeightedClassifier, Dict[str, Any]]
 ]:
@@ -534,15 +524,12 @@ def find_classifier_using_fw(
     tp, fp, fn, tn = calculate_confusion_matrix(
         y_true, y_pred_i, normalize=False, skip_tn=skip_tn
     )
-    reg_n = y_true.shape[0] + sum(reg_C)
-    tp += reg_C[0]
-    fp += reg_C[1]
-    fn += reg_C[2]
-    tn += reg_C[3]
-    tp /= reg_n
-    fp /= reg_n
-    fn /= reg_n
-    tn /= reg_n
+
+    reg_n = y_true.shape[0] + 4 * reg_C
+    tp = tp + reg_C / reg_n
+    fp = fp + reg_C / reg_n
+    fn = fn + reg_C / reg_n
+    tn = tn + reg_C / reg_n
     utility_i = metric_func(tp, fp, fn, tn)
 
     if return_meta:
@@ -573,14 +560,10 @@ def find_classifier_using_fw(
         tp_i, fp_i, fn_i, tn_i = calculate_confusion_matrix(
             y_true, y_pred_i, normalize=False, skip_tn=skip_tn
         )
-        tp_i += reg_C[0]
-        fp_i += reg_C[1]
-        fn_i += reg_C[2]
-        tn_i += reg_C[3]
-        tp_i /= reg_n
-        fp_i /= reg_n
-        fn_i /= reg_n
-        tn_i /= reg_n
+        tp_i = tp_i + reg_C / reg_n
+        fp_i = fp_i + reg_C / reg_n
+        fn_i = fn_i + reg_C / reg_n
+        tn_i = tn_i + reg_C / reg_n
         utility_i = metric_func(tp_i, fp_i, fn_i, tn_i)
 
         if search_for_best_alpha:
@@ -710,41 +693,76 @@ find_classifier_optimizing_macro_precision_using_fw = make_frank_wolfe_wrapper(
     skip_tn=True,
     warn_k_eq_0=True,
 )
+find_classifier_optimizing_micro_precision_using_fw = make_frank_wolfe_wrapper(
+    micro_precision,
+    "micro-averaged precision",
+    maximize=True,
+    skip_tn=True,
+    warn_k_eq_0=True,
+)
+
 find_classifier_optimizing_macro_recall_using_fw = make_frank_wolfe_wrapper(
-    macro_recall, "macro-averaged recall", maximize=True, skip_tn=True, warn_k_eq_0=True
+    macro_recall_on_conf_matrix,
+    "macro-averaged recall",
+    maximize=True,
+    skip_tn=True,
+    warn_k_eq_0=True,
+)
+find_classifier_optimizing_micro_recall_using_fw = make_frank_wolfe_wrapper(
+    micro_recall_on_conf_matrix,
+    "micro-averaged recall",
+    maximize=True,
+    skip_tn=True,
+    warn_k_eq_0=True,
 )
 
 find_classifier_optimizing_macro_f1_score_using_fw = make_frank_wolfe_wrapper(
-    macro_f1_score, "macro-averaged F1 score", maximize=True, skip_tn=True
+    macro_f1_score_on_conf_matrix,
+    "macro-averaged F1 score",
+    maximize=True,
+    skip_tn=True,
 )
 find_classifier_optimizing_micro_f1_score_using_fw = make_frank_wolfe_wrapper(
-    micro_f1_score, "micro-averaged F1 score", maximize=True, skip_tn=True
+    micro_f1_score_on_conf_matrix,
+    "micro-averaged F1 score",
+    maximize=True,
+    skip_tn=True,
 )
 
 find_classifier_optimizing_macro_jaccard_score_using_fw = make_frank_wolfe_wrapper(
-    macro_balanced_accuracy, "macro-averaged Jaccard score", maximize=True, skip_tn=True
+    macro_jaccard_score_on_conf_matrix,
+    "macro-averaged Jaccard score",
+    maximize=True,
+    skip_tn=True,
 )
 find_classifier_optimizing_micro_jaccard_score_using_fw = make_frank_wolfe_wrapper(
-    micro_jaccard_score, "micro-averaged Jaccard score", maximize=True, skip_tn=True
+    micro_jaccard_score_on_conf_matrix,
+    "micro-averaged Jaccard score",
+    maximize=True,
+    skip_tn=True,
 )
 
 find_classifier_optimizing_macro_balanced_accuracy_using_fw = make_frank_wolfe_wrapper(
-    macro_balanced_accuracy, "macro-averaged balanced accuracy", maximize=True
+    macro_balanced_accuracy_on_conf_matrix,
+    "macro-averaged balanced accuracy",
+    maximize=True,
 )
 find_classifier_optimizing_micro_balanced_accuracy_using_fw = make_frank_wolfe_wrapper(
-    micro_balanced_accuracy, "micro-averaged balanced accuracy", maximize=True
+    micro_balanced_accuracy_on_conf_matrix,
+    "micro-averaged balanced accuracy",
+    maximize=True,
 )
 
 find_classifier_optimizing_macro_hmean_using_fw = make_frank_wolfe_wrapper(
-    macro_hmean, "macro-averaged H-mean", maximize=True
+    macro_hmean_on_conf_matrix, "macro-averaged H-mean", maximize=True
 )
 find_classifier_optimizing_micro_hmean_using_fw = make_frank_wolfe_wrapper(
-    macro_hmean, "micro-averaged H-mean", maximize=True
+    micro_hmean_on_conf_matrix, "micro-averaged H-mean", maximize=True
 )
 
 find_classifier_optimizing_macro_gmean_using_fw = make_frank_wolfe_wrapper(
-    macro_gmean, "macro-averaged G-mean", maximize=True
+    macro_gmean_on_conf_matrix, "macro-averaged G-mean", maximize=True
 )
 find_classifier_optimizing_micro_gmean_using_fw = make_frank_wolfe_wrapper(
-    macro_gmean, "micro-averaged G-mean", maximize=True
+    micro_gmean_on_conf_matrix, "micro-averaged G-mean", maximize=True
 )

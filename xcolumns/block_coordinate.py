@@ -751,17 +751,22 @@ predict_optimizing_macro_f1_score_using_bc = make_bc_wrapper(
     maximize=True,
     skip_tn=True,
 )
-predict_optimizing_macro_jaccard_score_using_fw = make_bc_wrapper(
-    macro_balanced_accuracy, "macro-averaged Jaccard score", maximize=True, skip_tn=True
+predict_optimizing_macro_jaccard_score_using_bc = make_bc_wrapper(
+    binary_jaccard_score_on_conf_matrix,
+    "macro-averaged Jaccard score",
+    maximize=True,
+    skip_tn=True,
 )
-predict_optimizing_macro_balanced_accuracy_using_fw = make_bc_wrapper(
-    macro_balanced_accuracy, "macro-averaged balanced accuracy", maximize=True
+predict_optimizing_macro_balanced_accuracy_using_bc = make_bc_wrapper(
+    binary_balanced_accuracy_on_conf_matrix,
+    "macro-averaged balanced accuracy",
+    maximize=True,
 )
-predict_optimizing_macro_hmean_using_fw = make_bc_wrapper(
-    macro_hmean, "macro-averaged H-mean", maximize=True
+predict_optimizing_macro_hmean_using_bc = make_bc_wrapper(
+    binary_hmean_on_conf_matrix, "macro-averaged H-mean", maximize=True
 )
-predict_optimizing_macro_gmean_using_fw = make_bc_wrapper(
-    macro_gmean, "macro-averaged G-mean", maximize=True
+predict_optimizing_macro_gmean_using_bc = make_bc_wrapper(
+    binary_gmean_on_conf_matrix, "macro-averaged G-mean", maximize=True
 )
 
 
@@ -810,7 +815,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_precision_using_bc(
 ):
     """
     This function is a wrapper for using block coordinate ascent
-    with metric being a weighted average of instance precision and macro precision as the target metric.
+    with metric being a weighted average of instance precision and macro-averaged precision as the target metric.
     See :func:`predict_using_bc_with_0approx` for more details and a description of parameters.
     """
     n, m = y_proba.shape
@@ -848,7 +853,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_recall_using_bc(
 ):
     """
     This function is a wrapper for using block coordinate ascent
-    with metric being a weighted average of instance precision and macro f1 as the target metric.
+    with metric being a weighted average of instance precision and macro-averaged recall as the target metric.
     See :func:`predict_using_bc_with_0approx` for more details and a description of parameters.
     """
     n, m = y_proba.shape
@@ -886,7 +891,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc(
 ):
     """
     This function is a wrapper for using block coordinate ascent
-    with metric being a weighted average of instance precision and macro f1 as the target metric.
+    with metric being a weighted average of instance precision and macro-averaged f1 as the target metric.
     See :func:`predict_using_bc_with_0approx` for more details and a description of parameters.
     """
     n, m = y_proba.shape
@@ -895,6 +900,120 @@ def predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc(
         return (1 - alpha) * binary_precision_at_k_on_conf_matrix(
             tp, fp, fn, tn, k
         ) + alpha * binary_f1_score_on_conf_matrix(tp, fp, fn, tn) / m
+
+    return predict_using_bc_with_0approx(
+        y_proba,
+        k=k,
+        binary_metric_func=mixed_utility_fn,
+        metric_aggregation="sum",
+        skip_tn=True,
+        tolerance=tolerance,
+        init_y_pred=init_y_pred,
+        max_iters=max_iters,
+        shuffle_order=shuffle_order,
+        verbose=verbose,
+        return_meta=return_meta,
+    )
+
+
+def predict_optimizing_mixed_instance_precision_and_macro_jaccard_score_using_bc(
+    y_proba: Union[np.ndarray, csr_matrix],
+    k: int,
+    alpha: float = 1,
+    tolerance: float = 1e-6,
+    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
+    max_iters: int = 100,
+    shuffle_order: bool = True,
+    verbose: bool = False,
+    return_meta: bool = False,
+):
+    """
+    This function is a wrapper for using block coordinate ascent
+    with metric being a weighted average of instance precision and macro-averaged Jaccard score as the target metric.
+    See :func:`predict_using_bc_with_0approx` for more details and a description of parameters.
+    """
+    n, m = y_proba.shape
+
+    def mixed_utility_fn(tp, fp, fn, tn):
+        return (1 - alpha) * binary_precision_at_k_on_conf_matrix(
+            tp, fp, fn, tn, k
+        ) + alpha * binary_jaccard_score_on_conf_matrix(tp, fp, fn, tn) / m
+
+    return predict_using_bc_with_0approx(
+        y_proba,
+        k=k,
+        binary_metric_func=mixed_utility_fn,
+        metric_aggregation="sum",
+        skip_tn=True,
+        tolerance=tolerance,
+        init_y_pred=init_y_pred,
+        max_iters=max_iters,
+        shuffle_order=shuffle_order,
+        verbose=verbose,
+        return_meta=return_meta,
+    )
+
+
+def predict_optimizing_mixed_instance_precision_and_macro_gmean_using_bc(
+    y_proba: Union[np.ndarray, csr_matrix],
+    k: int,
+    alpha: float = 1,
+    tolerance: float = 1e-6,
+    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
+    max_iters: int = 100,
+    shuffle_order: bool = True,
+    verbose: bool = False,
+    return_meta: bool = False,
+):
+    """
+    This function is a wrapper for using block coordinate ascent
+    with metric being a weighted average of instance precision and macro-averaged G-mean score as the target metric.
+    See :func:`predict_using_bc_with_0approx` for more details and a description of parameters.
+    """
+    n, m = y_proba.shape
+
+    def mixed_utility_fn(tp, fp, fn, tn):
+        return (1 - alpha) * binary_precision_at_k_on_conf_matrix(
+            tp, fp, fn, tn, k
+        ) + alpha * binary_gmean_on_conf_matrix(tp, fp, fn, tn) / m
+
+    return predict_using_bc_with_0approx(
+        y_proba,
+        k=k,
+        binary_metric_func=mixed_utility_fn,
+        metric_aggregation="sum",
+        skip_tn=True,
+        tolerance=tolerance,
+        init_y_pred=init_y_pred,
+        max_iters=max_iters,
+        shuffle_order=shuffle_order,
+        verbose=verbose,
+        return_meta=return_meta,
+    )
+
+
+def predict_optimizing_mixed_instance_precision_and_macro_hmean_using_bc(
+    y_proba: Union[np.ndarray, csr_matrix],
+    k: int,
+    alpha: float = 1,
+    tolerance: float = 1e-6,
+    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
+    max_iters: int = 100,
+    shuffle_order: bool = True,
+    verbose: bool = False,
+    return_meta: bool = False,
+):
+    """
+    This function is a wrapper for using block coordinate ascent
+    with metric being a weighted average of instance precision and macro-averaged H-mean score as the target metric.
+    See :func:`predict_using_bc_with_0approx` for more details and a description of parameters.
+    """
+    n, m = y_proba.shape
+
+    def mixed_utility_fn(tp, fp, fn, tn):
+        return (1 - alpha) * binary_precision_at_k_on_conf_matrix(
+            tp, fp, fn, tn, k
+        ) + alpha * binary_hmean_on_conf_matrix(tp, fp, fn, tn) / m
 
     return predict_using_bc_with_0approx(
         y_proba,
