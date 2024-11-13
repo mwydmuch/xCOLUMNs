@@ -211,7 +211,7 @@ def _calculate_conf_mat_entry(
     func_for_dense: Callable,
     func_for_csr: Callable,
     normalize: bool = False,
-    axis: int = 0,
+    axis: Optional[int] = 0,
 ) -> DenseMatrix:
     """ """
 
@@ -257,7 +257,12 @@ def calculate_tp(
         The number of vector of false positives counts or rates.
     """
     return _calculate_conf_mat_entry(
-        y_true, y_pred, _calculate_tp_dense, _calculate_tp_csr, normalize=normalize
+        y_true,
+        y_pred,
+        _calculate_tp_dense,
+        _calculate_tp_csr,
+        normalize=normalize,
+        axis=axis,
     )
 
 
@@ -280,7 +285,12 @@ def calculate_fp(
         The number of vector of false positives counts or rates.
     """
     return _calculate_conf_mat_entry(
-        y_true, y_pred, _calculate_fp_dense, _calculate_fp_csr, normalize=normalize
+        y_true,
+        y_pred,
+        _calculate_fp_dense,
+        _calculate_fp_csr,
+        normalize=normalize,
+        axis=axis,
     )
 
 
@@ -303,7 +313,12 @@ def calculate_fn(
         The number of vector of false negatives counts or rates.
     """
     return _calculate_conf_mat_entry(
-        y_true, y_pred, _calculate_fn_dense, _calculate_fn_csr, normalize=normalize
+        y_true,
+        y_pred,
+        _calculate_fn_dense,
+        _calculate_fn_csr,
+        normalize=normalize,
+        axis=axis,
     )
 
 

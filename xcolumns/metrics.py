@@ -35,7 +35,7 @@ def check_if_y_pred_at_k(y_pred: Matrix, k: int) -> bool:
     return k > 0 and (y_pred.sum(axis=1) == k).all()
 
 
-def make_macro_metric_on_conf_matrix(binary_metric, name) -> Callable:
+def make_macro_metric_on_conf_matrix(binary_metric: Callable, name: str) -> Callable:
     """
     This is a factory function to create a macro-averaged metric
     from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn).
@@ -92,7 +92,7 @@ def make_micro_metric_on_conf_matrix(
         return binary_metric(tp.sum(), fp.sum(), fn.sum(), tn.sum(), **kwargs)
 
     micro_metric_on_conf_matrix.__doc__ = f"""
-    Calculates macro-averaged {metric_name} from the given entries of confusion matrix:
+    Calculates micro-averaged {metric_name} from the given entries of confusion matrix:
     true positives, false positives, false negatives, and true negatives.
 
     See :func:`{binary_metric.__name__}` for definition.
@@ -123,7 +123,9 @@ def make_metric_on_y_true_and_y_pred(
         y_pred: Matrix,
         **kwargs,
     ):
-        C = calculate_confusion_matrix(y_true, y_pred, normalize=True, skip_tn=skip_tn)
+        C = calculate_confusion_matrix(
+            y_true, y_pred, normalize=True, skip_tn=skip_tn, axis=0
+        )
         return metric_on_conf_matrix(*C, **kwargs)
 
     metric_on_y_true_and_y_pred.__doc__ = f"""
@@ -133,6 +135,41 @@ def make_metric_on_y_true_and_y_pred(
     """
 
     return add_kwargs_to_signature(metric_on_y_true_and_y_pred, metric_on_conf_matrix)
+
+
+def make_instance_metric_on_y_true_and_y_pred(
+    binary_metric: Callable, metric_name: str, skip_tn: bool = False
+) -> Callable:
+    """
+    This is a factory function to create
+    an instanve-wise metric calculated on true and predicted labels: metric(y_true, y_pred)
+    from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn).
+
+    Args:
+        binary_metric: binary metric defined on confusion matrix
+        metric_name: name of the metric to be used in the docstring
+
+    Returns:
+        Function calculating the metric on true and predicted labels
+    """
+
+    def instance_metric_on_y_true_and_y_pred(
+        y_true: Matrix,
+        y_pred: Matrix,
+        **kwargs,
+    ) -> DenseMatrix:
+        instance_C = calculate_confusion_matrix(
+            y_true, y_pred, normalize=False, skip_tn=skip_tn, axis=1
+        )
+        return binary_metric(*instance_C, **kwargs).mean()
+
+    instance_metric_on_y_true_and_y_pred.__doc__ = f"""
+    Calculates instance-averaged {metric_name} metric from the given true and predicted labels.
+
+    See :func:`{binary_metric.__name__}` for definition.
+    """
+
+    return add_kwargs_to_signature(instance_metric_on_y_true_and_y_pred, binary_metric)
 
 
 ########################################################################################
@@ -361,7 +398,7 @@ def binary_precision_at_k_on_conf_matrix(
     k: int,
 ) -> Union[Number, DenseMatrix]:
     r"""
-    Calculates binary precision at k based on the given entries of confusion matrix:
+    Calculates binary precision at k based on the given entries of normalized confusion matrix:
     true positives, false positives, false negatives, and true negatives.
 
     .. math::
@@ -373,10 +410,10 @@ def binary_precision_at_k_on_conf_matrix(
 
 
 def precision_at_k_on_conf_matrix(
-    tp: np.ndarray,
-    fp: Union[np.ndarray, None],
-    fn: Union[np.ndarray, None],
-    tn: Union[np.ndarray, None],
+    tp: DenseMatrix,
+    fp: Union[DenseMatrix, None],
+    fn: Union[DenseMatrix, None],
+    tn: Union[DenseMatrix, None],
     k: int,
 ) -> Number:
     """
@@ -392,6 +429,51 @@ precision_at_k = make_metric_on_y_true_and_y_pred(
 
 
 ########################################################################################
+# Weighted precision at k
+########################################################################################
+
+
+def binary_weighted_precision_at_k_on_conf_matrix(
+    tp: Union[Number, DenseMatrix],
+    fp: Union[Number, DenseMatrix, None],
+    fn: Union[Number, DenseMatrix, None],
+    tn: Union[Number, DenseMatrix, None],
+    k: int,
+    w: Union[Number, DenseMatrix],
+) -> Union[Number, DenseMatrix]:
+    r"""
+    Calculates binary weighted precision at k based on the given entries of normalized confusion matrix:
+    true positives, false positives, false negatives, and true negatives.
+
+    .. math::
+        \text{weighted-precision@k} = \frac{w \odot TP}{k}
+
+    where :math:`k` is the number of positive labels per instance.
+    """
+    return w * tp / k
+
+
+def weighted_precision_at_k_on_conf_matrix(
+    tp: DenseMatrix,
+    fp: Union[DenseMatrix, None],
+    fn: Union[DenseMatrix, None],
+    tn: Union[DenseMatrix, None],
+    k: int,
+    w: DenseMatrix,
+) -> Number:
+    """
+    Calculates weighted precision at k from the given entries of confusion matrix:
+    true positives, false positives, false negatives, and true negatives.
+    """
+    return binary_weighted_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k, w).sum()
+
+
+weighted_precision_at_k = make_metric_on_y_true_and_y_pred(
+    weighted_precision_at_k_on_conf_matrix, "weighted precision at k", skip_tn=True
+)
+
+
+########################################################################################
 # Precision
 ########################################################################################
 
@@ -401,7 +483,7 @@ def binary_precision_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix, None],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-8,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary precision
@@ -433,6 +515,9 @@ macro_precision = make_metric_on_y_true_and_y_pred(
 micro_precision = make_metric_on_y_true_and_y_pred(
     micro_precision_on_conf_matrix, "micro-averaged precision", skip_tn=True
 )
+instance_precision = make_instance_metric_on_y_true_and_y_pred(
+    binary_precision_on_conf_matrix, "precision", skip_tn=True
+)
 
 
 ########################################################################################
@@ -445,7 +530,7 @@ def binary_recall_on_conf_matrix(
     fp: Union[Number, DenseMatrix, None],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-8,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary recall
@@ -477,6 +562,9 @@ macro_recall = make_metric_on_y_true_and_y_pred(
 micro_recall = make_metric_on_y_true_and_y_pred(
     micro_recall_on_conf_matrix, "micro-averaged recall", skip_tn=True
 )
+instance_recall = make_instance_metric_on_y_true_and_y_pred(
+    binary_recall_on_conf_matrix, "recall", skip_tn=True
+)
 
 
 ########################################################################################
@@ -490,7 +578,7 @@ def binary_fbeta_score_on_conf_matrix(
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
     beta: float = 1.0,
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-8,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Compute the binary F-beta score.
@@ -507,7 +595,7 @@ def binary_fbeta_score_on_conf_matrix(
 
 
 # Alternative definition of F-beta score used in some old experiments
-# def binary_fbeta_score_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=1e-6):
+# def binary_fbeta_score_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=1e-8):
 #     precision = binary_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
 #     recall = binary_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
 #     return (
@@ -523,7 +611,7 @@ def binary_f1_score_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-8,
 ) -> Union[Number, DenseMatrix]:
     """
     Calculates binary F1 score, also known as balanced F-score or F-measure
@@ -548,6 +636,10 @@ macro_fbeta_score = make_metric_on_y_true_and_y_pred(
 micro_fbeta_score = make_metric_on_y_true_and_y_pred(
     micro_fbeta_score_on_conf_matrix, "micro-averaged F-beta score", skip_tn=True
 )
+instance_fbeta_score = make_instance_metric_on_y_true_and_y_pred(
+    binary_fbeta_score_on_conf_matrix, "F-beta score", skip_tn=True
+)
+
 
 macro_f1_score_on_conf_matrix = make_macro_metric_on_conf_matrix(
     binary_fbeta_score_on_conf_matrix, "F1 score"
@@ -564,6 +656,9 @@ macro_f1_score = make_metric_on_y_true_and_y_pred(
 micro_f1_score = make_metric_on_y_true_and_y_pred(
     micro_fbeta_score_on_conf_matrix, "micro-averaged F1 score"
 )
+instance_f1_score = make_instance_metric_on_y_true_and_y_pred(
+    binary_f1_score_on_conf_matrix, "F1 score", skip_tn=True
+)
 
 
 ########################################################################################
@@ -576,7 +671,7 @@ def binary_jaccard_score_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-8,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates Jaccard score
@@ -608,7 +703,9 @@ macro_jaccard_score = make_metric_on_y_true_and_y_pred(
 micro_jaccard_score = make_metric_on_y_true_and_y_pred(
     micro_jaccard_score_on_conf_matrix, "micro-averaged Jaccard score", skip_tn=True
 )
-
+instance_jaccard_score_score = make_instance_metric_on_y_true_and_y_pred(
+    binary_jaccard_score_on_conf_matrix, "Jaccard score", skip_tn=True
+)
 
 ########################################################################################
 # Balanced accuracy
@@ -620,7 +717,7 @@ def binary_balanced_accuracy_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-8,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates ballanced accuracy
@@ -654,6 +751,9 @@ macro_balanced_accuracy = make_metric_on_y_true_and_y_pred(
 micro_balanced_accuracy = make_metric_on_y_true_and_y_pred(
     micro_balanced_accuracy_on_conf_matrix, "micro-averaged balanced accuracy"
 )
+instance_balanced_accuracy = make_instance_metric_on_y_true_and_y_pred(
+    binary_balanced_accuracy_on_conf_matrix, "balanced accuracy"
+)
 
 
 ########################################################################################
@@ -666,7 +766,7 @@ def binary_gmean_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-8,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates G-mean (geometric mean)
@@ -700,6 +800,9 @@ macro_gmean = make_metric_on_y_true_and_y_pred(
 micro_gmean = make_metric_on_y_true_and_y_pred(
     micro_gmean_on_conf_matrix, "micro-averaged G-mean"
 )
+instance_gmean = make_instance_metric_on_y_true_and_y_pred(
+    binary_gmean_on_conf_matrix, "G-mean"
+)
 
 
 ########################################################################################
@@ -712,7 +815,7 @@ def binary_hmean_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-8,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates H-mean (harmonic mean)
@@ -747,6 +850,9 @@ macro_hmean = make_metric_on_y_true_and_y_pred(
 micro_hmean = make_metric_on_y_true_and_y_pred(
     micro_hmean_on_conf_matrix, "micro-averaged H-mean"
 )
+instance_hmean = make_instance_metric_on_y_true_and_y_pred(
+    binary_hmean_on_conf_matrix, "H-mean"
+)
 
 
 ########################################################################################
@@ -777,4 +883,8 @@ def coverage_on_conf_matrix(
 
 coverage = make_metric_on_y_true_and_y_pred(
     coverage_on_conf_matrix, "coverage", skip_tn=True
+)
+
+abandonment = make_instance_metric_on_y_true_and_y_pred(
+    coverage_on_conf_matrix, "abandonment", skip_tn=True
 )

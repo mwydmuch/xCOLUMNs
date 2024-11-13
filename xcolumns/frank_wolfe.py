@@ -609,7 +609,6 @@ def find_classifier_using_fw(
             meta["alphas"].append(alpha)
             meta["classifiers_utilities"].append(utility_i)
             meta["utilities"].append(new_utility)
-            meta["iters"] = i
 
         classifiers_proba[:i] *= 1 - alpha
         classifiers_proba[i] = alpha
@@ -620,6 +619,7 @@ def find_classifier_using_fw(
 
     if return_meta:
         meta["time"] = time() - meta["time"]
+        meta["iters"] = i
         return (
             rnd_classifier,
             meta,
@@ -687,14 +687,14 @@ def make_frank_wolfe_wrapper(
 
 
 find_classifier_optimizing_macro_precision_using_fw = make_frank_wolfe_wrapper(
-    macro_precision,
+    macro_precision_on_conf_matrix,
     "macro-averaged precision",
     maximize=True,
     skip_tn=True,
     warn_k_eq_0=True,
 )
 find_classifier_optimizing_micro_precision_using_fw = make_frank_wolfe_wrapper(
-    micro_precision,
+    micro_precision_on_conf_matrix,
     "micro-averaged precision",
     maximize=True,
     skip_tn=True,
