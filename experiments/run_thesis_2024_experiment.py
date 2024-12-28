@@ -3,6 +3,7 @@ import sys
 
 import click
 import numpy as np
+import scipy.sparse as sp
 from metrics_original import *
 from sklearn.model_selection import train_test_split
 from thesis_frank_wolfe_wrappers import *
@@ -53,6 +54,7 @@ def calculate_and_report_metrics(y_true, y_pred, k=5, inverse_propensities=None)
         print(f"    {metric}@{k}: {100 * value:>5.3f}")
 
     conf_mat = calculate_confusion_matrix(y_true, y_pred, normalize=True)
+    # print(*conf_mat)
     for metric, func in METRICS_ON_C_MAT.items():
         value = call_function_with_supported_kwargs(
             func, *conf_mat, k=k, w=inverse_propensities
@@ -159,25 +161,34 @@ METHODS = {
         predict_optimizing_macro_balanced_accuracy_using_bc,
         {"init_y_pred": "greedy", "max_iters": 1},
     ),
-    # Frank wolfe,
-    "frank-wolfe-macro-precision": (find_and_predict_for_macro_precision_using_fw, {}),
-    "frank-wolfe-macro-recall": (find_and_predict_for_macro_recall_using_fw, {}),
-    "frank-wolfe-macro-f1": (find_and_predict_for_macro_f1_score_using_fw, {}),
-    "frank-wolfe-macro-jaccard-score": (
-        find_and_predict_for_macro_jaccard_score_using_fw,
-        {},
-    ),
-    "frank-wolfe-macro-balanced-accuracy": (
-        find_and_predict_for_macro_balanced_accuracy_using_fw,
-        {},
-    ),
-    # "frank-wolfe-macro-gmean": (
-    #     find_and_predict_for_macro_gmean_using_fw, {}
-    # ),
-    # "frank-wolfe-macro-hmean": (
-    #     find_and_predict_for_macro_hmean_using_fw, {}
-    # ),
 }
+
+for args in [{}, {"max_iters": 1}]:
+    METHODS.update(
+        {
+            # Frank wolfe,
+            "frank-wolfe-macro-precision": (
+                find_and_predict_for_macro_precision_using_fw,
+                {},
+            ),
+            "frank-wolfe-macro-recall": (
+                find_and_predict_for_macro_recall_using_fw,
+                {},
+            ),
+            "frank-wolfe-macro-f1": (find_and_predict_for_macro_f1_score_using_fw, {}),
+            "frank-wolfe-macro-jaccard-score": (
+                find_and_predict_for_macro_jaccard_score_using_fw,
+                {},
+            ),
+            "frank-wolfe-macro-balanced-accuracy": (
+                find_and_predict_for_macro_balanced_accuracy_using_fw,
+                {},
+            ),
+            "frank-wolfe-macro-gmean": (find_and_predict_for_macro_gmean_using_fw, {}),
+            "frank-wolfe-macro-hmean": (find_and_predict_for_macro_hmean_using_fw, {}),
+        }
+    )
+
 
 # Add variants with different alpha for mixed utilities
 alphas = [
@@ -198,6 +209,7 @@ alphas = [
     # 0.995,
     # 0.999,
 ]
+alphas = [0, 0.01, 0.5, 0.99, 1]
 alphas = []
 for alpha in alphas:
     METHODS[f"block-coord-mixed-precision-macro-f1-alpha={alpha}-tol={TOL}"] = (
@@ -237,6 +249,16 @@ for alpha in alphas:
         {"beta": alpha},
     )
 
+    METHODS[f"frank-wolfe-mixed-precision-macro-precision-alpha={alpha}"] = (
+        find_and_predict_for_mixed_instance_precision_and_macro_precision_using_fw,
+        {"alpha": alpha},
+    )
+
+    METHODS[f"frank-wolfe-mixed-macro-recall-macro-precision-alpha={alpha}"] = (
+        find_and_predict_for_mixed_macro_recall_and_macro_precision_using_fw,
+        {"alpha": alpha},
+    )
+
 
 @click.command()
 @click.argument("experiment", type=str, required=True)
@@ -246,7 +268,7 @@ for alpha in alphas:
 @click.option("-p", "--probabilities_path", type=str, required=False, default=None)
 @click.option("-l", "--labels_path", type=str, required=False, default=None)
 @click.option(
-    "-r", "--results_dir", type=str, required=False, default="results_thesis/"
+    "-r", "--results_dir", type=str, required=False, default="results_thesis_sun"
 )
 @click.option(
     "--recalculate_predictions", is_flag=True, type=bool, required=False, default=False
@@ -254,6 +276,9 @@ for alpha in alphas:
 @click.option(
     "--recalculate_results", is_flag=True, type=bool, required=False, default=False
 )
+@click.option("--test_multiply", type=int, required=False, default=1)
+@click.option("--use_proba_as_true", is_flag=True, required=False, default=False)
+@click.option("--use_train_as_test", is_flag=True, required=False, default=False)
 @click.option("--use_dense", is_flag=True, type=bool, required=False, default=False)
 @click.option("-v", "--val_split", type=float, required=False, default=0.0)
 def main(
@@ -266,6 +291,9 @@ def main(
     results_dir,
     recalculate_predictions,
     recalculate_results,
+    test_multiply,
+    use_proba_as_true,
+    use_train_as_test,
     use_dense,
     val_split,
 ):
@@ -274,9 +302,11 @@ def main(
     elif method in METHODS:
         methods = {method: METHODS[method]}
     else:
+        methods = {k: v for k, v in METHODS.items() if method in k}
+    if len(methods) == 0:
         raise ValueError(f"Unknown method: {method}")
 
-    true_as_pred = "true_as_pred" in experiment
+    use_true_as_pred = "use_true_as_pred" in experiment
     lightxml_data = "lightxml" in experiment
 
     lightxml_data_load_config = {
@@ -415,6 +445,7 @@ def main(
         }
 
     nxc_datasets = [
+        "rcv1x",
         "eurlex",
         "amazonCat",
         "wiki10",
@@ -439,10 +470,11 @@ def main(
                 "path": f"datasets/{d}/{d}_train.txt",
                 "load_func": load_txt_labels,
             }
-            train_y_proba_path = {
-                "path": f"predictions/nxc/{d}/train_pred",
-                "load_func": load_txt_sparse_pred,
-            }
+            if os.path.exists(f"predictions/nxc/{d}/train_pred"):
+                train_y_proba_path = {
+                    "path": f"predictions/nxc/{d}/train_pred",
+                    "load_func": load_txt_sparse_pred,
+                }
             break
 
     # else:
@@ -477,6 +509,9 @@ def main(
         with Timer():
             train_y_proba = load_cache_npz_file(**train_y_proba_path)
 
+    if train_y_true.shape != y_true.shape:
+        align_dim1(y_true, train_y_true)
+
     # For some sparse format this resize might be necessary
     if y_true.shape != y_proba.shape:
         if y_true.shape[0] != y_proba.shape[0]:
@@ -509,8 +544,29 @@ def main(
         y_proba.data = 1.0 / (1.0 + np.exp(-y_proba.data))
 
     # Use true labels as predictions with 1.0 score (probability)
-    if true_as_pred:
+    if use_true_as_pred:
         y_proba = y_true
+
+    if use_proba_as_true:
+        y_true = y_proba
+        if val_y_proba is not None and val_y_true is not None:
+            val_y_true = val_y_proba
+        if train_y_proba is not None and train_y_true is not None:
+            train_y_true = train_y_proba
+
+    if use_train_as_test:
+        y_true = train_y_true
+        y_proba = train_y_proba
+        if val_y_proba is not None and val_y_true is not None:
+            val_y_true = train_y_true
+            val_y_proba = train_y_proba
+
+    def repeat_csr_matrix(matrix, n):
+        return sp.vstack([matrix] * n)
+
+    if test_multiply > 1:
+        y_true = sp.vstack([y_true] * test_multiply)
+        y_proba = sp.vstack([y_proba] * test_multiply)
 
     print(f"y_true: type={type(y_true)}, shape={y_true.shape}")
     print(f"y_proba: type={type(y_proba)}, shape={y_proba.shape}")
@@ -522,6 +578,8 @@ def main(
         y_true = y_true.toarray()
         y_proba = y_proba.toarray()
         train_y_true = train_y_true.toarray()
+
+    # print(y_pred.shape, inv_ps.shape, priors.shape, y_true.shape, y_true_test.shape, y_proba.shape, y_proba_test.shape)
 
     output_path_prefix = f"{results_dir}/{experiment}/"
     os.makedirs(output_path_prefix, exist_ok=True)
@@ -554,16 +612,19 @@ def main(
                         **func[1],
                     )
                     results.update(meta)
+                    print(f"  Val size: {val_y_true.shape}")
                     print(f"  Iters: {meta['iters']}")
                     print(f"  Time: {meta['time']:>5.2f} s")
                     save_npz_wrapper(pred_path, y_pred)
                     save_json(results_path, results)
                 except Exception as e:
+                    raise e
                     print(f"  Failed: {e}")
             else:
                 y_pred = load_npz_wrapper(pred_path)
                 results = load_json(results_path)
-
+            print(f"  Test size: {y_true.shape}")
+            print(f"  Pred size: {y_pred.shape}")
             print("  Metrics (%):")
             results.update(
                 calculate_and_report_metrics(

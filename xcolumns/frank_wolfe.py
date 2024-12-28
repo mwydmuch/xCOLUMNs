@@ -39,6 +39,7 @@ if TORCH_AVAILABLE:
             value, (tp, fp, fn, tn), materialize_grads=True, allow_unused=True
         )
         return value, tp_grad, fp_grad, fn_grad, tn_grad
+        # return float(value), tp_grad.detach().numpy(), fp_grad.detach().numpy(), fn_grad.detach().numpy(), tn_grad.detach().numpy()
 
     def _predict_using_randomized_weighted_classifier_torch(
         y_proba: torch.Tensor,
@@ -385,17 +386,21 @@ def find_classifier_using_fw(
     metric_func: Callable,
     k: int,
     max_iters: int = 100,
-    init_classifier: Union[str, Tuple[DenseMatrix, DenseMatrix]] = "random",  # or "top"
+    # init_classifier: Union[str, Tuple[DenseMatrix, DenseMatrix]] = "random",  # or "top"
+    init_classifier: Union[
+        str, Tuple[DenseMatrix, DenseMatrix]
+    ] = "inv_prior",  # or "top"
     maximize: bool = True,
     search_for_best_alpha: bool = True,
     alpha_search_algo: str = "uniform",  # or "ternary"
     alpha_tolerance: float = 0.001,
-    alpha_uniform_search_step: float = 0.001,
+    alpha_uniform_search_step: float = 0.0001,
     skip_tn: bool = False,
     seed: Optional[int] = None,
     verbose: bool = False,
     return_meta: bool = False,
-    reg_C: float = 1e-6,
+    reg_C: float = 0,
+    **kwargs,
 ) -> Union[
     RandomizedWeightedClassifier, Tuple[RandomizedWeightedClassifier, Dict[str, Any]]
 ]:
@@ -473,12 +478,20 @@ def find_classifier_using_fw(
     classifiers_b = np.zeros((max_iters + 1, m), dtype=DefaultDataDType)
     classifiers_proba = np.ones(max_iters + 1, dtype=DefaultDataDType)
 
+    y_freq = np.array(y_true.sum(axis=0)).flatten()
+    y_prior = (y_freq + 0.1) / y_true.shape[0]
+    inv_y_prior = 1.0 / y_prior
+    print(type(y_freq), y_freq.shape)
+
     if init_classifier == "top":
         classifiers_a[0] = np.ones(m, dtype=DefaultDataDType)
         classifiers_b[0] = np.full(m, -0.5, dtype=DefaultDataDType)
     elif init_classifier == "random":
         classifiers_a[0] = rng.random(m)
         classifiers_b[0] = rng.random(m) - 0.5
+    elif init_classifier == "inv_prior":
+        classifiers_a[0] = inv_y_prior
+        classifiers_b[0] = np.full(m, 0, dtype=DefaultDataDType)
     elif (
         isinstance(init_classifier, (tuple, list))
         and len(init_classifier) == 2
@@ -522,14 +535,15 @@ def find_classifier_using_fw(
     )
 
     tp, fp, fn, tn = calculate_confusion_matrix(
-        y_true, y_pred_i, normalize=False, skip_tn=skip_tn
+        y_true, y_pred_i, normalize=(reg_C == 0), skip_tn=skip_tn
     )
 
-    reg_n = y_true.shape[0] + 4 * reg_C
-    tp = tp + reg_C / reg_n
-    fp = fp + reg_C / reg_n
-    fn = fn + reg_C / reg_n
-    tn = tn + reg_C / reg_n
+    if reg_C != 0:
+        reg_n = y_true.shape[0] + 4 * reg_C
+        tp = (tp + reg_C) / reg_n
+        fp = (fp + reg_C) / reg_n
+        fn = (fn + reg_C) / reg_n
+        tn = (tn + reg_C) / reg_n
     utility_i = metric_func(tp, fp, fn, tn)
 
     if return_meta:
@@ -542,29 +556,53 @@ def find_classifier_using_fw(
         meta["utilities"].append(utility_i)
         meta["classifiers_utilities"].append(utility_i)
 
+    log_info(
+        f"    Utility of the first (sub)classifier 0: {utility_i}",
+        verbose,
+    )
+
     for i in range(1, max_iters + 1):
         log_info(f"  Starting iteration {i}/{max_iters} ...", verbose)
         old_utility, Gtp, Gfp, Gfn, Gtn = metric_func_with_gradient(
             metric_func, tp, fp, fn, tn
         )
 
+        # classifiers_a[i] = inv_y_prior + Gtp - Gfp - Gfn + Gtn
         classifiers_a[i] = Gtp - Gfp - Gfn + Gtn
         classifiers_b[i] = Gfp - Gtn
         if not maximize:
             classifiers_a[i] *= -1
             classifiers_b[i] *= -1
 
+        # classifiers_a[i] = np.minimum(classifiers_a[i], 1.0)
+
+        to_mean = y_freq < 10
+        print(to_mean.shape)
+        mean_a = classifiers_a[i][to_mean].mean()
+        mean_b = classifiers_b[i][to_mean].mean()
+        classifiers_a[i][to_mean] = mean_a
+        classifiers_b[i][to_mean] = mean_b
+
         y_pred_i = predict_weighted_per_instance(
             y_proba, k, th=0.0, a=classifiers_a[i], b=classifiers_b[i]
         )
         tp_i, fp_i, fn_i, tn_i = calculate_confusion_matrix(
-            y_true, y_pred_i, normalize=False, skip_tn=skip_tn
+            y_true, y_pred_i, normalize=(reg_C == 0), skip_tn=skip_tn
         )
-        tp_i = tp_i + reg_C / reg_n
-        fp_i = fp_i + reg_C / reg_n
-        fn_i = fn_i + reg_C / reg_n
-        tn_i = tn_i + reg_C / reg_n
+
+        if reg_C != 0:
+            tp_i = (tp_i + reg_C) / reg_n
+            fp_i = (fp_i + reg_C) / reg_n
+            fn_i = (fn_i + reg_C) / reg_n
+            tn_i = (tn_i + reg_C) / reg_n
         utility_i = metric_func(tp_i, fp_i, fn_i, tn_i)
+
+        # print(classifiers_a)
+        # print(tp_i, fp_i, fn_i, tn_i)
+        log_info(
+            f"    Utility of new (sub)classifier {i}: {utility_i}",
+            verbose,
+        )
 
         if search_for_best_alpha:
             alpha, _ = _find_best_alpha(
@@ -612,6 +650,12 @@ def find_classifier_using_fw(
 
         classifiers_proba[:i] *= 1 - alpha
         classifiers_proba[i] = alpha
+    else:
+        log_info(f"  Stopping because max iterations reached", verbose)
+    log_info(
+        f"  Final utility of the randomized classifier: {new_utility}, number of sub-classifiers: {len(classifiers_a)}",
+        verbose,
+    )
 
     rnd_classifier = RandomizedWeightedClassifier(
         k, classifiers_a, classifiers_b, classifiers_proba
@@ -766,3 +810,62 @@ find_classifier_optimizing_macro_gmean_using_fw = make_frank_wolfe_wrapper(
 find_classifier_optimizing_micro_gmean_using_fw = make_frank_wolfe_wrapper(
     micro_gmean_on_conf_matrix, "micro-averaged G-mean", maximize=True
 )
+
+
+########################################################################################
+# Wrapper functions of Frank Wolfe algorithm for mixed metrics
+########################################################################################
+
+
+def find_classifier_optimizing_mixed_instance_precision_and_macro_precision_using_fw(
+    y_true: Matrix,
+    y_proba: Matrix,
+    k: int,
+    alpha: float = 1,
+    **kwargs,
+):
+    """
+    Find a randomized classifier that maximizes a metric using Frank-Wolfe algorithm
+    with metric being a weighted average of instance precision and macro-averaged precision as the target metric.
+    See :meth:`find_classifier_using_fw` for more details and a description of arguments.
+    """
+
+    n, m = y_true.shape
+
+    def mixed_metric_fn(tp, fp, fn, tn):
+        return (
+            (1 - alpha) * binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k)
+            + alpha * binary_precision_on_conf_matrix(tp, fp, fn, tn) / m
+        ).sum()
+
+    # def mixed_metric_fn(tp, fp, fn, tn):
+    #     return binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k).sum()
+
+    return find_classifier_using_fw(y_true, y_proba, mixed_metric_fn, k, **kwargs)
+
+
+def find_classifier_optimizing_mixed_macro_recall_and_macro_precision_using_fw(
+    y_true: Matrix,
+    y_proba: Matrix,
+    k: int,
+    alpha: float = 1,
+    **kwargs,
+):
+    """
+    Find a randomized classifier that maximizes a metric using Frank-Wolfe algorithm
+    with metric being a weighted average of instance precision and macro-averaged precision as the target metric.
+    See :meth:`find_classifier_using_fw` for more details and a description of arguments.
+    """
+
+    n, m = y_true.shape
+
+    def mixed_metric_fn(tp, fp, fn, tn):
+        return (
+            (1 - alpha) * binary_recall_on_conf_matrix(tp, fp, fn, tn)
+            + alpha * binary_precision_on_conf_matrix(tp, fp, fn, tn)
+        ).mean()
+
+    # def mixed_metric_fn(tp, fp, fn, tn):
+    #     return binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k).sum()
+
+    return find_classifier_using_fw(y_true, y_proba, mixed_metric_fn, k, **kwargs)

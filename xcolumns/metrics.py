@@ -483,7 +483,7 @@ def binary_precision_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix, None],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-8,
+    epsilon: float = 1e-6,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary precision
@@ -530,7 +530,7 @@ def binary_recall_on_conf_matrix(
     fp: Union[Number, DenseMatrix, None],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-8,
+    epsilon: float = 1e-6,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary recall
@@ -578,7 +578,7 @@ def binary_fbeta_score_on_conf_matrix(
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
     beta: float = 1.0,
-    epsilon: float = 1e-8,
+    epsilon: float = 1e-6,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Compute the binary F-beta score.
@@ -595,7 +595,7 @@ def binary_fbeta_score_on_conf_matrix(
 
 
 # Alternative definition of F-beta score used in some old experiments
-# def binary_fbeta_score_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=1e-8):
+# def binary_fbeta_score_on_conf_matrix(tp, fp, fn, tn, beta=1.0, epsilon=1e-6):
 #     precision = binary_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
 #     recall = binary_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
 #     return (
@@ -611,7 +611,7 @@ def binary_f1_score_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-8,
+    epsilon: float = 1e-6,
 ) -> Union[Number, DenseMatrix]:
     """
     Calculates binary F1 score, also known as balanced F-score or F-measure
@@ -671,7 +671,7 @@ def binary_jaccard_score_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-8,
+    epsilon: float = 1e-6,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates Jaccard score
@@ -717,7 +717,7 @@ def binary_balanced_accuracy_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix],
-    epsilon: float = 1e-8,
+    epsilon: float = 1e-6,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates ballanced accuracy
@@ -766,7 +766,7 @@ def binary_gmean_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix],
-    epsilon: float = 1e-8,
+    epsilon: float = 1e-6,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates G-mean (geometric mean)
@@ -815,7 +815,7 @@ def binary_hmean_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix],
-    epsilon: float = 1e-8,
+    epsilon: float = 1e-6,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates H-mean (harmonic mean)

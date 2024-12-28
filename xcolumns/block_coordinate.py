@@ -286,6 +286,7 @@ def predict_using_bc_with_0approx(
     return_meta: bool = False,
     seed: Optional[int] = None,
     verbose: bool = False,
+    **kwargs,
 ) -> Union[Matrix, Tuple[Matrix, Dict[str, Any]]]:
     r"""
     Predicts for each instance (row) in a provided
@@ -309,7 +310,7 @@ def predict_using_bc_with_0approx(
                             (``binary_metric_func(tp, fp, fn, tn)``).
                             If a list of functions is provided, the metric is calculated as a sum of the metrics calculated by each function.
         k: The budget of positive labels per instance. If **k** is 0, the algorithm optimizes for the metric without any budget constraint.
-        metric_aggregation: The aggregation function for the binary metric(s), that forms the final metrics (objectite). Either "mean" or "sum".
+        metric_aggregation: The aggregation function for the binary metric(s), that forms the final metrics (objective). Either "mean" or "sum".
         maximize: Whether to maximize the metric.
         tolerance: Defines the stopping condition, if the expected improvement of the metric is smaller than **tolerance** the algorithm stops.
         init_y_pred: The initial prediction matrix. It can be either "random", "top", "greedy" or a matrix of shape (n, m).
@@ -779,6 +780,7 @@ def predict_optimizing_instance_precision_using_bc(
     shuffle_order: bool = True,
     verbose: bool = False,
     return_meta: bool = False,
+    **kwargs,
 ):
     """
     This function is a wrapper for using block coordinate ascent with instance precision as the target metric.
@@ -799,19 +801,20 @@ def predict_optimizing_instance_precision_using_bc(
         shuffle_order=shuffle_order,
         verbose=verbose,
         return_meta=return_meta,
+        **kwargs,
     )
+
+
+########################################################################################
+# Wrapper functions for BC algorithm for mixed metrics
+########################################################################################
 
 
 def predict_optimizing_mixed_instance_precision_and_macro_precision_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     alpha: float = 1,
-    tolerance: float = 1e-6,
-    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iters: int = 100,
-    shuffle_order: bool = True,
-    verbose: bool = False,
-    return_meta: bool = False,
+    **kwargs,
 ):
     """
     This function is a wrapper for using block coordinate ascent
@@ -831,12 +834,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_precision_using_bc(
         k=k,
         metric_aggregation="sum",
         skip_tn=True,
-        tolerance=tolerance,
-        init_y_pred=init_y_pred,
-        max_iters=max_iters,
-        shuffle_order=shuffle_order,
-        verbose=verbose,
-        return_meta=return_meta,
+        **kwargs,
     )
 
 
@@ -844,12 +842,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_recall_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     alpha: float = 1,
-    tolerance: float = 1e-6,
-    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iters: int = 100,
-    shuffle_order: bool = True,
-    verbose: bool = False,
-    return_meta: bool = False,
+    **kwargs,
 ):
     """
     This function is a wrapper for using block coordinate ascent
@@ -869,12 +862,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_recall_using_bc(
         k=k,
         metric_aggregation="sum",
         skip_tn=True,
-        tolerance=tolerance,
-        init_y_pred=init_y_pred,
-        max_iters=max_iters,
-        shuffle_order=shuffle_order,
-        verbose=verbose,
-        return_meta=return_meta,
+        **kwargs,
     )
 
 
@@ -882,12 +870,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     alpha: float = 1,
-    tolerance: float = 1e-6,
-    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iters: int = 100,
-    shuffle_order: bool = True,
-    verbose: bool = False,
-    return_meta: bool = False,
+    **kwargs,
 ):
     """
     This function is a wrapper for using block coordinate ascent
@@ -907,16 +890,11 @@ def predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc(
         binary_metric_func=mixed_utility_fn,
         metric_aggregation="sum",
         skip_tn=True,
-        tolerance=tolerance,
-        init_y_pred=init_y_pred,
-        max_iters=max_iters,
-        shuffle_order=shuffle_order,
-        verbose=verbose,
-        return_meta=return_meta,
+        **kwargs,
     )
 
 
-def predict_optimizing_mixed_instance_precision_and_macro_jaccard_score_using_bc(
+def predict_optimizing_mixed_instance_precision_and_macro_balanced_accuracy_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     alpha: float = 1,
@@ -926,6 +904,35 @@ def predict_optimizing_mixed_instance_precision_and_macro_jaccard_score_using_bc
     shuffle_order: bool = True,
     verbose: bool = False,
     return_meta: bool = False,
+    **kwargs,
+):
+    """
+    This function is a wrapper for using block coordinate ascent
+    with metric being a weighted average of instance precision and macro-averaged balanced_accuracy as the target metric.
+    See :func:`predict_using_bc_with_0approx` for more details and a description of parameters.
+    """
+    n, m = y_proba.shape
+
+    def mixed_utility_fn(tp, fp, fn, tn):
+        return (1 - alpha) * binary_precision_at_k_on_conf_matrix(
+            tp, fp, fn, tn, k
+        ) + alpha * binary_balanced_accuracy_on_conf_matrix(tp, fp, fn, tn) / m
+
+    return predict_using_bc_with_0approx(
+        y_proba,
+        k=k,
+        binary_metric_func=mixed_utility_fn,
+        metric_aggregation="sum",
+        skip_tn=True,
+        **kwargs,
+    )
+
+
+def predict_optimizing_mixed_instance_precision_and_macro_jaccard_score_using_bc(
+    y_proba: Union[np.ndarray, csr_matrix],
+    k: int,
+    alpha: float = 1,
+    **kwargs,
 ):
     """
     This function is a wrapper for using block coordinate ascent
@@ -945,12 +952,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_jaccard_score_using_bc
         binary_metric_func=mixed_utility_fn,
         metric_aggregation="sum",
         skip_tn=True,
-        tolerance=tolerance,
-        init_y_pred=init_y_pred,
-        max_iters=max_iters,
-        shuffle_order=shuffle_order,
-        verbose=verbose,
-        return_meta=return_meta,
+        **kwargs,
     )
 
 
@@ -958,12 +960,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_gmean_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     alpha: float = 1,
-    tolerance: float = 1e-6,
-    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iters: int = 100,
-    shuffle_order: bool = True,
-    verbose: bool = False,
-    return_meta: bool = False,
+    **kwargs,
 ):
     """
     This function is a wrapper for using block coordinate ascent
@@ -983,12 +980,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_gmean_using_bc(
         binary_metric_func=mixed_utility_fn,
         metric_aggregation="sum",
         skip_tn=True,
-        tolerance=tolerance,
-        init_y_pred=init_y_pred,
-        max_iters=max_iters,
-        shuffle_order=shuffle_order,
-        verbose=verbose,
-        return_meta=return_meta,
+        **kwargs,
     )
 
 
@@ -996,12 +988,7 @@ def predict_optimizing_mixed_instance_precision_and_macro_hmean_using_bc(
     y_proba: Union[np.ndarray, csr_matrix],
     k: int,
     alpha: float = 1,
-    tolerance: float = 1e-6,
-    init_y_pred: Union[str, np.ndarray, csr_matrix] = "random",
-    max_iters: int = 100,
-    shuffle_order: bool = True,
-    verbose: bool = False,
-    return_meta: bool = False,
+    **kwargs,
 ):
     """
     This function is a wrapper for using block coordinate ascent
@@ -1021,10 +1008,5 @@ def predict_optimizing_mixed_instance_precision_and_macro_hmean_using_bc(
         binary_metric_func=mixed_utility_fn,
         metric_aggregation="sum",
         skip_tn=True,
-        tolerance=tolerance,
-        init_y_pred=init_y_pred,
-        max_iters=max_iters,
-        shuffle_order=shuffle_order,
-        verbose=verbose,
-        return_meta=return_meta,
+        **kwargs,
     )

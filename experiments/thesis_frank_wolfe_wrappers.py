@@ -2,7 +2,6 @@ import random
 from time import time
 
 import numpy as np
-from custom_utilities_methods import *
 
 from utils import *
 from xcolumns.frank_wolfe import *
@@ -32,6 +31,8 @@ def make_frank_wolfe_find_and_predict_wrapper(
             val_y_true,
             val_y_proba,
             k,
+            reg_C=0.1,
+            max_iters=100,
             **kwargs,
         )
         classifiers_a = rnd_cls.a
@@ -43,6 +44,15 @@ def make_frank_wolfe_find_and_predict_wrapper(
 
         random.seed(seed)
         # meta['pred_meta'] = []
+
+        # classifiers_a = np.array([np.mean(classifiers_a, axis=0)])
+        # classifiers_b = np.array([np.mean(classifiers_b, axis=0)])
+        # classifiers_proba = np.array([1])
+
+        # classifiers_a = np.array([classifiers_a[-1]])
+        # classifiers_b = np.array([classifiers_b[-1]])
+        # classifiers_proba = np.array([1])
+
         meta["pred_time"] = []
         for i in range(pred_repeat):
             start_time = time()
@@ -56,6 +66,10 @@ def make_frank_wolfe_find_and_predict_wrapper(
                 seed=random.randint(0, int("0x7FFFFFFF", 16)),
                 # return_meta=True,
             )
+
+            # y_pred = predict_weighted_per_instance(
+            #     y_proba, k, th=0.0, a=classifiers_a[-1], b=classifiers_b[-1]
+            # )
             y_preds.append(y_pred)
             # meta['pred_meta'].append(meta)
             meta["pred_time"].append(time() - start_time)
@@ -67,11 +81,11 @@ def make_frank_wolfe_find_and_predict_wrapper(
 
         return y_preds, meta
 
-    return add_kwargs_to_signature(
-        find_and_predict_using_fw,
-        find_classifier_using_fw,
-        skip=["seed"],
-    )
+    # return add_kwargs_to_signature(
+    #     find_and_predict_using_fw,
+    #     find_classifier_using_fw,
+    #     skip=["seed"],
+    # )
 
     return find_and_predict_using_fw
 
@@ -110,4 +124,17 @@ find_and_predict_for_macro_gmean_using_fw = make_frank_wolfe_find_and_predict_wr
 
 find_and_predict_for_macro_hmean_using_fw = make_frank_wolfe_find_and_predict_wrapper(
     find_classifier_optimizing_macro_hmean_using_fw
+)
+
+
+find_and_predict_for_mixed_instance_precision_and_macro_precision_using_fw = (
+    make_frank_wolfe_find_and_predict_wrapper(
+        find_classifier_optimizing_mixed_instance_precision_and_macro_precision_using_fw
+    )
+)
+
+find_and_predict_for_mixed_macro_recall_and_macro_precision_using_fw = (
+    make_frank_wolfe_find_and_predict_wrapper(
+        find_classifier_optimizing_mixed_macro_recall_and_macro_precision_using_fw
+    )
 )
