@@ -50,6 +50,9 @@ elif [[ -e "${DATASET_FILE}.train" ]]; then
 elif [[ -e "${DATASET_FILE}_train.libsvm" ]]; then
     TRAIN_FILE="${DATASET_FILE}_train.libsvm"
     TEST_FILE="${DATASET_FILE}_test.libsvm"
+elif [[ -e "${DATASET_FILE}_train.svm" ]]; then
+    TRAIN_FILE="${DATASET_FILE}_train.svm"
+    TEST_FILE="${DATASET_FILE}_test.svm"
 fi
 
 # Train model
@@ -59,10 +62,6 @@ if [[ ! -e $MODEL ]] || [[ -e $TRAIN_LOCK_FILE ]]; then
     mkdir -p $MODEL
     touch $TRAIN_LOCK_FILE
 
-    if [[ $TRAIN_ARGS == *"--labelsWeights"* ]]; then
-        TRAIN_ARGS="${TRAIN_ARGS} --labelsWeights ${INV_PS_FILE}"
-    fi
-
     ${ROOT_DIR}/nxc train -i $TRAIN_FILE -o $MODEL $TRAIN_ARGS | tee $TRAIN_RESULT_FILE
     echo "Train date: $(date)" | tee -a $TRAIN_RESULT_FILE
     echo "Model file size: $(du -ch ${MODEL} | tail -n 1 | grep -E '[0-9\.,]+[BMG]' -o)" | tee -a $TRAIN_RESULT_FILE
@@ -71,12 +70,9 @@ if [[ ! -e $MODEL ]] || [[ -e $TRAIN_LOCK_FILE ]]; then
 fi
 
 # Predict using model
-
-
 RESULT_FILE=${MODEL}/train_${TEST_CONFIG}
-LOCK_FILE=${MODEL_DIR}/.test_lock_${TEST_CONFIG}
+LOCK_FILE=${MODEL}/.test_train_lock_${TEST_CONFIG}
 if [[ ! -e $RESULT_FILE ]] || [[ -e $LOCK_FILE ]]; then
-    mkdir -p $MODEL_DIR
     touch $LOCK_FILE
     if [ -e $TRAIN_RESULT_FILE ]; then
         cat $TRAIN_RESULT_FILE > $RESULT_FILE
@@ -110,9 +106,8 @@ fi
 
 
 RESULT_FILE=${MODEL}/test_${TEST_CONFIG}
-LOCK_FILE=${MODEL_DIR}/.test_lock_${TEST_CONFIG}
+LOCK_FILE=${MODEL}/.test_test_lock_${TEST_CONFIG}
 if [[ ! -e $RESULT_FILE ]] || [[ -e $LOCK_FILE ]]; then
-    mkdir -p $MODEL_DIR
     touch $LOCK_FILE
     if [ -e $TRAIN_RESULT_FILE ]; then
         cat $TRAIN_RESULT_FILE > $RESULT_FILE
@@ -136,7 +131,12 @@ if [[ ! -e $RESULT_FILE ]] || [[ -e $LOCK_FILE ]]; then
         cat $PRED_RESULT_FILE >> $RESULT_FILE
     fi
 
+    if [[ -e ${MODEL}/test_pred ]]; then
+        rm -f ${MODEL}/test_pred
+    fi
     ln -s test_pred_${PRED_CONFIG} ${MODEL}/test_pred
+
+    wc -l ${MODEL}/test_pred
 
     python3 ${ROOT_DIR}/experiments/evaluate.py $TEST_FILE $PRED_FILE $INV_PS_FILE | tee -a $RESULT_FILE
 
@@ -153,9 +153,9 @@ fi
 
 ln -s ${TRAIN_CONFIG} ${MODEL_DIR}/${DATASET_NAME}
 
-# # Create a symlink to the model directory
-# if [[ -e ${MODEL_DIR}/${DATASET_NAME}_hinge ]]; then
-#     rm -f ${MODEL_DIR}/${DATASET_NAME}_hinge
+# Create a symlink to the model directory
+# if [[ -e ${MODEL_DIR}/${DATASET_NAME}_l2 ]]; then
+#     rm -f ${MODEL_DIR}/${DATASET_NAME}_l2
 # fi
 
-# ln -s ${TRAIN_CONFIG} ${MODEL_DIR}/${DATASET_NAME}_hinge
+# ln -s ${TRAIN_CONFIG} ${MODEL_DIR}/${DATASET_NAME}_l2

@@ -3,17 +3,17 @@ import sys
 import click
 import numpy as np
 from custom_utilities_methods import *
+from metrics_original import *
+from omma_wrappers_frank_wolfe import *
+from omma_wrappers_online_methods import *
+from omma_wrappers_threshold_methods import *
 from scipy.sparse import csr_matrix
 from tqdm import tqdm
-from wrappers_frank_wolfe import *
-from wrappers_online_methods import *
-from wrappers_threshold_methods import *
 
 from utils import *
 from xcolumns.block_coordinate import *
 from xcolumns.frank_wolfe import *
 from xcolumns.metrics import *
-from xcolumns.metrics_original import *
 from xcolumns.types import *
 from xcolumns.utils import *
 from xcolumns.weighted_prediction import *

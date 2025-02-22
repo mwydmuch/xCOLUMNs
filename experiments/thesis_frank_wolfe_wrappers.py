@@ -31,8 +31,7 @@ def make_frank_wolfe_find_and_predict_wrapper(
             val_y_true,
             val_y_proba,
             k,
-            reg_C=0.1,
-            max_iters=100,
+            # reg_C = 10,
             **kwargs,
         )
         classifiers_a = rnd_cls.a
@@ -130,6 +129,18 @@ find_and_predict_for_macro_hmean_using_fw = make_frank_wolfe_find_and_predict_wr
 find_and_predict_for_mixed_instance_precision_and_macro_precision_using_fw = (
     make_frank_wolfe_find_and_predict_wrapper(
         find_classifier_optimizing_mixed_instance_precision_and_macro_precision_using_fw
+    )
+)
+
+find_and_predict_for_mixed_instance_precision_and_macro_f1_score_using_fw = (
+    make_frank_wolfe_find_and_predict_wrapper(
+        find_classifier_optimizing_mixed_instance_precision_and_macro_f1_score_using_fw
+    )
+)
+
+find_and_predict_for_mixed_instance_precision_and_macro_recall_using_fw = (
+    make_frank_wolfe_find_and_predict_wrapper(
+        find_classifier_optimizing_mixed_instance_precision_and_macro_recall_using_fw
     )
 )
 

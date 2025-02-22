@@ -4,6 +4,7 @@ import click
 import numpy as np
 import scipy.sparse as sp
 import torch
+from metrics_original import *
 from napkinxc.datasets import load_libsvm_file, to_csr_matrix
 from napkinxc.models import BR, PLT
 from pytorch_models.baseline_classifiers import *
@@ -19,7 +20,6 @@ from utils import *
 from xcolumns.block_coordinate import *
 from xcolumns.frank_wolfe import *
 from xcolumns.metrics import *
-from xcolumns.metrics_original import *
 from xcolumns.weighted_prediction import *
 
 
@@ -363,52 +363,52 @@ METHODS = {
     # ),
 }
 
-# alphas = [
-#     # 0.01,
-#     #0.05,
-#     0.1,
-#     #0.2,
-#     0.3,
-#     #0.4,
-#     0.5,
-#     #0.6,
-#     0.7,
-#     #0.8,
-#     0.9,
-#     #0.95,
-#     # 0.99,
-#     # 0.995,
-#     # 0.999,
-# ]
-# for alpha in alphas:
-#     METHODS[f"frank-wolfe-mixed-prec-f1-alpha={alpha}-step=0.001"] = (
-#         frank_wolfe_mixed_instance_prec_macro_f1,
-#         {"alpha": alpha, "alpha_uniform_search_step": 0.001},
-#     )
-#     METHODS[f"frank-wolfe-mixed-prec-prec-alpha={alpha}-step=0.001"] = (
-#         frank_wolfe_mixed_instance_prec_macro_prec,
-#         {"alpha": alpha, "alpha_uniform_search_step": 0.001},
-#     )
-#     METHODS[f"frank-wolfe-mixed-prec-f1-alpha={alpha}-step=0.01"] = (
-#         frank_wolfe_mixed_instance_prec_macro_f1,
-#         {"alpha": alpha, "alpha_uniform_search_step": 0.01},
-#     )
-#     METHODS[f"frank-wolfe-mixed-prec-prec-alpha={alpha}-step=0.01"] = (
-#         frank_wolfe_mixed_instance_prec_macro_prec,
-#         {"alpha": alpha, "alpha_uniform_search_step": 0.01},
-#     )
-#     METHODS[f"frank-wolfe-mixed-prec-f1-alpha={alpha}-step=0.0001"] = (
-#         frank_wolfe_mixed_instance_prec_macro_f1,
-#         {"alpha": alpha, "alpha_uniform_search_step": 0.0001},
-#     )
-#     METHODS[f"frank-wolfe-mixed-prec-prec-alpha={alpha}-step=0.0001"] = (
-#         frank_wolfe_mixed_instance_prec_macro_prec,
-#         {"alpha": alpha, "alpha_uniform_search_step": 0.0001},
-#     )
-#     METHODS[f"fw-power-law-with-beta={alpha}"] = (
-#         fw_power_law_weighted_instance_wrapper,
-#         {"beta": alpha},
-#     )
+alphas = [
+    # 0.01,
+    # 0.05,
+    0.1,
+    # 0.2,
+    0.3,
+    # 0.4,
+    0.5,
+    # 0.6,
+    0.7,
+    # 0.8,
+    0.9,
+    # 0.95,
+    # 0.99,
+    # 0.995,
+    # 0.999,
+]
+for alpha in alphas:
+    METHODS[f"frank-wolfe-mixed-prec-f1-alpha={alpha}-step=0.001"] = (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": alpha, "alpha_uniform_search_step": 0.001},
+    )
+    METHODS[f"frank-wolfe-mixed-prec-prec-alpha={alpha}-step=0.001"] = (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": alpha, "alpha_uniform_search_step": 0.001},
+    )
+    METHODS[f"frank-wolfe-mixed-prec-f1-alpha={alpha}-step=0.01"] = (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": alpha, "alpha_uniform_search_step": 0.01},
+    )
+    METHODS[f"frank-wolfe-mixed-prec-prec-alpha={alpha}-step=0.01"] = (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": alpha, "alpha_uniform_search_step": 0.01},
+    )
+    METHODS[f"frank-wolfe-mixed-prec-f1-alpha={alpha}-step=0.0001"] = (
+        frank_wolfe_mixed_instance_prec_macro_f1,
+        {"alpha": alpha, "alpha_uniform_search_step": 0.0001},
+    )
+    METHODS[f"frank-wolfe-mixed-prec-prec-alpha={alpha}-step=0.0001"] = (
+        frank_wolfe_mixed_instance_prec_macro_prec,
+        {"alpha": alpha, "alpha_uniform_search_step": 0.0001},
+    )
+    METHODS[f"fw-power-law-with-beta={alpha}"] = (
+        fw_power_law_weighted_instance_wrapper,
+        {"beta": alpha},
+    )
 
 
 def log_loss(true, pred):
