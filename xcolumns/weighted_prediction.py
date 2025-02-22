@@ -343,7 +343,7 @@ def predict_log_weighted_per_instance(
     y_proba: Matrix,
     k: int,
     priors: DenseMatrix,
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-9,
     dtype: Optional[DType] = None,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
@@ -383,7 +383,7 @@ def predict_power_law_weighted_per_instance(
     k: int,
     priors: DenseMatrix,
     beta: float,
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-9,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
     r"""

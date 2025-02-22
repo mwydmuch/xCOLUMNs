@@ -23,7 +23,13 @@ from .weighted_prediction import predict_weighted_per_instance
 if TORCH_AVAILABLE:
     import torch
 
-    def _metric_func_with_gradient_torch(metric_func, tp, fp, fn, tn):
+    def _metric_func_with_gradient_torch(
+        metric_func: Callable,
+        tp: torch.Tensor,
+        fp: torch.Tensor,
+        fn: torch.Tensor,
+        tn: torch.Tensor,
+    ):
         if not isinstance(tp, torch.Tensor):
             tp = torch.tensor(tp, dtype=TORCH_FLOAT_TYPE)
             fp = torch.tensor(fp, dtype=TORCH_FLOAT_TYPE)
@@ -94,6 +100,7 @@ def _predict_using_randomized_weighted_classifier_np(
     classifiers_range = np.arange(c)
     y_pred = np.zeros(y_proba.shape, dtype=y_proba.dtype if dtype is None else dtype)
     for i in range(n):
+        # Simple version
         c_i = rng.choice(classifiers_range, p=classifiers_proba)
         gains = y_proba[i] * classifiers_a[c_i] + classifiers_b[c_i]
 
@@ -103,7 +110,38 @@ def _predict_using_randomized_weighted_classifier_np(
         else:
             y_pred[i, gains > 0] = 1.0
 
+        # Better version
+        for j in range(classifiers_range):
+            gains = y_proba[i] * classifiers_a[j] + classifiers_b[j]
+
+            if k > 0:
+                top_k = np.argpartition(-gains, k)[:k]
+                y_pred[i, top_k] = 1.0
+            else:
+                y_pred[i, gains > 0] = 1.0
+
     return y_pred
+
+
+def _madows_sampling(values_range, p, k):
+    u = np.random.uniform(0, 1)
+    sample = []
+    order = np.arange(len(values_range))
+    np.random.shuffle(order)
+    pi = 0
+    assert np.allclose(
+        np.sum(p), k
+    ), f"Sum of probabilities is not equal to k: {np.sum(p)} != {k}"
+    # print(order, values_range, p, u)
+    for i in order:
+        if u > pi:
+            sample.append(values_range[i])
+            u += 1
+            if len(sample) == k:
+                break
+        pi += p[i]
+    # print(sample)
+    return sample
 
 
 def _predict_using_randomized_weighted_classifier_csr(
@@ -115,6 +153,8 @@ def _predict_using_randomized_weighted_classifier_csr(
     dtype: Optional[np.dtype] = None,
     seed: Optional[int] = None,
 ) -> csr_matrix:
+    from .numba_csr_functions import numba_argtopk_csr
+
     rng = np.random.default_rng(seed)
 
     n, m = y_proba.shape
@@ -130,6 +170,7 @@ def _predict_using_randomized_weighted_classifier_csr(
 
     # TODO: Can be further optimized in numba
     for i in range(n):
+        # Simple version
         c_i = rng.choice(classifiers_range, p=classifiers_proba)
         (
             y_pred_data,
@@ -148,6 +189,23 @@ def _predict_using_randomized_weighted_classifier_csr(
             classifiers_a[c_i],
             classifiers_b[c_i],
         )
+
+        # Better version
+        # new_y_proba = {}
+        # for j in range(c):
+        #     gains_data = y_proba.data[y_proba.indptr[i] : y_proba.indptr[i + 1]]
+        #     gains_indices = y_proba.indices[y_proba.indptr[i] : y_proba.indptr[i + 1]]
+        #     gains_data = gains_data * classifiers_a[j][gains_indices].reshape(-1)
+        #     gains_data = gains_data + classifiers_b[j][gains_indices].reshape(-1)
+
+        #     new_y_pred_i_indices = numba_argtopk_csr(gains_data, gains_indices, k)
+        #     assert len(new_y_pred_i_indices) == k
+        #     for idx in new_y_pred_i_indices:
+        #         new_y_proba[idx] = new_y_proba.get(idx, 0) + classifiers_proba[j]
+
+        # new_y_pred_i_indices = np.sort(_madows_sampling(list(new_y_proba.keys()), list(new_y_proba.values()), k))
+        # assert len(new_y_pred_i_indices) == k
+        # y_pred_indices[y_pred_indptr[i] : y_pred_indptr[i + 1]] = new_y_pred_i_indices
 
     # y_pred_data = np.ones(y_pred_indices.size, dtype=FLOAT_TYPE)
 
@@ -347,7 +405,13 @@ class RandomizedWeightedClassifier:
 ########################################################################################
 
 
-def _metric_func_with_gradient_autograd(metric_func, tp, fp, fn, tn):
+def _metric_func_with_gradient_autograd(
+    metric_func: Callable,
+    tp: DenseMatrix,
+    fp: DenseMatrix,
+    fn: DenseMatrix,
+    tn: DenseMatrix,
+):
     grad_func = autograd.grad(metric_func, argnum=[0, 1, 2, 3])
     return float(metric_func(tp, fp, fn, tn)), *grad_func(tp, fp, fn, tn)
 
@@ -387,10 +451,11 @@ def find_classifier_using_fw(
     k: int,
     max_iters: int = 100,
     # init_classifier: Union[str, Tuple[DenseMatrix, DenseMatrix]] = "random",  # or "top"
-    init_classifier: Union[
-        str, Tuple[DenseMatrix, DenseMatrix]
-    ] = "inv_prior",  # or "top"
+    init_classifier: Union[str, Tuple[DenseMatrix, DenseMatrix]] = "top",  # or "top"
     maximize: bool = True,
+    normalize_conf_matrix: bool = True,
+    metric_kwargs: Optional[Dict[str, Any]] = None,
+    tolerance: float = 1e-6,
     search_for_best_alpha: bool = True,
     alpha_search_algo: str = "uniform",  # or "ternary"
     alpha_tolerance: float = 0.001,
@@ -424,6 +489,7 @@ def find_classifier_using_fw(
         max_iters: The maximum number of iterations.
         init_classifier: The initial classifier, can be either "random", "top", or an initial weighted classifier with provided vectors of coeficients :math:`\boldsymbol{a}` and constants :math:`\boldsymbol{b}`.
         maximize: Whether to maximize or minimize the metric.
+        metric_kwargs: Additional keyword arguments for the metric function.
         search_for_best_alpha: Whether to search for the best alpha (step size) in each iteration or to use standard Frank-Wolfe step size :math:`2/(i + 1)`, where :math:`i` is an iteration number.
                                Setting slows down the algorithm, but may help to find better solution if the metric is not convex.
         alpha_search_algo: The algorithm for searching for the best alpha, can be either "uniform" or "ternary".
@@ -472,16 +538,13 @@ def find_classifier_using_fw(
         f"  Initializing initial {init_classifier if isinstance(init_classifier, str) else 'custom'} classifier ...",
         verbose,
     )
+
     # Initialize the classifiers matrix
+    y_freq = np.array(y_true.sum(axis=0), dtype=DefaultDataDType).flatten()
     rng = np.random.default_rng(seed)
     classifiers_a = np.zeros((max_iters + 1, m), dtype=DefaultDataDType)
     classifiers_b = np.zeros((max_iters + 1, m), dtype=DefaultDataDType)
     classifiers_proba = np.ones(max_iters + 1, dtype=DefaultDataDType)
-
-    y_freq = np.array(y_true.sum(axis=0)).flatten()
-    y_prior = (y_freq + 0.1) / y_true.shape[0]
-    inv_y_prior = 1.0 / y_prior
-    print(type(y_freq), y_freq.shape)
 
     if init_classifier == "top":
         classifiers_a[0] = np.ones(m, dtype=DefaultDataDType)
@@ -489,7 +552,10 @@ def find_classifier_using_fw(
     elif init_classifier == "random":
         classifiers_a[0] = rng.random(m)
         classifiers_b[0] = rng.random(m) - 0.5
-    elif init_classifier == "inv_prior":
+    elif init_classifier == "prior":
+        y_prior = (y_freq + 0.1) / y_true.shape[0]
+        inv_y_prior = 1.0 / y_prior
+
         classifiers_a[0] = inv_y_prior
         classifiers_b[0] = np.full(m, 0, dtype=DefaultDataDType)
     elif (
@@ -530,12 +596,23 @@ def find_classifier_using_fw(
             classifiers_proba, dtype=y_proba.dtype, device=y_proba.device
         )
 
+    # Create the metric wrapper that supports kwargs
+    if metric_kwargs is None:
+        metric_kwargs = {}
+
+    def _metric_func(tp, fp, fn, tn):
+        return metric_func(tp, fp, fn, tn, **metric_kwargs)
+
+    # Calculate the initial prediction and utility
+    if reg_C != 0:
+        normalize_conf_matrix = False
+
     y_pred_i = predict_weighted_per_instance(
         y_proba, k, th=0.0, a=classifiers_a[0], b=classifiers_b[0]
     )
 
     tp, fp, fn, tn = calculate_confusion_matrix(
-        y_true, y_pred_i, normalize=(reg_C == 0), skip_tn=skip_tn
+        y_true, y_pred_i, normalize=normalize_conf_matrix, skip_tn=skip_tn
     )
 
     if reg_C != 0:
@@ -544,7 +621,8 @@ def find_classifier_using_fw(
         fp = (fp + reg_C) / reg_n
         fn = (fn + reg_C) / reg_n
         tn = (tn + reg_C) / reg_n
-    utility_i = metric_func(tp, fp, fn, tn)
+
+    utility_i = _metric_func(tp, fp, fn, tn)
 
     if return_meta:
         meta = {
@@ -557,17 +635,16 @@ def find_classifier_using_fw(
         meta["classifiers_utilities"].append(utility_i)
 
     log_info(
-        f"    Utility of the first (sub)classifier 0: {utility_i}",
+        f"    Metric value of the first (sub)classifier 0: {utility_i}",
         verbose,
     )
 
     for i in range(1, max_iters + 1):
         log_info(f"  Starting iteration {i}/{max_iters} ...", verbose)
         old_utility, Gtp, Gfp, Gfn, Gtn = metric_func_with_gradient(
-            metric_func, tp, fp, fn, tn
+            _metric_func, tp, fp, fn, tn
         )
 
-        # classifiers_a[i] = inv_y_prior + Gtp - Gfp - Gfn + Gtn
         classifiers_a[i] = Gtp - Gfp - Gfn + Gtn
         classifiers_b[i] = Gfp - Gtn
         if not maximize:
@@ -576,18 +653,18 @@ def find_classifier_using_fw(
 
         # classifiers_a[i] = np.minimum(classifiers_a[i], 1.0)
 
-        to_mean = y_freq < 10
-        print(to_mean.shape)
-        mean_a = classifiers_a[i][to_mean].mean()
-        mean_b = classifiers_b[i][to_mean].mean()
-        classifiers_a[i][to_mean] = mean_a
-        classifiers_b[i][to_mean] = mean_b
+        # to_mean = y_freq < 100
+        # print(to_mean.shape)
+        # mean_a = classifiers_a[i][to_mean].mean()
+        # mean_b = classifiers_b[i][to_mean].mean()
+        # classifiers_a[i][to_mean] = mean_a
+        # classifiers_b[i][to_mean] = mean_b
 
         y_pred_i = predict_weighted_per_instance(
             y_proba, k, th=0.0, a=classifiers_a[i], b=classifiers_b[i]
         )
         tp_i, fp_i, fn_i, tn_i = calculate_confusion_matrix(
-            y_true, y_pred_i, normalize=(reg_C == 0), skip_tn=skip_tn
+            y_true, y_pred_i, normalize=normalize_conf_matrix, skip_tn=skip_tn
         )
 
         if reg_C != 0:
@@ -595,18 +672,17 @@ def find_classifier_using_fw(
             fp_i = (fp_i + reg_C) / reg_n
             fn_i = (fn_i + reg_C) / reg_n
             tn_i = (tn_i + reg_C) / reg_n
-        utility_i = metric_func(tp_i, fp_i, fn_i, tn_i)
 
-        # print(classifiers_a)
-        # print(tp_i, fp_i, fn_i, tn_i)
+        utility_i = _metric_func(tp_i, fp_i, fn_i, tn_i)
+
         log_info(
-            f"    Utility of new (sub)classifier {i}: {utility_i}",
+            f"    Metric value of new (sub)classifier {i}: {utility_i}",
             verbose,
         )
 
         if search_for_best_alpha:
             alpha, _ = _find_best_alpha(
-                metric_func,
+                _metric_func,
                 tp,
                 fp,
                 fn,
@@ -626,17 +702,27 @@ def find_classifier_using_fw(
         fp = (1 - alpha) * fp + alpha * fp_i
         fn = (1 - alpha) * fn + alpha * fn_i
         tn = (1 - alpha) * tn + alpha * tn_i
-        new_utility = metric_func(tp, fp, fn, tn)
+        new_utility = _metric_func(tp, fp, fn, tn)
 
         log_info(
-            f"    Iteration {i}/{max_iters} finished, alpha: {alpha}, utility: {old_utility} -> {new_utility}",
+            f"    Iteration {i}/{max_iters} finished, alpha: {alpha}, metric: {old_utility} -> {new_utility}",
             verbose,
         )
 
-        if alpha < alpha_tolerance:
-            log_info(
-                f"  Stopping because alpha is smaller than {alpha_tolerance}", verbose
-            )
+        if alpha < alpha_tolerance or (
+            (maximize and new_utility - old_utility < tolerance)
+            or (not maximize and old_utility - new_utility < tolerance)
+        ):
+            if alpha < alpha_tolerance:
+                log_info(
+                    f"  Stopping because alpha is smaller than {alpha_tolerance}",
+                    verbose,
+                )
+            else:
+                log_info(
+                    f"  Stopping because the improvement is smaller than {tolerance}",
+                    verbose,
+                )
             # Truncate unused classifiers
             classifiers_a = classifiers_a[:i]
             classifiers_b = classifiers_b[:i]
@@ -832,10 +918,68 @@ def find_classifier_optimizing_mixed_instance_precision_and_macro_precision_usin
 
     n, m = y_true.shape
 
-    def mixed_metric_fn(tp, fp, fn, tn):
+    def mixed_metric_fn(tp, fp, fn, tn, epsilon=1e-9):
         return (
             (1 - alpha) * binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k)
-            + alpha * binary_precision_on_conf_matrix(tp, fp, fn, tn) / m
+            + alpha
+            * binary_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
+            / m
+        ).sum()
+
+    # def mixed_metric_fn(tp, fp, fn, tn):
+    #     return binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k).sum()
+
+    return find_classifier_using_fw(y_true, y_proba, mixed_metric_fn, k, **kwargs)
+
+
+def find_classifier_optimizing_mixed_instance_precision_and_macro_f1_score_using_fw(
+    y_true: Matrix,
+    y_proba: Matrix,
+    k: int,
+    alpha: float = 1,
+    **kwargs,
+):
+    """
+    Find a randomized classifier that maximizes a metric using Frank-Wolfe algorithm
+    with metric being a weighted average of instance precision and macro-averaged f1 score as the target metric.
+    See :meth:`find_classifier_using_fw` for more details and a description of arguments.
+    """
+
+    n, m = y_true.shape
+
+    def mixed_metric_fn(tp, fp, fn, tn, epsilon=1e-9):
+        return (
+            (1 - alpha) * binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k)
+            + alpha
+            * binary_f1_score_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
+            / m
+        ).sum()
+
+    # def mixed_metric_fn(tp, fp, fn, tn):
+    #     return binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k).sum()
+
+    return find_classifier_using_fw(y_true, y_proba, mixed_metric_fn, k, **kwargs)
+
+
+def find_classifier_optimizing_mixed_instance_precision_and_macro_recall_using_fw(
+    y_true: Matrix,
+    y_proba: Matrix,
+    k: int,
+    alpha: float = 1,
+    **kwargs,
+):
+    """
+    Find a randomized classifier that maximizes a metric using Frank-Wolfe algorithm
+    with metric being a weighted average of instance precision and macro-averaged recall as the target metric.
+    See :meth:`find_classifier_using_fw` for more details and a description of arguments.
+    """
+
+    n, m = y_true.shape
+
+    def mixed_metric_fn(tp, fp, fn, tn, epsilon=1e-9):
+        return (
+            (1 - alpha) * binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k)
+            + alpha * binary_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon) / m
         ).sum()
 
     # def mixed_metric_fn(tp, fp, fn, tn):
@@ -859,10 +1003,10 @@ def find_classifier_optimizing_mixed_macro_recall_and_macro_precision_using_fw(
 
     n, m = y_true.shape
 
-    def mixed_metric_fn(tp, fp, fn, tn):
+    def mixed_metric_fn(tp, fp, fn, tn, epsilon=1e-9):
         return (
-            (1 - alpha) * binary_recall_on_conf_matrix(tp, fp, fn, tn)
-            + alpha * binary_precision_on_conf_matrix(tp, fp, fn, tn)
+            (1 - alpha) * binary_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
+            + alpha * binary_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
         ).mean()
 
     # def mixed_metric_fn(tp, fp, fn, tn):

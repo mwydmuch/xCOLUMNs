@@ -38,7 +38,7 @@ def check_if_y_pred_at_k(y_pred: Matrix, k: int) -> bool:
 def make_macro_metric_on_conf_matrix(binary_metric: Callable, name: str) -> Callable:
     """
     This is a factory function to create a macro-averaged metric
-    from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn).
+    from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn, **kwargs).
 
     Args:
         binary_metric: binary metric defined on confusion matrix
@@ -72,7 +72,7 @@ def make_micro_metric_on_conf_matrix(
 ) -> Callable:
     """
     This is a factory function to create a micro-averaged metric
-    from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn).
+    from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn, **kwargs).
 
     Args:
         binary_metric: binary metric defined on confusion matrix
@@ -106,8 +106,8 @@ def make_metric_on_y_true_and_y_pred(
 ) -> Callable:
     """
     This is a factory function to create
-    a metric calculated on true and predicted labels: metric(y_true, y_pred)
-    from metric calculated on confusion matrix: metric(tp, fp, fn, tn).
+    a metric calculated on true and predicted labels: metric(y_true, y_pred, **kwargs)
+    from metric calculated on confusion matrix: metric(tp, fp, fn, tn, **kwargs).
 
     Args:
         metric_on_conf_matrix: metric calculated on confusion matrix
@@ -122,7 +122,7 @@ def make_metric_on_y_true_and_y_pred(
         y_true: Matrix,
         y_pred: Matrix,
         **kwargs,
-    ):
+    ) -> Number:
         C = calculate_confusion_matrix(
             y_true, y_pred, normalize=True, skip_tn=skip_tn, axis=0
         )
@@ -142,8 +142,8 @@ def make_instance_metric_on_y_true_and_y_pred(
 ) -> Callable:
     """
     This is a factory function to create
-    an instanve-wise metric calculated on true and predicted labels: metric(y_true, y_pred)
-    from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn).
+    an instanve-wise metric calculated on true and predicted labels: metric(y_true, y_pred, **kwargs)
+    from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn, **kwargs).
 
     Args:
         binary_metric: binary metric defined on confusion matrix
@@ -483,7 +483,7 @@ def binary_precision_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix, None],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-9,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary precision
@@ -497,6 +497,7 @@ def binary_precision_on_conf_matrix(
 
     where :math:`\epsilon` is a very small number to avoid division by zero.
     """
+    # return (tp + epsilon) / (tp + fp + epsilon)
     return tp / (tp + fp + epsilon)
 
 
@@ -530,7 +531,7 @@ def binary_recall_on_conf_matrix(
     fp: Union[Number, DenseMatrix, None],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-9,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates binary recall
@@ -578,7 +579,7 @@ def binary_fbeta_score_on_conf_matrix(
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
     beta: float = 1.0,
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-9,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Compute the binary F-beta score.
@@ -591,6 +592,7 @@ def binary_fbeta_score_on_conf_matrix(
 
     where :math:`\epsilon` is a very small number to avoid division by zero.
     """
+    # return ((1 + beta**2) * tp + epsilon) / ((beta**2 * (tp + fp)) + tp + fn + epsilon)
     return (1 + beta**2) * tp / ((beta**2 * (tp + fp)) + tp + fn + epsilon)
 
 
@@ -611,7 +613,7 @@ def binary_f1_score_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-9,
 ) -> Union[Number, DenseMatrix]:
     """
     Calculates binary F1 score, also known as balanced F-score or F-measure
@@ -671,7 +673,7 @@ def binary_jaccard_score_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix, None],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-9,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates Jaccard score
@@ -717,7 +719,7 @@ def binary_balanced_accuracy_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-9,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates ballanced accuracy
@@ -766,7 +768,7 @@ def binary_gmean_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-9,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates G-mean (geometric mean)
@@ -815,7 +817,7 @@ def binary_hmean_on_conf_matrix(
     fp: Union[Number, DenseMatrix],
     fn: Union[Number, DenseMatrix],
     tn: Union[Number, DenseMatrix],
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-9,
 ) -> Union[Number, DenseMatrix]:
     r"""
     Calculates H-mean (harmonic mean)
