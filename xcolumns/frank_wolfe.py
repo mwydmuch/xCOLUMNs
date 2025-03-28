@@ -464,7 +464,6 @@ def find_classifier_using_fw(
     seed: Optional[int] = None,
     verbose: bool = False,
     return_meta: bool = False,
-    reg_C: float = 0,
     **kwargs,
 ) -> Union[
     RandomizedWeightedClassifier, Tuple[RandomizedWeightedClassifier, Dict[str, Any]]
@@ -615,13 +614,6 @@ def find_classifier_using_fw(
         y_true, y_pred_i, normalize=normalize_conf_matrix, skip_tn=skip_tn
     )
 
-    if reg_C != 0:
-        reg_n = y_true.shape[0] + 4 * reg_C
-        tp = (tp + reg_C) / reg_n
-        fp = (fp + reg_C) / reg_n
-        fn = (fn + reg_C) / reg_n
-        tn = (tn + reg_C) / reg_n
-
     utility_i = _metric_func(tp, fp, fn, tn)
 
     if return_meta:
@@ -651,27 +643,12 @@ def find_classifier_using_fw(
             classifiers_a[i] *= -1
             classifiers_b[i] *= -1
 
-        # classifiers_a[i] = np.minimum(classifiers_a[i], 1.0)
-
-        # to_mean = y_freq < 100
-        # print(to_mean.shape)
-        # mean_a = classifiers_a[i][to_mean].mean()
-        # mean_b = classifiers_b[i][to_mean].mean()
-        # classifiers_a[i][to_mean] = mean_a
-        # classifiers_b[i][to_mean] = mean_b
-
         y_pred_i = predict_weighted_per_instance(
             y_proba, k, th=0.0, a=classifiers_a[i], b=classifiers_b[i]
         )
         tp_i, fp_i, fn_i, tn_i = calculate_confusion_matrix(
             y_true, y_pred_i, normalize=normalize_conf_matrix, skip_tn=skip_tn
         )
-
-        if reg_C != 0:
-            tp_i = (tp_i + reg_C) / reg_n
-            fp_i = (fp_i + reg_C) / reg_n
-            fn_i = (fn_i + reg_C) / reg_n
-            tn_i = (tn_i + reg_C) / reg_n
 
         utility_i = _metric_func(tp_i, fp_i, fn_i, tn_i)
 

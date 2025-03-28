@@ -1,14 +1,27 @@
+import os
 import random
 from typing import Optional, Tuple
 
 import numpy as np
-from numba import njit
+from numba import njit, prange, set_num_threads
 from scipy.sparse import csr_matrix
 
 from .types import CSRMatrixAsTuple, DefaultDataDType, DefaultIndDType
 
 
-@njit(cache=True)
+def str_bool_true(value: str) -> bool:
+    """
+    Checks if string represents a boolean true value.
+    """
+    return value.lower() in ("true", "1")
+
+
+NUMBA_CACHE = str_bool_true(os.environ.get("XCOLUMNS_NUMBA_CACHE", "0"))
+NUMBA_PARALLEL = str_bool_true(os.environ.get("XCOLUMNS_NUMBA_PARALLEL", "0"))
+NUMBA_THREADS = os.environ.get("NUMBA_NUM_THREADS", 1)
+
+
+@njit(cache=NUMBA_CACHE)
 def numba_first_k(n: int, k: int) -> CSRMatrixAsTuple:
     """
     Selects the first k labels indexes ([0, 1, ..., k]) for each instance.
@@ -23,7 +36,7 @@ def numba_first_k(n: int, k: int) -> CSRMatrixAsTuple:
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_random_at_k_from(
     y_proba_indices: np.ndarray,
     y_proba_indptr: np.ndarray,
@@ -59,7 +72,7 @@ def numba_random_at_k_from(
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_fast_random_choice(array, k=-1) -> np.ndarray:
     """
     Selects k random elements from array.
@@ -74,7 +87,7 @@ def numba_fast_random_choice(array, k=-1) -> np.ndarray:
     return array[index[:k]]
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_random_at_k(
     n: int, m: int, k: int, seed: Optional[int] = None, dtype: Optional[np.dtype] = None
 ) -> CSRMatrixAsTuple:
@@ -97,7 +110,7 @@ def numba_random_at_k(
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_csr_vec_mul_vec(
     a_data: np.ndarray, a_indices: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -125,7 +138,7 @@ def numba_csr_vec_mul_vec(
     return new_data[:k], new_indices[:k]
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE, parallel=NUMBA_PARALLEL)
 def numba_calculate_sum_0_csr_mat_mul_mat(
     a_data: np.ndarray,
     a_indices: np.ndarray,
@@ -147,7 +160,7 @@ def numba_calculate_sum_0_csr_mat_mul_mat(
     else:
         result = np.zeros(n, dtype=a_data.dtype)
 
-    for i in range(n):
+    for i in prange(n):
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
 
@@ -166,7 +179,7 @@ def numba_calculate_sum_0_csr_mat_mul_mat(
     return result
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_csr_vec_mul_ones_minus_vec(
     a_data: np.ndarray, a_indices: np.ndarray, b_data: np.ndarray, b_indices: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -181,7 +194,6 @@ def numba_csr_vec_mul_ones_minus_vec(
     new_data = np.zeros(new_data_size, dtype=a_data.dtype)
     new_indices = np.zeros(new_data_size, dtype=a_indices.dtype)
     while i < a_indices.size:
-        # print(i, j, k, a_indices[i], b_indices[j], a_indices.size, b_indices.size)
         if j >= b_indices.size or a_indices[i] < b_indices[j]:
             new_data[k] = a_data[i]
             new_indices[k] = a_indices[i]
@@ -198,8 +210,8 @@ def numba_csr_vec_mul_ones_minus_vec(
     return new_data[:k], new_indices[:k]
 
 
-@njit(cache=True)
-def numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
+@njit(cache=NUMBA_CACHE, parallel=NUMBA_PARALLEL)
+def numba_calculate_sum_csr_mat_mul_ones_minus_mat(
     a_data: np.ndarray,
     a_indices: np.ndarray,
     a_indptr: np.ndarray,
@@ -212,16 +224,18 @@ def numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
 ) -> np.ndarray:
     """
     Performs a fast multiplication of a sparse matrix a
-    with a dense matrix of ones minus other sparse matrix b and then sums the rows (axis=0).
-    Gives the same result as a.multiply(ones - b).sum(axis=0) where a and b are sparse matrices but makes it more efficient.
+    with a dense matrix of ones minus other sparse matrix b and then sums the rows (axis=0) or columns (axis=1).
+    Gives the same result as a.multiply(ones - b).sum(axis=axis) where a and b are sparse matrices but makes it more efficient.
     Requires a and b to have sorted y_proba_indices (in ascending order).
     """
     if axis == 0:
         result = np.zeros(m, dtype=a_data.dtype)
-    else:
+    elif axis == 1:
         result = np.zeros(n, dtype=a_data.dtype)
+    else:
+        raise ValueError("axis must be 0 or 1")
 
-    for i in range(n):
+    for i in prange(n):
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
 
@@ -240,19 +254,33 @@ def numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
     return result
 
 
-# TODO: fix docstirng
-@njit(cache=True)
-def numba_calculate_prod_0_csr_mat_mul_ones_minus_mat(
-    a_data, a_indices, a_indptr, b_data, b_indices, b_indptr, n, m
+@njit(cache=NUMBA_CACHE, parallel=NUMBA_PARALLEL)
+def numba_calculate_prod_csr_mat_mul_ones_minus_mat(
+    a_data: np.ndarray,
+    a_indices: np.ndarray,
+    a_indptr: np.ndarray,
+    b_data: np.ndarray,
+    b_indices: np.ndarray,
+    b_indptr: np.ndarray,
+    n: int,
+    m: int,
+    axis: int = 0,
 ) -> np.ndarray:
     """
     Performs a fast multiplication of a sparse matrix a
-    with a dense matrix of ones minus other sparse matrix b and then sums the rows (axis=0).
-    Gives the same result as a.multiply(ones - b).prod(axis=0) where a and b are sparse matrices but makes it more efficient.
+    with a dense matrix of ones minus other sparse matrix b and then multiply the rows (axis=0) or columns (axis=1).
+    Gives the same result as a.multiply(ones - b).prod(axis=axis) where a and b are sparse matrices but makes it more efficient.
     Requires a and b to have sorted y_proba_indices (in ascending order).
     """
+    if axis == 0:
+        result = np.ones(m, dtype=a_data.dtype)
+    elif axis == 1:
+        result = np.ones(n, dtype=a_data.dtype)
+    else:
+        raise ValueError("axis must be 0 or 1")
+
     result = np.ones(m, dtype=a_data.dtype)
-    for i in range(n):
+    for i in prange(n):
         a_start, a_end = a_indptr[i], a_indptr[i + 1]
         b_start, b_end = b_indptr[i], b_indptr[i + 1]
 
@@ -262,12 +290,15 @@ def numba_calculate_prod_0_csr_mat_mul_ones_minus_mat(
             b_data[b_start:b_end],
             b_indices[b_start:b_end],
         )
-        result[y_proba_indices] *= y_proba_data
+        if axis == 0:
+            result[y_proba_indices] *= y_proba_data
+        else:
+            result[i] = np.prod(y_proba_data)
 
     return result
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_sub_from_unnormalized_confusion_matrix_csr(
     tp: np.ndarray,
     fp: np.ndarray,
@@ -279,6 +310,9 @@ def numba_sub_from_unnormalized_confusion_matrix_csr(
     pred_indices: np.ndarray,
     skip_tn=False,
 ) -> None:
+    """
+    Updates the confusion matrix by substracting the values based on the true and predicted labels.
+    """
     tp_data, tp_indices = numba_csr_vec_mul_vec(
         pred_data, pred_indices, true_data, true_indices
     )
@@ -299,7 +333,7 @@ def numba_sub_from_unnormalized_confusion_matrix_csr(
         tn[fn_indices] += fn_data
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_add_to_unnormalized_confusion_matrix_csr(
     tp: np.ndarray,
     fp: np.ndarray,
@@ -311,6 +345,9 @@ def numba_add_to_unnormalized_confusion_matrix_csr(
     pred_indices: np.ndarray,
     skip_tn=False,
 ) -> None:
+    """
+    Updates the confusion matrix by adding the values based on the true and predicted labels.
+    """
     tp_data, tp_indices = numba_csr_vec_mul_vec(
         pred_data, pred_indices, true_data, true_indices
     )
@@ -331,10 +368,10 @@ def numba_add_to_unnormalized_confusion_matrix_csr(
         tn[fn_indices] -= fn_data
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_argtopk_csr(y_proba_data, y_proba_indices, k) -> np.ndarray:
     """
-    Returns the y_proba_indices of the top k elements
+    Returns the y_proba_indices of the top k elements.
     """
     if y_proba_data.size > k:
         top_k = y_proba_indices[np.argpartition(-y_proba_data, k)[:k]]
@@ -344,8 +381,11 @@ def numba_argtopk_csr(y_proba_data, y_proba_indices, k) -> np.ndarray:
         return y_proba_indices
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_resize(arr, new_size, fill) -> np.ndarray:
+    """
+    Resizes the array to new_size and fills the rest with fill.
+    """
     new_arr = np.zeros(new_size, dtype=arr.dtype)
     new_arr[: arr.size] = arr
     if fill != 0:
@@ -353,7 +393,7 @@ def numba_resize(arr, new_size, fill) -> np.ndarray:
     return new_arr
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_set_gains_csr(
     y_pred_data: np.ndarray,
     y_pred_indices: np.ndarray,
@@ -380,12 +420,6 @@ def numba_set_gains_csr(
     if y_pred_i_start + new_y_pred_i_indices.size == y_pred_i_end:
         y_pred_indices[y_pred_i_start:y_pred_i_end] = new_y_pred_i_indices
     else:
-        # input()
-        # print("IND:", i, y_pred_indptr[i:i+3])
-        # print("y_proba_data:", i, new_y_pred_i_indices)
-        # print("SIZE:", i, new_y_pred_i_indices.size, "->", y_pred_i_end - y_pred_i_start)
-        # print("NEED RESIZE")
-        # input()
         new_y_pred_i_end = y_pred_i_start + new_y_pred_i_indices.size
         new_y_pred_last_indptr = y_pred_indptr[-1] + new_y_pred_i_end - y_pred_i_end
 
@@ -395,25 +429,21 @@ def numba_set_gains_csr(
             y_pred_indices = numba_resize(y_pred_indices, new_y_pred_size, 0)
             y_pred_data = numba_resize(y_pred_data, new_y_pred_size, 1.0)
 
-        # Move rest of the y_proba_data
+        # Move rest of the y_pred_data
         if is_insert:
             y_pred_indices[new_y_pred_i_end:new_y_pred_last_indptr] = y_pred_indices[
                 y_pred_i_end : y_pred_indptr[-1]
             ]
             y_pred_indptr[i + 2 :] += new_y_pred_i_end - y_pred_i_end
 
-        # Assign new y_proba_indices
+        # Assign new y_pred_indices
         y_pred_indices[y_pred_i_start:new_y_pred_i_end] = new_y_pred_i_indices
         y_pred_indptr[i + 1] = new_y_pred_i_end
-
-        # print("IND:", i, y_pred_indptr[i:i+3])
-        # print("y_proba_data", i, y_pred_indices[y_pred_indptr[i]:y_pred_indptr[i + 1]])
-        # print("END RESIZE")
 
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE)
 def numba_predict_weighted_per_instance_csr_step(
     y_pred_data: np.ndarray,
     y_pred_indices: np.ndarray,
@@ -449,7 +479,7 @@ def numba_predict_weighted_per_instance_csr_step(
     )
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE, parallel=NUMBA_PARALLEL)
 def numba_predict_weighted_per_instance_csr(
     y_proba_data: np.ndarray,
     y_proba_indices: np.ndarray,
@@ -466,34 +496,48 @@ def numba_predict_weighted_per_instance_csr(
     y_pred_indices = np.zeros(n * initial_row_size, dtype=y_proba_indices.dtype)
     y_pred_indptr = np.arange(n + 1, dtype=y_proba_indptr.dtype) * initial_row_size
 
-    # This can be done in parallel, but Numba parallelism seems to not work well here
-    for i in range(n):
-        (
-            y_pred_data,
-            y_pred_indices,
-            y_pred_indptr,
-        ) = numba_predict_weighted_per_instance_csr_step(
-            y_pred_data,
-            y_pred_indices,
-            y_pred_indptr,
-            y_proba_data,
-            y_proba_indices,
-            y_proba_indptr,
-            i,
-            k,
-            th,
-            a,
-            b,
-            is_insert=False,
-        )
+    if k > 0:
+        for i in prange(n):
+            gains_data = y_proba_data[y_proba_indptr[i] : y_proba_indptr[i + 1]]
+            gains_indices = y_proba_indices[y_proba_indptr[i] : y_proba_indptr[i + 1]]
 
-    y_pred_indices = y_pred_indices[: y_pred_indptr[-1]]
-    y_pred_data = y_pred_data[: y_pred_indptr[-1]]
+            if a is not None:
+                gains_data = gains_data * a[gains_indices].reshape(-1)
+            if b is not None:
+                gains_data = gains_data + b[gains_indices].reshape(-1)
+
+            new_y_pred_i_indices = numba_argtopk_csr(gains_data, gains_indices, k)
+            y_pred_indices[
+                y_pred_indptr[i] : y_pred_indptr[i + 1]
+            ] = new_y_pred_i_indices
+    else:
+        for i in range(n):
+            (
+                y_pred_data,
+                y_pred_indices,
+                y_pred_indptr,
+            ) = numba_predict_weighted_per_instance_csr_step(
+                y_pred_data,
+                y_pred_indices,
+                y_pred_indptr,
+                y_proba_data,
+                y_proba_indices,
+                y_proba_indptr,
+                i,
+                k,
+                th,
+                a,
+                b,
+                is_insert=False,
+            )
+
+        y_pred_indices = y_pred_indices[: y_pred_indptr[-1]]
+        y_pred_data = y_pred_data[: y_pred_indptr[-1]]
 
     return y_pred_data, y_pred_indices, y_pred_indptr
 
 
-@njit(cache=True)
+@njit(cache=NUMBA_CACHE, parallel=NUMBA_PARALLEL)
 def numba_predict_macro_balanced_accuracy_csr(
     y_proba_data: np.ndarray,
     y_proba_indices: np.ndarray,
@@ -510,7 +554,7 @@ def numba_predict_macro_balanced_accuracy_csr(
     y_pred_indices = np.zeros(n * k, dtype=y_proba_indices.dtype)
     y_pred_indptr = np.zeros(n + 1, dtype=y_proba_indptr.dtype)
 
-    for i in range(n):
+    for i in prange(n):
         row_data = y_proba_data[y_proba_indptr[i] : y_proba_indptr[i + 1]]
         row_indices = y_proba_indices[y_proba_indptr[i] : y_proba_indptr[i + 1]]
         row_marginals = marginals[row_indices].reshape(-1)

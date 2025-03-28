@@ -9,7 +9,7 @@ from .confusion_matrix import *
 from .metrics import *
 from .numba_csr_functions import (
     numba_add_to_unnormalized_confusion_matrix_csr,
-    numba_calculate_prod_0_csr_mat_mul_ones_minus_mat,
+    numba_calculate_prod_csr_mat_mul_ones_minus_mat,
     numba_csr_vec_mul_ones_minus_vec,
     numba_set_gains_csr,
     numba_sub_from_unnormalized_confusion_matrix_csr,
@@ -660,7 +660,7 @@ def predict_optimizing_coverage_using_bc(
             if isinstance(y_proba, np.ndarray):
                 Ef = np.product(1 - y_pred * y_proba, axis=0)
             elif isinstance(y_proba, csr_matrix):
-                Ef = numba_calculate_prod_0_csr_mat_mul_ones_minus_mat(
+                Ef = numba_calculate_prod_csr_mat_mul_ones_minus_mat(
                     *unpack_csr_matrices(y_pred, y_proba), n, m
                 )
 

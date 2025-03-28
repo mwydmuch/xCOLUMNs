@@ -189,14 +189,14 @@ def _calculate_fn_dense(
 
 def _calculate_fp_csr(y_true: csr_matrix, y_pred: csr_matrix, axis=0) -> np.ndarray:
     n, m = y_true.shape
-    return numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
+    return numba_calculate_sum_csr_mat_mul_ones_minus_mat(
         *unpack_csr_matrices(y_pred, y_true), n, m, axis=axis
     )
 
 
 def _calculate_fn_csr(y_true: csr_matrix, y_pred: csr_matrix, axis=0) -> np.ndarray:
     n, m = y_true.shape
-    return numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
+    return numba_calculate_sum_csr_mat_mul_ones_minus_mat(
         *unpack_csr_matrices(y_true, y_pred), n, m, axis=axis
     )
 
