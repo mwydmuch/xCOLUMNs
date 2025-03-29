@@ -21,6 +21,7 @@ def make_frank_wolfe_find_and_predict_wrapper(
         pred_repeat: int = 1,
         val_y_true: Matrix = None,
         val_y_proba: Matrix = None,
+        return_weights=False,
         **kwargs,
     ):
         if val_y_true is None or val_y_proba is None:
@@ -77,6 +78,10 @@ def make_frank_wolfe_find_and_predict_wrapper(
             y_preds = y_preds[0]
             # meta['pred_meta'] = meta['pred_meta'][0]
             meta["pred_time"] = meta["pred_time"][0]
+
+        if return_weights:
+            meta["a"] = classifiers_a
+            meta["b"] = classifiers_b
 
         return y_preds, meta
 
