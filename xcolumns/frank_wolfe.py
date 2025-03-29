@@ -602,10 +602,6 @@ def find_classifier_using_fw(
     def _metric_func(tp, fp, fn, tn):
         return metric_func(tp, fp, fn, tn, **metric_kwargs)
 
-    # Calculate the initial prediction and utility
-    if reg_C != 0:
-        normalize_conf_matrix = False
-
     y_pred_i = predict_weighted_per_instance(
         y_proba, k, th=0.0, a=classifiers_a[0], b=classifiers_b[0]
     )
