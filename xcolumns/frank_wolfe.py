@@ -8,14 +8,7 @@ from scipy.sparse import csr_matrix
 from .confusion_matrix import calculate_confusion_matrix
 from .metrics import *
 from .numba_csr_functions import numba_predict_weighted_per_instance_csr_step
-from .types import (
-    TORCH_AVAILABLE,
-    TORCH_FLOAT_TYPE,
-    DefaultDataDType,
-    DenseMatrix,
-    DType,
-    Matrix,
-)
+from .types import TORCH_AVAILABLE, DefaultDataDType, DenseMatrix, DType, Matrix
 from .utils import log_info, log_warning, ternary_search, uniform_search
 from .weighted_prediction import predict_weighted_per_instance
 
@@ -31,10 +24,10 @@ if TORCH_AVAILABLE:
         tn: torch.Tensor,
     ):
         if not isinstance(tp, torch.Tensor):
-            tp = torch.tensor(tp, dtype=TORCH_FLOAT_TYPE)
-            fp = torch.tensor(fp, dtype=TORCH_FLOAT_TYPE)
-            fn = torch.tensor(fn, dtype=TORCH_FLOAT_TYPE)
-            tn = torch.tensor(tn, dtype=TORCH_FLOAT_TYPE)
+            tp = torch.tensor(tp)
+            fp = torch.tensor(fp)
+            fn = torch.tensor(fn)
+            tn = torch.tensor(tn)
 
         tp.requires_grad_(True)
         fp.requires_grad_(True)
@@ -100,7 +93,6 @@ def _predict_using_randomized_weighted_classifier_np(
     classifiers_range = np.arange(c)
     y_pred = np.zeros(y_proba.shape, dtype=y_proba.dtype if dtype is None else dtype)
     for i in range(n):
-        # Simple version
         c_i = rng.choice(classifiers_range, p=classifiers_proba)
         gains = y_proba[i] * classifiers_a[c_i] + classifiers_b[c_i]
 
@@ -109,16 +101,6 @@ def _predict_using_randomized_weighted_classifier_np(
             y_pred[i, top_k] = 1.0
         else:
             y_pred[i, gains > 0] = 1.0
-
-        # Better version
-        for j in range(classifiers_range):
-            gains = y_proba[i] * classifiers_a[j] + classifiers_b[j]
-
-            if k > 0:
-                top_k = np.argpartition(-gains, k)[:k]
-                y_pred[i, top_k] = 1.0
-            else:
-                y_pred[i, gains > 0] = 1.0
 
     return y_pred
 
@@ -132,7 +114,6 @@ def _madows_sampling(values_range, p, k):
     assert np.allclose(
         np.sum(p), k
     ), f"Sum of probabilities is not equal to k: {np.sum(p)} != {k}"
-    # print(order, values_range, p, u)
     for i in order:
         if u > pi:
             sample.append(values_range[i])
@@ -140,7 +121,6 @@ def _madows_sampling(values_range, p, k):
             if len(sample) == k:
                 break
         pi += p[i]
-    # print(sample)
     return sample
 
 
@@ -163,14 +143,13 @@ def _predict_using_randomized_weighted_classifier_csr(
 
     initial_row_size = k if k > 0 else 10
     y_pred_data = np.ones(
-        n * initial_row_size, dtype=y_proba.data.dtype if dtype is None else dtype
+        n * initial_row_size, dtype=dtype if dtype else y_proba.data.dtype
     )
     y_pred_indices = np.zeros(n * initial_row_size, dtype=y_proba.indices.dtype)
     y_pred_indptr = np.arange(n + 1, dtype=y_proba.indptr.dtype) * initial_row_size
 
     # TODO: Can be further optimized in numba
     for i in range(n):
-        # Simple version
         c_i = rng.choice(classifiers_range, p=classifiers_proba)
         (
             y_pred_data,
@@ -189,25 +168,6 @@ def _predict_using_randomized_weighted_classifier_csr(
             classifiers_a[c_i],
             classifiers_b[c_i],
         )
-
-        # Better version
-        # new_y_proba = {}
-        # for j in range(c):
-        #     gains_data = y_proba.data[y_proba.indptr[i] : y_proba.indptr[i + 1]]
-        #     gains_indices = y_proba.indices[y_proba.indptr[i] : y_proba.indptr[i + 1]]
-        #     gains_data = gains_data * classifiers_a[j][gains_indices].reshape(-1)
-        #     gains_data = gains_data + classifiers_b[j][gains_indices].reshape(-1)
-
-        #     new_y_pred_i_indices = numba_argtopk_csr(gains_data, gains_indices, k)
-        #     assert len(new_y_pred_i_indices) == k
-        #     for idx in new_y_pred_i_indices:
-        #         new_y_proba[idx] = new_y_proba.get(idx, 0) + classifiers_proba[j]
-
-        # new_y_pred_i_indices = np.sort(_madows_sampling(list(new_y_proba.keys()), list(new_y_proba.values()), k))
-        # assert len(new_y_pred_i_indices) == k
-        # y_pred_indices[y_pred_indptr[i] : y_pred_indptr[i + 1]] = new_y_pred_i_indices
-
-    # y_pred_data = np.ones(y_pred_indices.size, dtype=FLOAT_TYPE)
 
     return csr_matrix((y_pred_data, y_pred_indices, y_pred_indptr), shape=(n, m))
 
@@ -450,8 +410,7 @@ def find_classifier_using_fw(
     metric_func: Callable,
     k: int,
     max_iters: int = 100,
-    # init_classifier: Union[str, Tuple[DenseMatrix, DenseMatrix]] = "random",  # or "top"
-    init_classifier: Union[str, Tuple[DenseMatrix, DenseMatrix]] = "top",  # or "top"
+    init_classifier: Union[str, Tuple[DenseMatrix, DenseMatrix]] = "top",  # or "random"
     maximize: bool = True,
     normalize_conf_matrix: bool = True,
     metric_kwargs: Optional[Dict[str, Any]] = None,
@@ -928,9 +887,6 @@ def find_classifier_optimizing_mixed_instance_precision_and_macro_f1_score_using
             / m
         ).sum()
 
-    # def mixed_metric_fn(tp, fp, fn, tn):
-    #     return binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k).sum()
-
     return find_classifier_using_fw(y_true, y_proba, mixed_metric_fn, k, **kwargs)
 
 
@@ -955,9 +911,6 @@ def find_classifier_optimizing_mixed_instance_precision_and_macro_recall_using_f
             + alpha * binary_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon) / m
         ).sum()
 
-    # def mixed_metric_fn(tp, fp, fn, tn):
-    #     return binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k).sum()
-
     return find_classifier_using_fw(y_true, y_proba, mixed_metric_fn, k, **kwargs)
 
 
@@ -980,9 +933,6 @@ def find_classifier_optimizing_mixed_macro_recall_and_macro_precision_using_fw(
         return (
             (1 - alpha) * binary_recall_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
             + alpha * binary_precision_on_conf_matrix(tp, fp, fn, tn, epsilon=epsilon)
-        ).mean()
-
-    # def mixed_metric_fn(tp, fp, fn, tn):
-    #     return binary_precision_at_k_on_conf_matrix(tp, fp, fn, tn, k).sum()
+        ).sum()
 
     return find_classifier_using_fw(y_true, y_proba, mixed_metric_fn, k, **kwargs)

@@ -78,10 +78,6 @@ if [[ ! -e $RESULT_FILE ]] || [[ -e $LOCK_FILE ]]; then
         cat $TRAIN_RESULT_FILE > $RESULT_FILE
     fi
 
-    if [[ $TEST_ARGS == *"--labelsWeights"* ]]; then
-        TEST_ARGS="${TEST_ARGS} --labelsWeights ${INV_PS_FILE}"
-    fi
-
     PRED_CONFIG=$(echo "${TEST_ARGS}" | tr " /" "__")
     PRED_FILE=${MODEL}/train_pred_${PRED_CONFIG}
     PRED_LOCK_FILE=${MODEL}/.test_train_lock_${PRED_CONFIG}
@@ -111,10 +107,6 @@ if [[ ! -e $RESULT_FILE ]] || [[ -e $LOCK_FILE ]]; then
     touch $LOCK_FILE
     if [ -e $TRAIN_RESULT_FILE ]; then
         cat $TRAIN_RESULT_FILE > $RESULT_FILE
-    fi
-
-    if [[ $TEST_ARGS == *"--labelsWeights"* ]]; then
-        TEST_ARGS="${TEST_ARGS} --labelsWeights ${INV_PS_FILE}"
     fi
 
     PRED_CONFIG=$(echo "${TEST_ARGS}" | tr " /" "__")

@@ -28,6 +28,7 @@ def _predict_weighted_per_instance_dense(
     th: float = 0.0,
     a: Optional[DenseMatrix] = None,
     b: Optional[DenseMatrix] = None,
+    keep_scores: bool = False,
     dtype: Optional[DType] = None,
 ) -> DenseMatrix:
     n, m = y_proba.shape
@@ -43,12 +44,16 @@ def _predict_weighted_per_instance_dense(
         # Numpy implementation
         if isinstance(y_proba, np.ndarray):
             top_k = np.argpartition(-gains, k, axis=1)[:, :k]
-            y_pred[np.arange(n)[:, None], top_k] = 1
+            y_pred[np.arange(n)[:, None], top_k] = (
+                gains[np.arange(n)[:, None], top_k] if keep_scores else 1
+            )
 
         # Torch implementation
         elif TORCH_AVAILABLE and isinstance(y_proba, torch.Tensor):
             _, top_k = torch.topk(gains, k, axis=1)
-            y_pred[torch.arange(n)[:, None], top_k] = 1
+            y_pred[torch.arange(n)[:, None], top_k] = (
+                gains[torch.arange(n)[:, None], top_k] if keep_scores else 1
+            )
     else:
         y_pred[gains >= th] = 1
 
@@ -61,6 +66,7 @@ def _predict_weighted_per_instance_csr(
     th: float = 0.0,
     a: Optional[np.ndarray] = None,
     b: Optional[np.ndarray] = None,
+    keep_scores: bool = False,
     dtype: Optional[np.dtype] = None,
 ) -> csr_matrix:
     if a is not None and a.dtype != y_proba.dtype:
@@ -74,7 +80,7 @@ def _predict_weighted_per_instance_csr(
         y_pred_indices,
         y_pred_indptr,
     ) = numba_predict_weighted_per_instance_csr(
-        *unpack_csr_matrix(y_proba), k, th, a, b
+        *unpack_csr_matrix(y_proba), k, th, a, b, keep_scores
     )
 
     return csr_matrix(
@@ -89,6 +95,7 @@ def predict_weighted_per_instance(
     a: Optional[DenseMatrix] = None,
     b: Optional[DenseMatrix] = None,
     dtype: Optional[DType] = None,
+    keep_scores: bool = False,
     return_meta: bool = False,
     return_weights: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
@@ -116,6 +123,7 @@ def predict_weighted_per_instance(
         b: The vector of intercepts (constants) :math:`\boldsymbol{b}` used for calculating gains.
            It needs to be a size of number of columns of **y_proba** (m).
            If equal to None, then :math:`\boldsymbol{b} = \boldsymbol{0}`.
+        keep_scores: Whether to keep the scores in the output prediction matrix instead of 1.
         dtype: The data type for the output matrix. If equal to None, the data type of **y_proba** will be used.
         return_meta: Whether to return meta data.
 
@@ -163,11 +171,11 @@ def predict_weighted_per_instance(
     # Invoke the specialized implementation
     if isinstance(y_proba, DenseMatrix):
         y_pred = _predict_weighted_per_instance_dense(
-            y_proba, k, th=th, a=a, b=b, dtype=dtype
+            y_proba, k, th=th, a=a, b=b, dtype=dtype, keep_scores=keep_scores
         )
     elif isinstance(y_proba, csr_matrix):
         y_pred = _predict_weighted_per_instance_csr(
-            y_proba, k, th=th, a=a, b=b, dtype=dtype
+            y_proba, k, th=th, a=a, b=b, dtype=dtype, keep_scores=keep_scores
         )
 
     if return_meta:
@@ -189,6 +197,7 @@ def predict_top_k(
     y_proba: Matrix,
     k: int,
     dtype: Optional[DType] = None,
+    keep_scores: bool = False,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
     r"""
@@ -199,13 +208,16 @@ def predict_top_k(
     Args:
         y_proba: A 2D matrix of conditional probabilities for each label.
         k: The number of labels to predict for each instance.
+        keep_scores: Whether to keep the scores in the output prediction matrix instead of 1.
         dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
         return_meta: Whether to return metadata. Defaults to False.
 
     Returns:
         The binary prediction matrix: with exactly **k** labels in each row, the shape and type of the matrix is the same as **y_proba**. If **return_meta** is True, additionally, a dictionary is returned, that contains the time taken to calculate the prediction.
     """
-    return predict_weighted_per_instance(y_proba, k=k, return_meta=return_meta)
+    return predict_weighted_per_instance(
+        y_proba, k=k, dtype=dtype, keep_scores=keep_scores, return_meta=return_meta
+    )
 
 
 def predict_optimizing_macro_recall(
@@ -213,6 +225,7 @@ def predict_optimizing_macro_recall(
     k: int,
     priors: DenseMatrix,
     epsilon: float = 1e-6,
+    keep_scores: bool = False,
     dtype: Optional[DType] = None,
     return_meta: bool = False,
     return_weights: bool = False,
@@ -229,6 +242,7 @@ def predict_optimizing_macro_recall(
         k: The number of labels to predict for each instance.
         priors: The prior probabilities for each label.
         epsilon: A small value to avoid division by zero when calculating inverse of priors.
+        keep_scores: Whether to keep the scores in the output prediction matrix instead of 1.
         dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
         return_meta: Whether to return metadata.
 
@@ -244,6 +258,7 @@ def predict_optimizing_macro_recall(
         k=k,
         a=weights,
         dtype=dtype,
+        keep_scores=keep_scores,
         return_meta=return_meta,
         return_weights=return_weights,
     )
@@ -358,6 +373,7 @@ def predict_log_weighted_per_instance(
     k: int,
     priors: DenseMatrix,
     epsilon: float = 1e-9,
+    keep_scores: bool = False,
     dtype: Optional[DType] = None,
     return_meta: bool = False,
     return_weights: bool = False,
@@ -377,6 +393,7 @@ def predict_log_weighted_per_instance(
         k: The number of labels to predict for each instance.
         priors: The prior probabilities for each label.
         epsilon: A small value to avoid domain error.
+        keep_scores: Whether to keep the scores in the output prediction matrix instead of 1.
         dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
         return_meta: Whether to return meta data.
 
@@ -392,6 +409,7 @@ def predict_log_weighted_per_instance(
         y_proba,
         k=k,
         a=weights,
+        keep_scores=keep_scores,
         dtype=dtype,
         return_meta=return_meta,
         return_weights=return_weights,
@@ -404,6 +422,7 @@ def predict_power_law_weighted_per_instance(
     priors: DenseMatrix,
     beta: float,
     epsilon: float = 1e-9,
+    keep_scores: bool = False,
     dtype: Optional[DType] = None,
     return_meta: bool = False,
     return_weights: bool = False,
@@ -424,6 +443,7 @@ def predict_power_law_weighted_per_instance(
         priors: The prior probabilities for each label.
         beta: The power parameter.
         epsilon: A small value to avoid division by zero when calculating inverse of priors.
+        keep_scores: Whether to keep the scores in the output prediction matrix instead of 1.
         dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
         return_meta: Whether to return meta data.
 
@@ -438,6 +458,7 @@ def predict_power_law_weighted_per_instance(
         y_proba,
         k=k,
         a=weights,
+        keep_scores=keep_scores,
         dtype=dtype,
         return_meta=return_meta,
         return_weights=return_weights,
@@ -447,6 +468,7 @@ def predict_power_law_weighted_per_instance(
 def predict_optimizing_instance_precision(
     y_proba: Matrix,
     k: int,
+    keep_scores: bool = False,
     dtype: Optional[DType] = None,
     return_meta: bool = False,
 ) -> Union[Matrix, Tuple[Matrix, dict]]:
@@ -460,6 +482,7 @@ def predict_optimizing_instance_precision(
         priors: The prior probabilities for each label.
         beta: The power parameter.
         epsilon: A small value to avoid division by zero when calculating inverse of priors.
+        keep_scores: Whether to keep the scores in the output prediction matrix instead of 1.
         dtype: The data type for the output matrix, if equal to None, the data type of **y_proba** will be used.
         return_meta: Whether to return meta data.
 
@@ -469,7 +492,9 @@ def predict_optimizing_instance_precision(
     if k <= 0:
         raise ValueError("k must be > 0")
 
-    return predict_top_k(y_proba, k=k, dtype=dtype, return_meta=return_meta)
+    return predict_top_k(
+        y_proba, k=k, keep_scores=keep_scores, dtype=dtype, return_meta=return_meta
+    )
 
 
 def predict_optimizing_instance_propensity_scored_precision(
@@ -477,6 +502,7 @@ def predict_optimizing_instance_propensity_scored_precision(
     k: int,
     inverse_propensities: Optional[DenseMatrix] = None,
     propensities: Optional[DenseMatrix] = None,
+    keep_scores: bool = False,
     dtype: Optional[DType] = None,
     return_meta: bool = False,
     return_weights: bool = False,
@@ -500,6 +526,7 @@ def predict_optimizing_instance_propensity_scored_precision(
         y_proba,
         k=k,
         a=inverse_propensities,
+        keep_scores=keep_scores,
         dtype=dtype,
         return_meta=return_meta,
         return_weights=return_weights,

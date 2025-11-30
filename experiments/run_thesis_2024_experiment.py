@@ -12,26 +12,37 @@ from utils import *
 from xcolumns.block_coordinate import *
 from xcolumns.confusion_matrix import *
 from xcolumns.frank_wolfe import *
+from xcolumns.metrics import *
 from xcolumns.weighted_prediction import *
 
 
+def mean_positive_labels(y_true, y_pred):
+    """
+    Count the number of positive labels in the true labels.
+    """
+    return y_true.sum(axis=1).mean()
+
+
 METRICS_ON_Y = {
-    "mC": macro_abandonment_v0,
-    "iC": instance_abandonment_v0,
-    "mP": macro_precision_v0,
-    "iP": instance_precision_v0,
-    "mR": macro_recall_v0,
-    "iR": instance_recall_v0,
-    "mF": macro_f1_v0,
-    "iF": instance_f1_v0,
-    "iBA": instance_balanced_accuracy_v0,
-    "mBA": macro_balanced_accuracy_v0,
+    # These are slow to compute (old implementations)
+    # "mC": macro_abandonment_v0,
+    # "iC": instance_abandonment_v0,
+    # "mP": macro_precision_v0,
+    # "iP": instance_precision_v0,
+    # "mR": macro_recall_v0,
+    # "iR": instance_recall_v0,
+    # "mF": macro_f1_v0,
+    # "iF": instance_f1_v0,
+    # "iBA": instance_balanced_accuracy_v0,
+    # "mBA": macro_balanced_accuracy_v0,
     "instance-recall": instance_recall,
     "instance-precision": instance_precision,
     "instance-f1": instance_f1_score,
     "instance-balanced-accuracy": instance_balanced_accuracy,
     "abandonment": abandonment,
+    "mean_positive_labels": mean_positive_labels,
 }
+
 METRICS_ON_C_MAT = {
     "precision-at-k": precision_at_k_on_conf_matrix,
     "ps-precision": weighted_precision_at_k_on_conf_matrix,
@@ -48,29 +59,22 @@ METRICS_ON_C_MAT = {
 
 def calculate_and_report_metrics(y_true, y_pred, k=5, inverse_propensities=None):
     results = {}
+
     for metric, func in METRICS_ON_Y.items():
         value = func(y_true, y_pred)
         results[f"{metric}@{k}"] = value
         print(f"    {metric}@{k}: {100 * value:>5.3f}")
 
     conf_mat = calculate_confusion_matrix(y_true, y_pred, normalize=True)
-    # print(*conf_mat)
+    # conf_mat = calculate_confusion_matrix(y_true, y_pred, normalize=False)
+    # print(f"    Confusion matrix: {conf_mat.tp[0]}, {conf_mat.tn[0]}, {conf_mat.fp[0]}, {conf_mat.fn[0]}")
+
     for metric, func in METRICS_ON_C_MAT.items():
         value = call_function_with_supported_kwargs(
-            func, *conf_mat, k=k, w=inverse_propensities
+            func, *conf_mat, k=k, w=inverse_propensities, epsilon=1e-9
         )
         results[f"{metric}@{k}"] = value
         print(f"    {metric}@{k}: {100 * value:>5.3f}")
-
-    # conf_mat = calculate_confusion_matrix(y_true, y_pred, normalize=False)
-    # for metric, func in METRICS_ON_C_MAT.items():
-    #     value = call_function_with_supported_kwargs(
-    #         func,
-    #         *conf_mat,
-    #         k=k
-    #     )
-    #     results[f"non-norm-{metric}@{k}"] = value
-    #     print(f"    non-norm-{metric}@{k}: {100 * value:>5.3f}")
 
     return results
 
@@ -79,6 +83,7 @@ TOL = 1e-7
 METHODS = {
     # Instance-wise measures / baselines
     "optimal-instance-precision": (predict_optimizing_instance_precision, {}),
+    # "optimal-instance-precision-keep-scores": (predict_optimizing_instance_precision, {"keep_scores": True}),
     # "block-coord-instance-precision": (bc_instance_precision_at_k, {}), # This is the same as optimal-instance-precision but using block coordinate, for sanity-check purposes only
     "optimal-instance-ps-precision": (
         predict_optimizing_instance_propensity_scored_precision,
@@ -96,96 +101,129 @@ METHODS = {
     "log": (predict_log_weighted_per_instance, {}),
     "optimal-macro-recall": (predict_optimizing_macro_recall, {}),
     "optimal-macro-balanced-accuracy": (predict_optimizing_macro_balanced_accuracy, {}),
-    #
-    # Block coordinate with default parameters - commented out because it better to use variatns with specific tolerance to stopping condition
-    # "block-coord-macro-precision": (predict_optimizing_macro_precision_using_bc, {}),
-    # "block-coord-macro-recall": (predict_optimizing_macro_recall_using_bc, {}),
-    # "block-coord-macro-f1": (predict_optimizing_macro_f1_score_using_bc, {}),
-    # "block-coord-coverage": (predict_optimizing_coverage_using_bc, {}),
-    #
-    # Tolerance on stopping condiction experiments
-    f"block-coord-macro-precision-tol={TOL}": (
-        predict_optimizing_macro_precision_using_bc,
-        {"tolerance": TOL},
+    "power-law-with-beta=0.5-eps=1e-08": (
+        predict_power_law_weighted_per_instance,
+        {"beta": 0.5, "epsilon": 1e-8},
     ),
-    f"block-coord-macro-recall-tol={TOL}": (
-        predict_optimizing_macro_recall_using_bc,
-        {"tolerance": TOL},
+    "power-law-with-beta=0.25-eps=1e-08": (
+        predict_power_law_weighted_per_instance,
+        {"beta": 0.25, "epsilon": 1e-8},
     ),
-    f"block-coord-macro-f1-tol={TOL}": (
-        predict_optimizing_macro_f1_score_using_bc,
-        {"tolerance": TOL},
+    "log-eps=1e-08": (predict_log_weighted_per_instance, {"epsilon": 1e-8}),
+    "optimal-macro-recall-eps=1e-08": (
+        predict_optimizing_macro_recall,
+        {"epsilon": 1e-8},
+    ),
+    "optimal-macro-balanced-accuracy-eps=1e-08": (
+        predict_optimizing_macro_balanced_accuracy,
+        {"epsilon": 1e-8},
     ),
     f"block-coord-coverage-tol={TOL}": (
         predict_optimizing_coverage_using_bc,
-        {"tolerance": TOL},
-    ),
-    f"block-coord-macro-jaccard-score-tol={TOL}": (
-        predict_optimizing_macro_jaccard_score_using_bc,
-        {"tolerance": TOL},
-    ),
-    f"block-coord-macro-balanced-accuracy-tol={TOL}": (
-        predict_optimizing_macro_balanced_accuracy_using_bc,
-        {"tolerance": TOL},
-    ),
-    # f"block-coord-macro-gmean-tol={TOL}": (
-    #     predict_optimizing_macro_gmean_using_bc,
-    #     {"tolerance": TOL},
-    # ),
-    # f"block-coord-macro-hmean-tol={TOL}": (
-    #     predict_optimizing_macro_hmean_using_bc,
-    #     {"tolerance": TOL},
-    # ),
-    # Greedy / 1 iter variants
-    "greedy-macro-precision": (
-        predict_optimizing_macro_precision_using_bc,
-        {"init_y_pred": "greedy", "max_iters": 1},
-    ),
-    "greedy-macro-recall": (
-        predict_optimizing_macro_precision_using_bc,
-        {"init_y_pred": "greedy", "max_iters": 1},
-    ),
-    "greedy-macro-f1": (
-        predict_optimizing_macro_f1_score_using_bc,
-        {"init_y_pred": "greedy", "max_iters": 1},
-    ),
-    "greedy-coverage": (
-        predict_optimizing_coverage_using_bc,
-        {"init_y_pred": "greedy", "max_iters": 1},
-    ),
-    "greedy-macro-jaccard-score": (
-        predict_optimizing_macro_jaccard_score_using_bc,
-        {"init_y_pred": "greedy", "max_iters": 1},
-    ),
-    "greedy-macro-balanced-accuracy": (
-        predict_optimizing_macro_balanced_accuracy_using_bc,
-        {"init_y_pred": "greedy", "max_iters": 1},
+        {"tolerance": TOL, "max_iters": 100},
     ),
 }
 
-for args in [{}, {"max_iters": 1}]:
+# Block Coordinate
+for eps in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5]:
+    bc_args = {"max_iters": 100, "tolerance": TOL, "metric_kwargs": {"epsilon": eps}}
+    greedy_args = {
+        "init_y_pred": "greedy",
+        "max_iters": 1,
+        "metric_kwargs": {"epsilon": eps},
+    }
+    fw_args = {"max_iters": 100, "metric_kwargs": {"epsilon": eps}}
+    fw_1_iter = {"max_iters": 1, "metric_kwargs": {"epsilon": eps}}
+
     METHODS.update(
         {
-            # Frank wolfe,
-            "frank-wolfe-macro-precision": (
+            f"block-coord-macro-precision-tol={TOL}-eps={eps}": (
+                predict_optimizing_macro_precision_using_bc,
+                bc_args,
+            ),
+            f"block-coord-macro-f1-tol={TOL}-eps={eps}": (
+                predict_optimizing_macro_f1_score_using_bc,
+                bc_args,
+            ),
+            f"block-coord-macro-jaccard-score-tol={TOL}-eps={eps}": (
+                predict_optimizing_macro_jaccard_score_using_bc,
+                bc_args,
+            ),
+        }
+    )
+
+# Frank Wolfe
+for eps in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]:
+    bc_args = {"max_iters": 100, "tolerance": TOL, "metric_kwargs": {"epsilon": eps}}
+    greedy_args = {
+        "init_y_pred": "greedy",
+        "max_iters": 1,
+        "metric_kwargs": {"epsilon": eps},
+    }
+    fw_args = {"max_iters": 100, "metric_kwargs": {"epsilon": eps}}
+    fw_1_iter = {"max_iters": 1, "metric_kwargs": {"epsilon": eps}}
+
+    METHODS.update(
+        {
+            f"frank-wolfe-macro-precision-eps={eps}": (
                 find_and_predict_for_macro_precision_using_fw,
-                {},
+                fw_args,
             ),
-            "frank-wolfe-macro-recall": (
-                find_and_predict_for_macro_recall_using_fw,
-                {},
+            f"frank-wolfe-macro-f1-eps={eps}": (
+                find_and_predict_for_macro_f1_score_using_fw,
+                fw_args,
             ),
-            "frank-wolfe-macro-f1": (find_and_predict_for_macro_f1_score_using_fw, {}),
-            "frank-wolfe-macro-jaccard-score": (
+            f"frank-wolfe-macro-jaccard-score-eps={eps}": (
                 find_and_predict_for_macro_jaccard_score_using_fw,
-                {},
+                fw_args,
             ),
-            "frank-wolfe-macro-balanced-accuracy": (
+            # Frank Wolfe with 1 iter
+            # f"frank-wolfe-macro-precision-max_iters=1-eps={eps}": (
+            #     find_and_predict_for_macro_precision_using_fw,
+            #     fw_1_iter,
+            # ),
+            # f"frank-wolfe-macro-f1-max_iters=1-eps={eps}": (
+            #     find_and_predict_for_macro_f1_score_using_fw,
+            #     fw_1_iter,
+            # ),
+            # f"frank-wolfe-macro-jaccard-score-max_iters=1-eps={eps}": (
+            #     find_and_predict_for_macro_jaccard_score_using_fw,
+            #     fw_1_iter,
+            # ),
+        }
+    )
+
+# Greedy variants
+for eps in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 5e-3, 1e-3, 5e-2, 1e-2]:
+    bc_args = {"max_iters": 100, "tolerance": TOL, "metric_kwargs": {"epsilon": eps}}
+    greedy_args = {
+        "init_y_pred": "greedy",
+        "max_iters": 1,
+        "metric_kwargs": {"epsilon": eps},
+    }
+    fw_args = {"max_iters": 100, "metric_kwargs": {"epsilon": eps}}
+    fw_1_iter = {"max_iters": 1, "metric_kwargs": {"epsilon": eps}}
+
+    METHODS.update(
+        {
+            # Block coordinate
+            f"block-coord-macro-recall-tol={TOL}-eps={eps}": (
+                predict_optimizing_macro_recall_using_bc,
+                bc_args,
+            ),
+            f"block-coord-macro-balanced-accuracy-tol={TOL}-eps={eps}": (
+                predict_optimizing_macro_balanced_accuracy_using_bc,
+                bc_args,
+            ),
+            # Frank Wolfe,
+            f"frank-wolfe-macro-recall-eps={eps}": (
+                find_and_predict_for_macro_recall_using_fw,
+                fw_args,
+            ),
+            f"frank-wolfe-macro-balanced-accuracy-eps={eps}": (
                 find_and_predict_for_macro_balanced_accuracy_using_fw,
-                {},
+                fw_args,
             ),
-            "frank-wolfe-macro-gmean": (find_and_predict_for_macro_gmean_using_fw, {}),
-            "frank-wolfe-macro-hmean": (find_and_predict_for_macro_hmean_using_fw, {}),
         }
     )
 
@@ -193,71 +231,74 @@ for args in [{}, {"max_iters": 1}]:
 # Add variants with different alpha for mixed utilities
 alphas = [
     # 0.01,
-    # 0.05,
+    0.05,
     0.1,
-    0.2,
+    # 0.2,
     0.3,
-    0.4,
+    # 0.4,
     0.5,
-    0.6,
+    # 0.6,
     0.7,
-    0.7,
-    0.8,
+    # 0.8,
     0.9,
-    # 0.95,
+    0.95,
     # 0.99,
-    # 0.995,
-    # 0.999,
 ]
-alphas = [0, 0.01, 0.5, 0.99, 1]
-alphas = []
+# alphas = [0.95,]
+alphas = [0.95, 0.96, 0.99]
 for alpha in alphas:
-    METHODS[f"block-coord-mixed-precision-macro-f1-alpha={alpha}-tol={TOL}"] = (
-        predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc,
-        {"alpha": alpha, "tolerance": TOL},
-    )
-    METHODS[f"block-coord-mixed-precision-macro-precision-alpha={alpha}-tol={TOL}"] = (
-        predict_optimizing_mixed_instance_precision_and_macro_precision_using_bc,
-        {"alpha": alpha, "tolerance": TOL},
-    )
+    # METHODS[f"power-law-with-beta={alpha}"] = (
+    #     predict_power_law_weighted_per_instance,
+    #     {"beta": alpha},
+    # )
     METHODS[f"block-coord-mixed-precision-macro-coverage-alpha={alpha}-tol={TOL}"] = (
         predict_optimizing_coverage_using_bc,
-        {"alpha": alpha, "tolerance": TOL},
-    )
-    METHODS[
-        f"block-coord-mixed-precision-macro-jaccard-score-alpha={alpha}-tol={TOL}"
-    ] = (
-        predict_optimizing_mixed_instance_precision_and_macro_jaccard_score_using_bc,
-        {"alpha": alpha, "tolerance": TOL},
-    )
-    METHODS[
-        f"block-coord-mixed-precision-macro-balanced-accuracy-alpha={alpha}-tol={TOL}"
-    ] = (
-        predict_optimizing_mixed_instance_precision_and_macro_balanced_accuracy_using_bc,
-        {"alpha": alpha, "tolerance": TOL},
-    )
-    # METHODS[f"block-coord-mixed-precision-macro-gmean-alpha={alpha}-tol={TOL}"] = (
-    #     predict_optimizing_mixed_instance_precision_and_macro_gmean_accuracy_using_bc,
-    #     {"alpha": alpha, "tolerance": TOL},
-    # )
-    # METHODS[f"block-coord-mixed-precision-macro-hmean-alpha={alpha}-tol={TOL}"] = (
-    #     predict_optimizing_mixed_instance_precision_and_macro_hmean_accuracy_using_bc,
-    #     {"alpha": alpha, "tolerance": TOL},
-    # )
-    METHODS[f"power-law-with-beta={alpha}"] = (
-        predict_power_law_weighted_per_instance,
-        {"beta": alpha},
+        {"alpha": alpha, "tolerance": TOL, "max_iters": 100},
     )
 
-    METHODS[f"frank-wolfe-mixed-precision-macro-precision-alpha={alpha}"] = (
-        find_and_predict_for_mixed_instance_precision_and_macro_precision_using_fw,
-        {"alpha": alpha},
-    )
+    for eps in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 5e-3, 1e-3, 5e-2, 1e-2]:
+        bc_args = {
+            "max_iters": 100,
+            "alpha": alpha,
+            "tolerance": TOL,
+            "metric_kwargs": {"epsilon": eps},
+        }
+        fw_args = {"alpha": alpha, "max_iters": 100, "metric_kwargs": {"epsilon": eps}}
+        METHODS.update(
+            {
+                f"block-coord-mixed-precision-macro-f1-alpha={alpha}-tol={TOL}-eps={eps}": (
+                    predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc,
+                    bc_args,
+                ),
+                # f"block-coord-mixed-precision-macro-precision-alpha={alpha}-tol={TOL}-eps={eps}": (
+                #     predict_optimizing_mixed_instance_precision_and_macro_precision_using_bc,
+                #     bc_args,
+                # ),
+                f"block-coord-mixed-precision-macro-recall-alpha={alpha}-tol={TOL}-eps={eps}": (
+                    predict_optimizing_mixed_instance_precision_and_macro_recall_using_bc,
+                    bc_args,
+                ),
+                f"frank-wolfe-mixed-precision-macro-recall-alpha={alpha}-eps={eps}": (
+                    find_and_predict_for_mixed_instance_precision_and_macro_recall_using_fw,
+                    fw_args,
+                ),
+            }
+        )
 
-    METHODS[f"frank-wolfe-mixed-macro-recall-macro-precision-alpha={alpha}"] = (
-        find_and_predict_for_mixed_macro_recall_and_macro_precision_using_fw,
-        {"alpha": alpha},
-    )
+    for eps in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 5e-3, 1e-3, 5e-2, 1e-2]:
+        fw_args = {"alpha": alpha, "max_iters": 100, "metric_kwargs": {"epsilon": eps}}
+        METHODS.update(
+            {
+                f"frank-wolfe-mixed-precision-macro-f1-alpha={alpha}-eps={eps}": (
+                    find_and_predict_for_mixed_instance_precision_and_macro_f1_score_using_fw,
+                    fw_args,
+                ),
+                # f"frank-wolfe-mixed-precision-macro-precision-alpha={alpha}-eps={eps}": (
+                #     find_and_predict_for_mixed_instance_precision_and_macro_precision_using_fw,
+                #     fw_args,
+                # ),
+            }
+        )
 
 
 @click.command()
@@ -276,11 +317,27 @@ for alpha in alphas:
 @click.option(
     "--recalculate_results", is_flag=True, type=bool, required=False, default=False
 )
-@click.option("--test_multiply", type=int, required=False, default=1)
+@click.option(
+    "--only_recalculate_results", is_flag=True, type=bool, required=False, default=False
+)
+@click.option("--shuffle_data", is_flag=True, type=bool, required=False, default=False)
+@click.option("--multiply_data", type=int, required=False, default=1)
+@click.option("--multiply_test", type=int, required=False, default=1)
 @click.option("--use_proba_as_true", is_flag=True, required=False, default=False)
+@click.option("--use_proba_as_val", is_flag=True, required=False, default=False)
+@click.option(
+    "--use_proba_mul_true_as_val", is_flag=True, required=False, default=False
+)
 @click.option("--use_train_as_test", is_flag=True, required=False, default=False)
 @click.option("--use_dense", is_flag=True, type=bool, required=False, default=False)
 @click.option("-v", "--val_split", type=float, required=False, default=0.0)
+@click.option("-t", "--proba_threshold", type=float, required=False, default=0.0)
+@click.option("-i", "--max_iters", type=int, required=False, default=100)
+@click.option(
+    "--sample_test_labels", is_flag=True, type=bool, required=False, default=False
+)
+@click.option("--sample_test_seed", type=int)
+@click.option("--top_labels", type=float, default=1.0)
 def main(
     experiment,
     k,
@@ -291,23 +348,47 @@ def main(
     results_dir,
     recalculate_predictions,
     recalculate_results,
-    test_multiply,
+    only_recalculate_results,
+    shuffle_data,
+    multiply_data,
+    multiply_test,
     use_proba_as_true,
+    use_proba_as_val,
+    use_proba_mul_true_as_val,
     use_train_as_test,
     use_dense,
     val_split,
+    proba_threshold,
+    max_iters,
+    sample_test_labels,
+    sample_test_seed,
+    top_labels,
 ):
     if method is None:
         methods = METHODS
     elif method in METHODS:
         methods = {method: METHODS[method]}
     else:
-        methods = {k: v for k, v in METHODS.items() if method in k}
+        _method = method.split(",")
+        print(f"Method: {_method}")
+        methods = METHODS
+        for m in _method:
+            methods = {k: v for k, v in methods.items() if m in k}
+            # print(f"Methods: {methods.keys()}")
     if len(methods) == 0:
         raise ValueError(f"Unknown method: {method}")
 
     use_true_as_pred = "use_true_as_pred" in experiment
     lightxml_data = "lightxml" in experiment
+    inv_ps_a = 0.55
+    inv_ps_b = 1.5
+
+    if "wikiLSHTC_" in experiment or "WikipediaLarge-500K_" in experiment:
+        inv_ps_a = 0.5
+        inv_ps_b = 0.4
+    elif "amazon_" in experiment or "amazon-3M_" in experiment:
+        inv_ps_a = 0.6
+        inv_ps_b = 2.6
 
     lightxml_data_load_config = {
         "labels_delimiter": " ",
@@ -445,21 +526,25 @@ def main(
         }
 
     nxc_datasets = [
+        "EURLex-4.3K",
+        "amazon-3M",
+        "amazonCat-14K",
         "rcv1x",
         "eurlex",
         "amazonCat",
         "wiki10",
         "amazon",
-        "amazon-3M",
         "wikiLSHTC",
         "WikipediaLarge-500K",
-        "amazonCat-14K",
         "deliciousLarge",
     ]
     for d in nxc_datasets:
-        if f"{d}_100_plt" in experiment:
+        if d in experiment:
+            _d = d
+            if "l2" in experiment:
+                _d += "_l2"
             y_proba_path = {
-                "path": f"predictions/nxc/{d}/test_pred",
+                "path": f"predictions/nxc/{_d}/test_pred",
                 "load_func": load_txt_sparse_pred,
             }
             y_true_path = {
@@ -470,9 +555,9 @@ def main(
                 "path": f"datasets/{d}/{d}_train.txt",
                 "load_func": load_txt_labels,
             }
-            if os.path.exists(f"predictions/nxc/{d}/train_pred"):
+            if os.path.exists(f"predictions/nxc/{_d}/train_pred"):
                 train_y_proba_path = {
-                    "path": f"predictions/nxc/{d}/train_pred",
+                    "path": f"predictions/nxc/{_d}/train_pred",
                     "load_func": load_txt_sparse_pred,
                 }
             break
@@ -509,8 +594,15 @@ def main(
         with Timer():
             train_y_proba = load_cache_npz_file(**train_y_proba_path)
 
-    if train_y_true.shape != y_true.shape:
-        align_dim1(y_true, train_y_true)
+    print(f"y_true: type={type(y_true)}, shape={y_true.shape}")
+    print(f"y_proba: type={type(y_proba)}, shape={y_proba.shape}")
+
+    if train_y_true is not None and train_y_proba is not None:
+        if train_y_true.shape != y_true.shape:
+            align_dim1(y_true, train_y_true)
+
+        if train_y_proba.shape != y_true.shape:
+            align_dim1(y_true, train_y_proba)
 
     # For some sparse format this resize might be necessary
     if y_true.shape != y_proba.shape:
@@ -519,6 +611,23 @@ def main(
                 f"Number of instances in true and prediction do not match {y_true.shape[0]} != {y_proba.shape[0]}"
             )
         align_dim1(y_true, y_proba)
+
+    if "apply_sigmoid" in y_proba_path and y_proba_path["apply_sigmoid"]:
+        # LightXML predictions aren't probabilities
+        y_proba.data = 1.0 / (1.0 + np.exp(-y_proba.data))
+
+    if shuffle_data and train_y_true is not None and train_y_proba is not None:
+        all_y_true = sp.vstack([train_y_true, y_true])
+        all_y_proba = sp.vstack([train_y_proba, y_proba])
+
+    if multiply_data > 1:
+        all_y_true = sp.vstack([all_y_true] * multiply_data)
+        all_y_proba = sp.vstack([all_y_proba] * multiply_data)
+
+    if shuffle_data:
+        y_true, train_y_true, y_proba, train_y_proba = train_test_split(
+            all_y_true, all_y_proba, test_size=0.5, random_state=seed
+        )
 
     val_y_proba = None
     val_y_true = None
@@ -532,18 +641,66 @@ def main(
 
     # Calculate priors and propensities
     with Timer():
-        print("Calculating priors and propensities")
+        print(f"Calculating priors and propensities A={inv_ps_a}, B={inv_ps_b}")
         if val_y_true is not None:
             priors = labels_priors(val_y_true)
         else:
             priors = labels_priors(train_y_true)
-        inv_ps = jpv_inverse_propensity(train_y_true)
+        inv_ps = jpv_inverse_propensity(train_y_true, A=inv_ps_a, B=inv_ps_b)
 
-    if "apply_sigmoid" in y_proba_path and y_proba_path["apply_sigmoid"]:
-        # LightXML predictions aren't probabilities
-        y_proba.data = 1.0 / (1.0 + np.exp(-y_proba.data))
+    def zero_not_in_the_list(matrix: csr_matrix, list: np.array):
+        for i in tqdm(range(matrix.shape[0])):
+            row = matrix[i]
+            mask = np.isin(row.indices, list, assume_unique=True)
+            # row.data[~mask] = 0
+            matrix.data[matrix.indptr[i] : matrix.indptr[i + 1]][~mask] = 0
+
+    # Release some memory
+    if only_recalculate_results:
+        print("Releasing memory")
+        del train_y_proba
+        del train_y_true
+        del val_y_proba
+        del val_y_true
+        train_y_proba = None
+        train_y_true = None
+        val_y_proba = None
+        val_y_true = None
+
+    # Sample test labels based on the provided marginals
+    if sample_test_labels:
+        np.random.seed(sample_test_seed)
+        print("Sampling labels using seed:", sample_test_seed)
+        y_true = y_proba.copy()
+        # print(y_proba[0])
+        y_true.data = (y_true.data >= np.random.random(y_true.data.shape[0])).astype(
+            np.float64
+        )
+        y_true.eliminate_zeros()
+        # print(y_true[0])
+        # print(y_true.sum(axis=0).shape, y_true.sum(axis=0)[0])
+        # print(y_proba[0])
+
+    if top_labels < 1.0:
+        print(y_proba[0].data.shape)
+        n_top_labels = int(top_labels * priors.shape[0])
+        labels_to_keep = np.argpartition(-priors, n_top_labels)[:n_top_labels]
+        print(labels_to_keep, labels_to_keep.shape)
+        zero_not_in_the_list(y_proba, labels_to_keep)
+        y_proba.eliminate_zeros()
+        print("Eliminated probas:", y_proba[0].data.shape)
+        # if train_y_proba is not None:
+        #     zero_not_in_the_list(train_y_proba, labels_to_keep)
+        #     train_y_proba.eliminate_zeros()
+        # if val_y_proba is not None and train_y_proba.shape != val_y_proba.shape:
+        #     zero_not_in_the_list(val_y_proba, labels_to_keep)
+        #     val_y_proba.eliminate_zeros()
 
     # Use true labels as predictions with 1.0 score (probability)
+    if multiply_test > 1:
+        y_true = sp.vstack([y_true] * multiply_test)
+        y_proba = sp.vstack([y_proba] * multiply_test)
+
     if use_true_as_pred:
         y_proba = y_true
 
@@ -554,6 +711,12 @@ def main(
         if train_y_proba is not None and train_y_true is not None:
             train_y_true = train_y_proba
 
+    if use_proba_as_val:
+        val_y_true = val_y_proba
+
+    if use_proba_mul_true_as_val:
+        val_y_true = val_y_true.multiply(val_y_proba)
+
     if use_train_as_test:
         y_true = train_y_true
         y_proba = train_y_proba
@@ -561,17 +724,35 @@ def main(
             val_y_true = train_y_true
             val_y_proba = train_y_proba
 
-    def repeat_csr_matrix(matrix, n):
-        return sp.vstack([matrix] * n)
-
-    if test_multiply > 1:
-        y_true = sp.vstack([y_true] * test_multiply)
-        y_proba = sp.vstack([y_proba] * test_multiply)
-
     print(f"y_true: type={type(y_true)}, shape={y_true.shape}")
     print(f"y_proba: type={type(y_proba)}, shape={y_proba.shape}")
     if train_y_true is not None:
         print(f"train_y_true: type={type(train_y_true)}, shape={train_y_true.shape}")
+
+    if proba_threshold > 0:
+
+        def zero_below_threshold_and_keep_top_k(matrix: csr_matrix, threshold, k):
+            for i in tqdm(range(matrix.shape[0])):
+                row = matrix[i]
+                indices = np.argsort(row.data)[-k:]
+                mask = np.zeros_like(row.data, dtype=bool)
+                mask[row.data < threshold] = True
+                mask[indices] = False
+                matrix.data[matrix.indptr[i] : matrix.indptr[i + 1]][mask] = 0
+
+        zero_below_threshold_and_keep_top_k(y_proba, proba_threshold, k)
+        y_proba.eliminate_zeros()
+        print("Eliminated probas:", y_proba[0].data.shape)
+        if train_y_proba is not None:
+            zero_below_threshold_and_keep_top_k(train_y_proba, proba_threshold, k)
+            train_y_proba.eliminate_zeros()
+        if val_y_proba is not None and train_y_proba.shape != val_y_proba.shape:
+            zero_below_threshold_and_keep_top_k(val_y_proba, proba_threshold, k)
+            val_y_proba.eliminate_zeros()
+
+        # y_proba.data[y_proba.data < proba_threshold] = 0
+        # val_y_proba.data[val_y_proba.data < proba_threshold] = 0
+        # train_y_proba.data[train_y_proba.data < proba_threshold] = 0
 
     # Convert to array to check if it gives the same results
     if use_dense:
@@ -584,7 +765,18 @@ def main(
     output_path_prefix = f"{results_dir}/{experiment}/"
     os.makedirs(output_path_prefix, exist_ok=True)
     for method, func in methods.items():
-        print(f"{experiment} - {method} @ {k} (seed {seed}): ")
+        print(f"{experiment} - {method} @ {k} ({seed=}, kwargs={func[1]}): ")
+
+        if top_labels < 1.0:
+            method += f"_top_labels={top_labels}"
+        if proba_threshold > 0:
+            method += f"_proba_threshold={proba_threshold}"
+        if use_proba_as_val:
+            method += "_proba_as_val"
+        if use_proba_mul_true_as_val:
+            method += "_proba_mul_true_as_val"
+        if multiply_test > 1:
+            method += f"_multiply_test={multiply_test}"
 
         output_path = f"{output_path_prefix}{method}_k={k}_v={val_split}_s={seed}"
         results_path = f"{output_path}_results.json"
@@ -594,10 +786,16 @@ def main(
             not os.path.exists(results_path)
             or recalculate_results
             or recalculate_predictions
+            or only_recalculate_results
         ):
             results = {}
-            if not os.path.exists(pred_path) or recalculate_predictions:
+            if (
+                not os.path.exists(pred_path) or recalculate_predictions
+            ) and not only_recalculate_results:
                 try:
+                    if "max_iters" in func[1]:
+                        func[1]["max_iters"] = max_iters
+
                     y_pred, meta = call_function_with_supported_kwargs(
                         func[0],
                         y_proba,
@@ -612,25 +810,34 @@ def main(
                         **func[1],
                     )
                     results.update(meta)
-                    print(f"  Val size: {val_y_true.shape}")
-                    print(f"  Iters: {meta['iters']}")
+                    if val_y_true is not None:
+                        print(f"  Val shape: {val_y_true.shape}")
+                    print(f"  Iters: {meta.get('iters', 1)}")
                     print(f"  Time: {meta['time']:>5.2f} s")
                     save_npz_wrapper(pred_path, y_pred)
                     save_json(results_path, results)
                 except Exception as e:
                     raise e
-                    print(f"  Failed: {e}")
-            else:
+                    # print(f"  Failed: {e}")
+            elif os.path.exists(pred_path):
                 y_pred = load_npz_wrapper(pred_path)
                 results = load_json(results_path)
-            print(f"  Test size: {y_true.shape}")
-            print(f"  Pred size: {y_pred.shape}")
+            else:
+                continue
+            print(y_true.sum(axis=0).shape, y_true.sum(axis=0)[0])
+            print(f"  Test shape: {y_true.shape}")
+            print(f"  Pred shape: {y_pred.shape}")
             print("  Metrics (%):")
+            results["pred_shape"] = y_pred.shape
             results.update(
                 calculate_and_report_metrics(
                     y_true, y_pred, k=k, inverse_propensities=inv_ps
                 )
             )
+
+            if sample_test_labels:
+                results_path = f"{output_path_prefix}{method}_sample_test_labels_k={k}_v={val_split}_s={seed}_sample_s={sample_test_seed}_results.json"
+
             save_json(results_path, results)
 
         print("  Done")

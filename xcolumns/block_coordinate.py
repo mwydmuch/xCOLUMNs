@@ -10,6 +10,7 @@ from .metrics import *
 from .numba_csr_functions import (
     numba_add_to_unnormalized_confusion_matrix_csr,
     numba_calculate_prod_csr_mat_mul_ones_minus_mat,
+    numba_calculate_prod_ones_minus_csr_mat_mul_mat,
     numba_csr_vec_mul_ones_minus_vec,
     numba_set_gains_csr,
     numba_sub_from_unnormalized_confusion_matrix_csr,
@@ -420,14 +421,18 @@ def predict_using_bc_with_0approx(
         # Recalculate expected conf matrices to prevent numerical errors from accumulating too much
         # In this variant they will be all np.matrix with shape (1, m)
         if greedy:
-            Etp = zeros_like(y_proba, shape=(m,))
-            Efp = zeros_like(y_proba, shape=(m,))
-            Efn = zeros_like(y_proba, shape=(m,))
-            Etn = zeros_like(y_proba, shape=(m,))
+            Etp = zeros_like(y_proba, shape=(m,), dtype=DefaultAccDataDType)
+            Efp = zeros_like(y_proba, shape=(m,), dtype=DefaultAccDataDType)
+            Efn = zeros_like(y_proba, shape=(m,), dtype=DefaultAccDataDType)
+            Etn = zeros_like(y_proba, shape=(m,), dtype=DefaultAccDataDType)
         else:
             log_info("    Calculating expected confusion matrix ...", verbose)
             Etp, Efp, Efn, Etn = calculate_confusion_matrix(
-                y_proba, y_pred, normalize=False, skip_tn=skip_tn
+                y_proba,
+                y_pred,
+                normalize=False,
+                skip_tn=skip_tn,
+                dtype=DefaultAccDataDType,
             )
 
         old_utility = _calculate_utility(
@@ -439,6 +444,7 @@ def predict_using_bc_with_0approx(
             Etn / n,
         )
 
+        log_info("    Doing block coordinate optimization steps ...", verbose)
         for i in order:
             bc_with_0approx_step_func(
                 y_proba,
@@ -455,6 +461,10 @@ def predict_using_bc_with_0approx(
                 maximize=maximize,
                 skip_tn=skip_tn,
             )
+
+        Etp, Efp, Efn, Etn = calculate_confusion_matrix(
+            y_proba, y_pred, normalize=False, skip_tn=skip_tn, dtype=DefaultAccDataDType
+        )
 
         new_utility = _calculate_utility(
             binary_metric_func,
@@ -550,10 +560,8 @@ def _bc_for_coverage_step_csr(
 
     # Adjust estimates of failure probability (not covering the label)
     if not greedy:
-        data, indices = numba_csr_vec_mul_ones_minus_vec(
-            p_data, p_indices, t_data, t_indices
-        )
-        Ef[indices] /= data + 1e-12
+        data, indices = numba_csr_vec_mul_vec(p_data, p_indices, t_data, t_indices)
+        Ef[indices] /= 1 - data
 
     # Calculate gain and selection
     gains = Ef[t_indices] * t_data
@@ -568,10 +576,8 @@ def _bc_for_coverage_step_csr(
         y_pred.indices[p_start:p_end] = sorted(t_indices)
 
     # Update estimates of failure probability
-    data, indices = numba_csr_vec_mul_ones_minus_vec(
-        p_data, p_indices, t_data, t_indices
-    )
-    Ef[indices] *= data
+    data, indices = numba_csr_vec_mul_vec(p_data, p_indices, t_data, t_indices)
+    Ef[indices] *= 1 - data
 
 
 def _calculate_coverage_utility(
@@ -596,9 +602,7 @@ def predict_optimizing_coverage_using_bc(
     k: int,
     alpha: float = 1,
     tolerance: float = 1e-6,
-    init_y_pred: Union[
-        str, np.ndarray, csr_matrix
-    ] = "random",  # "random", "topk", "random", or csr_matrix
+    init_y_pred: Union[str, Matrix] = "top",  # "random", "topk", or csr_matrix
     max_iters: int = 100,
     shuffle_order: bool = True,
     return_meta: bool = False,
@@ -643,8 +647,6 @@ def predict_optimizing_coverage_using_bc(
     greedy = isinstance(init_y_pred, str) and init_y_pred == "greedy"
     y_pred = _get_initial_y_pred(y_proba, init_y_pred, k, random_at_k_func)
 
-    # y_proba.data = np.minimum(y_proba.data, 1 - 1e-9)
-
     # Initialize the instance order and set seed for shuffling
     rng = np.random.default_rng(seed)
     order = np.arange(n)
@@ -655,21 +657,27 @@ def predict_optimizing_coverage_using_bc(
             rng.shuffle(order)
 
         if greedy:
-            Ef = ones_like(y_pred, shape=(m,))  # np.ones(m, dtype=FLOAT_TYPE)
+            Ef = ones_like(y_pred, shape=(m,), dtype=DefaultAccDataDType)
         else:
             if isinstance(y_proba, np.ndarray):
-                Ef = np.product(1 - y_pred * y_proba, axis=0)
+                Ef = np.product(1 - y_pred * y_proba, axis=0, dtype=DefaultAccDataDType)
             elif isinstance(y_proba, csr_matrix):
                 Ef = numba_calculate_prod_csr_mat_mul_ones_minus_mat(
-                    *unpack_csr_matrices(y_pred, y_proba), n, m
+                    *unpack_csr_matrices(y_pred, y_proba), n, m, DefaultAccDataDType
                 )
 
         old_cov = _calculate_coverage_utility(y_proba, y_pred, Ef, k, alpha)
-
         for i in order:
             bc_coverage_step_func(y_proba, y_pred, i, Ef, k, alpha, greedy=greedy)
 
-        new_cov = _calculate_coverage_utility(y_proba, y_pred, Ef, k, alpha)
+        if isinstance(y_proba, np.ndarray):
+            Ef = np.product(1 - y_pred * y_proba, axis=0, dtype=DefaultAccDataDType)
+        elif isinstance(y_proba, csr_matrix):
+            Ef = numba_calculate_prod_csr_mat_mul_ones_minus_mat(
+                *unpack_csr_matrices(y_pred, y_proba), n, m, DefaultAccDataDType
+            )
+
+        new_cov = _calculate_coverage_utility(y_pred, y_proba, Ef, k, alpha)
 
         greedy = False
         meta["iters"] = j
