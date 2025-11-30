@@ -158,9 +158,12 @@ class ConfusionMatrix:
 
 
 def _calculate_tp_dense(
-    y_true: DenseMatrix, y_pred: DenseMatrix, axis=0
+    y_true: DenseMatrix,
+    y_pred: DenseMatrix,
+    axis: int = 0,
+    dtype: Optional[DType] = None,
 ) -> DenseMatrix:
-    return (y_true * y_pred).sum(axis=axis)
+    return np.sum(y_true * y_pred, axis=axis, dtype=dtype)
 
 
 # Alternative version, performance is similar
@@ -168,41 +171,67 @@ def _calculate_tp_dense(
 #     return (y_pred.multiply(y_true)).sum(axis=axis)
 
 
-def _calculate_tp_csr(y_true: csr_matrix, y_pred: csr_matrix, axis=0) -> np.ndarray:
+def _calculate_tp_csr(
+    y_true: csr_matrix, y_pred: csr_matrix, axis: int = 0, dtype: Optional[DType] = None
+) -> np.ndarray:
     n, m = y_true.shape
-    return numba_calculate_sum_0_csr_mat_mul_mat(
-        *unpack_csr_matrices(y_pred, y_true), n, m, axis=axis
+    return numba_calculate_sum_csr_mat_mul_mat(
+        *unpack_csr_matrices(y_pred, y_true),
+        n,
+        m,
+        axis=axis,
+        dtype=dtype if dtype else y_true.dtype,
     )
 
 
 def _calculate_fp_dense(
-    y_true: DenseMatrix, y_pred: DenseMatrix, axis=0
+    y_true: DenseMatrix,
+    y_pred: DenseMatrix,
+    axis: int = 0,
+    dtype: Optional[DType] = None,
 ) -> DenseMatrix:
-    return ((1 - y_true) * y_pred).sum(axis=axis)
+    return np.sum((1 - y_true) * y_pred, axis=axis, dtype=dtype)
 
 
 def _calculate_fn_dense(
-    y_true: DenseMatrix, y_pred: DenseMatrix, axis=0
+    y_true: DenseMatrix,
+    y_pred: DenseMatrix,
+    axis: int = 0,
+    dtype: Optional[DType] = None,
 ) -> DenseMatrix:
-    return (y_true * (1 - y_pred)).sum(axis=axis)
+    return np.sum(y_true * (1 - y_pred), axis=axis, dtype=dtype)
 
 
-def _calculate_fp_csr(y_true: csr_matrix, y_pred: csr_matrix, axis=0) -> np.ndarray:
+def _calculate_fp_csr(
+    y_true: csr_matrix, y_pred: csr_matrix, axis: int = 0, dtype: Optional[DType] = None
+) -> np.ndarray:
     n, m = y_true.shape
-    return numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
-        *unpack_csr_matrices(y_pred, y_true), n, m, axis=axis
+    return numba_calculate_sum_csr_mat_mul_ones_minus_mat(
+        *unpack_csr_matrices(y_pred, y_true),
+        n,
+        m,
+        axis=axis,
+        dtype=dtype if dtype else y_true.dtype,
     )
 
 
-def _calculate_fn_csr(y_true: csr_matrix, y_pred: csr_matrix, axis=0) -> np.ndarray:
+def _calculate_fn_csr(
+    y_true: csr_matrix, y_pred: csr_matrix, axis: int = 0, dtype: Optional[DType] = None
+) -> np.ndarray:
     n, m = y_true.shape
-    return numba_calculate_sum_0_csr_mat_mul_ones_minus_mat(
-        *unpack_csr_matrices(y_true, y_pred), n, m, axis=axis
+    return numba_calculate_sum_csr_mat_mul_ones_minus_mat(
+        *unpack_csr_matrices(y_true, y_pred),
+        n,
+        m,
+        axis=axis,
+        dtype=dtype if dtype else y_true.dtype,
     )
 
 
-def _calculate_tn_dense(y_true: np.ndarray, y_pred: np.ndarray, axis=0) -> np.ndarray:
-    return (1 - y_true) * (1 - y_pred).sum(axis=axis)
+def _calculate_tn_dense(
+    y_true: np.ndarray, y_pred: np.ndarray, axis: int = 0, dtype: Optional[DType] = None
+) -> np.ndarray:
+    return np.sum((1 - y_true) * (1 - y_pred), axis=axis, dtype=dtype)
 
 
 def _calculate_conf_mat_entry(
@@ -211,7 +240,8 @@ def _calculate_conf_mat_entry(
     func_for_dense: Callable,
     func_for_csr: Callable,
     normalize: bool = False,
-    axis: int = 0,
+    axis: Optional[int] = 0,
+    dtype: Optional[DType] = None,
 ) -> DenseMatrix:
     """ """
 
@@ -230,7 +260,7 @@ def _calculate_conf_mat_entry(
     if axis not in (0, 1):
         raise ValueError("axis must be 0 or 1")
 
-    val = func(y_true, y_pred, axis=axis)
+    val = func(y_true, y_pred, axis=axis, dtype=dtype)
 
     if normalize:
         val = val / y_true.shape[0]
@@ -243,6 +273,7 @@ def calculate_tp(
     y_pred: Matrix,
     normalize: bool = False,
     axis: Optional[int] = 0,
+    dtype: Optional[DType] = None,
 ) -> Union[Number, DenseMatrix]:
     """
     Calculate number of true positives for the given true and predicted labels along an axis.
@@ -252,12 +283,19 @@ def calculate_tp(
         y_pred: The predicted labels.
         normalize: Whether to normalize the confusion matrix, resulting the rates instead of counts.
         axis: The axis along which to calculate the confusion matrix.
+        dtype: The data type of the output, if None, the same as y_true.
 
     Returns:
         The number of vector of false positives counts or rates.
     """
     return _calculate_conf_mat_entry(
-        y_true, y_pred, _calculate_tp_dense, _calculate_tp_csr, normalize=normalize
+        y_true,
+        y_pred,
+        _calculate_tp_dense,
+        _calculate_tp_csr,
+        normalize=normalize,
+        axis=axis,
+        dtype=dtype,
     )
 
 
@@ -266,6 +304,7 @@ def calculate_fp(
     y_pred: Matrix,
     normalize: bool = False,
     axis: Optional[int] = 0,
+    dtype: Optional[DType] = None,
 ) -> Union[Number, DenseMatrix]:
     """
     Calculate number of false positives for the given true and predicted labels along an axis.
@@ -275,12 +314,19 @@ def calculate_fp(
         y_pred: The predicted labels.
         normalize: Whether to normalize the confusion matrix, resulting the rates instead of counts.
         axis: The axis along which to calculate the confusion matrix.
+        dtype: The data type of the output, if None, the same as y_true.
 
     Returns:
         The number of vector of false positives counts or rates.
     """
     return _calculate_conf_mat_entry(
-        y_true, y_pred, _calculate_fp_dense, _calculate_fp_csr, normalize=normalize
+        y_true,
+        y_pred,
+        _calculate_fp_dense,
+        _calculate_fp_csr,
+        normalize=normalize,
+        axis=axis,
+        dtype=dtype,
     )
 
 
@@ -289,6 +335,7 @@ def calculate_fn(
     y_pred: Matrix,
     normalize: bool = False,
     axis: Optional[int] = 0,
+    dtype: Optional[DType] = None,
 ) -> Union[Number, DenseMatrix]:
     """
     Calculate number of false negatives for the given true and predicted labels along an axis.
@@ -298,12 +345,19 @@ def calculate_fn(
         y_pred: The predicted labels.
         normalize: Whether to normalize the confusion matrix, resulting the rates instead of counts.
         axis: The axis along which to calculate the confusion matrix.
+        dtype: The data type of the output, if None, the same as y_true.
 
     Returns:
         The number of vector of false negatives counts or rates.
     """
     return _calculate_conf_mat_entry(
-        y_true, y_pred, _calculate_fn_dense, _calculate_fn_csr, normalize=normalize
+        y_true,
+        y_pred,
+        _calculate_fn_dense,
+        _calculate_fn_csr,
+        normalize=normalize,
+        axis=axis,
+        dtype=dtype,
     )
 
 
@@ -313,6 +367,7 @@ def calculate_confusion_matrix(
     normalize: bool = False,
     skip_tn: bool = False,
     axis: Optional[int] = 0,
+    dtype: Optional[DType] = None,
 ) -> ConfusionMatrix:
     """
     Calculate confusion matrix for given true and predicted labels along an axis.
@@ -323,13 +378,14 @@ def calculate_confusion_matrix(
         normalize: Whether to normalize the confusion matrix, resulting the rates instead of counts.
         skip_tn: Whether to skip calculating true negatives, as they may not be always needed.
         axis: The axis along which to calculate the confusion matrix.
+        dtype: The data type of the output, if None, the same as y_true.
 
     Returns:
         The confusion matrix.
     """
-    tp = calculate_tp(y_true, y_pred, normalize=normalize, axis=axis)
-    fp = calculate_fp(y_true, y_pred, normalize=normalize, axis=axis)
-    fn = calculate_fn(y_true, y_pred, normalize=normalize, axis=axis)
+    tp = calculate_tp(y_true, y_pred, normalize=normalize, axis=axis, dtype=dtype)
+    fp = calculate_fp(y_true, y_pred, normalize=normalize, axis=axis, dtype=dtype)
+    fn = calculate_fn(y_true, y_pred, normalize=normalize, axis=axis, dtype=dtype)
 
     n, m = y_true.shape
     if skip_tn:

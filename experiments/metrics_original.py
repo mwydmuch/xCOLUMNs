@@ -55,7 +55,7 @@ def _true_negatives(  # t in the paper
     return np.asarray(y_true_x_pred.mean(axis=axis)).ravel()
 
 
-def precision(
+def _precision(
     *,
     y_true: Union[np.ndarray, csr_matrix],
     y_pred: Union[np.ndarray, csr_matrix],
@@ -70,7 +70,7 @@ def precision(
     return true_positives / predicted_positives
 
 
-def recall(
+def _recall(
     y_true: Union[np.ndarray, csr_matrix],
     y_pred: Union[np.ndarray, csr_matrix],
     axis: int,
@@ -84,7 +84,7 @@ def recall(
     return true_positives / positives
 
 
-def fmeasure(
+def _fmeasure(
     y_true: Union[np.ndarray, csr_matrix],
     y_pred: Union[np.ndarray, csr_matrix],
     axis: int,
@@ -114,7 +114,7 @@ def fmeasure(
     # )
 
 
-def abandonment(
+def _abandonment(
     y_true: Union[np.ndarray, csr_matrix],
     y_pred: Union[np.ndarray, csr_matrix],
     axis: int,
@@ -127,7 +127,7 @@ def abandonment(
     )
 
 
-def balanced_accuracy(
+def _balanced_accuracy(
     y_true: Union[np.ndarray, csr_matrix],
     y_pred: Union[np.ndarray, csr_matrix],
     axis: int,
@@ -155,27 +155,14 @@ def make_average(fn, **kwargs):
     return avg_func
 
 
-macro_precision = make_average(precision, axis=0)
-macro_recall = make_average(recall, axis=0)
-macro_f1 = make_average(fmeasure, axis=0)
-macro_abandonment = make_average(abandonment, axis=0)
-macro_balanced_accuracy = make_average(balanced_accuracy, axis=0)
+macro_precision_v0 = make_average(_precision, axis=0)
+macro_recall_v0 = make_average(_recall, axis=0)
+macro_f1_v0 = make_average(_fmeasure, axis=0)
+macro_abandonment_v0 = make_average(_abandonment, axis=0)
+macro_balanced_accuracy_v0 = make_average(_balanced_accuracy, axis=0)
 
-instance_precision = make_average(precision, axis=1)
-instance_recall = make_average(recall, axis=1)
-instance_f1 = make_average(fmeasure, axis=1)
-instance_abandonment = make_average(abandonment, axis=1)
-instance_balanced_accuracy = make_average(balanced_accuracy, axis=1)
-
-__all__ = [
-    "macro_precision",
-    "instance_precision",
-    "macro_abandonment",
-    "instance_abandonment",
-    "macro_recall",
-    "instance_recall",
-    "macro_f1",
-    "instance_f1",
-    "macro_balanced_accuracy",
-    "instance_balanced_accuracy",
-]
+instance_precision_v0 = make_average(_precision, axis=1)
+instance_recall_v0 = make_average(_recall, axis=1)
+instance_f1_v0 = make_average(_fmeasure, axis=1)
+instance_abandonment_v0 = make_average(_abandonment, axis=1)
+instance_balanced_accuracy_v0 = make_average(_balanced_accuracy, axis=1)

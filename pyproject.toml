@@ -37,11 +37,15 @@ dependencies = [
     "numpy",
     "scipy",
     "numba>=0.58.0",
-    "click",
     "autograd>=1.6",
-    "tqdm",
 ]
 dynamic = ["version"]
+
+[project.optional-dependencies]
+tests = [
+    "pytest",
+    "scikit-learn",
+]
 
 [project.urls]
 Homepage = "https://github.com/mwydmuch/xcolumns"

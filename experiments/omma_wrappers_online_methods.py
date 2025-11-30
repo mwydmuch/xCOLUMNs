@@ -22,6 +22,9 @@ from xcolumns.utils import *
 from xcolumns.weighted_prediction import *
 
 
+DEFAULT_REG = 1e-6
+
+
 class OnlineMethod:
     def __init__(self, m, k):
         self.m = m
@@ -85,6 +88,7 @@ class OnlineFrankWolfe(OnlineMethod):
         m,
         k,
         utility_func,
+        first_update_n=0,
         update_base=10,
         update_exp=1.1,
         skip_tn=False,
@@ -106,6 +110,7 @@ class OnlineFrankWolfe(OnlineMethod):
         self.update_base = update_base
         self.update_exp = update_exp
         self.next_update = update_base
+        self.first_update_n = first_update_n
         self.updates = []
 
     def predict_online(self, y_proba, y_pred, i):
@@ -148,7 +153,10 @@ class OnlineFrankWolfe(OnlineMethod):
             y_true = y_proba
 
         self.seen_so_far.append(i)
-        if len(self.seen_so_far) % self.next_update == self.next_update - 1:
+        if (
+            len(self.seen_so_far) % self.next_update == self.next_update - 1
+            and len(self.seen_so_far) >= self.first_update_n
+        ):
             print("  Updating classifier ...")
             rnd_cls = find_classifier_using_fw(
                 y_true[self.seen_so_far],
@@ -157,7 +165,7 @@ class OnlineFrankWolfe(OnlineMethod):
                 max_iters=25,
                 k=self.k,
                 skip_tn=self.skip_tn,
-                alpha_eps=0.001,
+                alpha_tolerance=0.001,
                 alpha_uniform_search_step=0.001,
                 verbose=False,
             )
@@ -182,7 +190,16 @@ class OnlineFrankWolfe(OnlineMethod):
 
 
 class OnlineGreedy(OnlineMethod):
-    def __init__(self, m, k, binary_utility_func, skip_tn=False, etu_variant=False):
+    def __init__(
+        self,
+        m,
+        k,
+        binary_utility_func,
+        skip_tn=False,
+        etu_variant=False,
+        # initial_confusion_matrix=(1e-6, 1e-6, 1e-6, 1e-6),
+        initial_confusion_matrix=(DEFAULT_REG, DEFAULT_REG, DEFAULT_REG, DEFAULT_REG),
+    ):
         super().__init__(m, k)
 
         self.binary_utility_func = binary_utility_func
@@ -192,11 +209,12 @@ class OnlineGreedy(OnlineMethod):
         # self.fp = np.zeros(m, dtype=FLOAT_TYPE)
         # self.fn = np.zeros(m, dtype=FLOAT_TYPE)
         # self.tn = np.zeros(m, dtype=FLOAT_TYPE)
-        tp = np.full(m, 1e-6, dtype=FLOAT_TYPE)
-        fp = np.full(m, 1e-6, dtype=FLOAT_TYPE)
-        fn = np.full(m, 1e-6, dtype=FLOAT_TYPE)
-        tn = np.full(m, 1e-6, dtype=FLOAT_TYPE)
+        tp = np.full(m, initial_confusion_matrix[0], dtype=FLOAT_TYPE)
+        fp = np.full(m, initial_confusion_matrix[1], dtype=FLOAT_TYPE)
+        fn = np.full(m, initial_confusion_matrix[2], dtype=FLOAT_TYPE)
+        tn = np.full(m, initial_confusion_matrix[3], dtype=FLOAT_TYPE)
         self.C = ConfusionMatrix(tp, fp, fn, tn)
+        self.n = sum(initial_confusion_matrix)
 
         self.etu_variant = etu_variant
         print("Skip tn", self.skip_tn)
@@ -236,6 +254,7 @@ class OnlineGreedy(OnlineMethod):
         # exit(1)
 
     def update_online(self, y_true, y_pred, y_proba, i):
+        self.n += 1
         if self.etu_variant:
             y_true = y_proba
 
@@ -264,6 +283,9 @@ class OMMA(OnlineMethod):
         skip_tn=False,
         etu_variant=False,
         lazy_update=True,
+        first_update_n=0,
+        # initial_confusion_matrix=(1e-6, 1e-6, 1e-6, 1e-6),
+        initial_confusion_matrix=(DEFAULT_REG, DEFAULT_REG, DEFAULT_REG, DEFAULT_REG),
     ):
         super().__init__(m, k)
         self.utility_func = utility_func
@@ -273,17 +295,18 @@ class OMMA(OnlineMethod):
         self.skip_tn = skip_tn
         self.etu_variant = etu_variant
         self.lazy_update = lazy_update
+        self.first_update_n = first_update_n
 
         # tp = np.zeros(m, dtype=FLOAT_TYPE)
         # fp = np.zeros(m, dtype=FLOAT_TYPE)
         # fn = np.zeros(m, dtype=FLOAT_TYPE)
         # tn = np.zeros(m, dtype=FLOAT_TYPE)
-        tp = np.full(m, 1e-6, dtype=FLOAT_TYPE)
-        fp = np.full(m, 1e-6, dtype=FLOAT_TYPE)
-        fn = np.full(m, 1e-6, dtype=FLOAT_TYPE)
-        tn = np.full(m, 1e-6, dtype=FLOAT_TYPE)
+        tp = np.full(m, initial_confusion_matrix[0], dtype=FLOAT_TYPE)
+        fp = np.full(m, initial_confusion_matrix[1], dtype=FLOAT_TYPE)
+        fn = np.full(m, initial_confusion_matrix[2], dtype=FLOAT_TYPE)
+        tn = np.full(m, initial_confusion_matrix[3], dtype=FLOAT_TYPE)
         self.C = ConfusionMatrix(tp, fp, fn, tn)
-        self.n = 0
+        self.n = sum(initial_confusion_matrix)
 
         self.buffer_size = buffer_size
         self.buffer_pos = 0
@@ -300,7 +323,7 @@ class OMMA(OnlineMethod):
             t_data = y_proba.data[t_start:t_end]
             t_indices = y_proba.indices[t_start:t_end]
 
-            if self.lazy_update and self.n > 0:
+            if self.lazy_update and self.n >= self.first_update_n:
                 utility, Gtp, Gfp, Gfn, Gtn = _metric_func_with_gradient_autograd(
                     self.utility_func,
                     self.C.tp[t_indices] / self.n,
@@ -308,6 +331,20 @@ class OMMA(OnlineMethod):
                     self.C.fn[t_indices] / self.n,
                     self.C.tn[t_indices] / self.n,
                 )
+
+                # utility, Gtp, Gfp, Gfn, Gtn = _metric_func_with_gradient_torch(
+                #     self.utility_func,
+                #     self.C.tp[t_indices] / self.n,
+                #     self.C.tp[t_indices] / self.n,
+                #     self.C.tp[t_indices] / self.n,
+                #     self.C.tp[t_indices] / self.n,
+                # )
+
+                # Gtp = Gtp.detach().numpy()
+                # Gfp = Gfp.detach().numpy()
+                # Gfn = Gfn.detach().numpy()
+                # Gtn = Gtn.detach().numpy()
+
                 # new_classifier_a = Gtp - Gfp - Gfn + Gtn
                 # new_classifier_b = Gfp - Gtn
 
@@ -317,7 +354,6 @@ class OMMA(OnlineMethod):
 
                 self.classifier_a[t_indices] = Gtp - Gfp - Gfn + Gtn
                 self.classifier_b[t_indices] = Gfp - Gtn
-
             (
                 y_pred.data,
                 y_pred.indices,
@@ -390,7 +426,7 @@ class OMMA(OnlineMethod):
         )
         self.n += 1
 
-        if not self.lazy_update:
+        if not self.lazy_update and self.n >= self.first_update_n:
             utility, Gtp, Gfp, Gfn, Gtn = _metric_func_with_gradient_autograd(
                 self.utility_func,
                 self.tp / self.n,
@@ -398,6 +434,20 @@ class OMMA(OnlineMethod):
                 self.fn / self.n,
                 self.tn / self.n,
             )
+
+            # utility, Gtp, Gfp, Gfn, Gtn = _metric_func_with_gradient_torch(
+            #     self.utility_func,
+            #     self.C.tp / self.n,
+            #     self.C.fp / self.n,
+            #     self.C.fn / self.n,
+            #     self.C.tn / self.n,
+            # )
+
+            # Gtp = Gtp.detach().numpy()
+            # Gfp = Gfp.detach().numpy()
+            # Gfn = Gfn.detach().numpy()
+            # Gtn = Gtn.detach().numpy()
+
             new_classifier_a = Gtp - Gfp - Gfn + Gtn
             new_classifier_b = Gfp - Gtn
 
@@ -433,10 +483,20 @@ class OMMA(OnlineMethod):
 
 
 class OnlineFMeasureOptimization(OnlineMethod):
-    def __init__(self, m, k, etu_variant=False, micro=False):
+    def __init__(
+        self,
+        m,
+        k,
+        etu_variant=False,
+        micro=False,
+        initial_a=DEFAULT_REG,
+        initial_b=DEFAULT_REG,
+    ):
         super().__init__(m, k)
-        self.a = np.zeros(m, dtype=FLOAT_TYPE)
-        self.b = np.full(m, 1e-6, dtype=FLOAT_TYPE)
+        # self.a = np.zeros(m, dtype=FLOAT_TYPE)
+        # self.b = np.full(m, 1e-6, dtype=FLOAT_TYPE)
+        self.a = np.full(m, initial_a, dtype=FLOAT_TYPE)
+        self.b = np.full(m, initial_b, dtype=FLOAT_TYPE)
         self.etu_variant = etu_variant
         self.micro = micro
 
@@ -634,10 +694,14 @@ def online_experiment(
     method = online_method_class(**online_method_args)
     skip_tn = online_method_args.get("skip_tn", False)
 
-    tp = np.zeros(m, dtype=FLOAT_TYPE)
-    fp = np.zeros(m, dtype=FLOAT_TYPE)
-    fn = np.zeros(m, dtype=FLOAT_TYPE)
-    tn = np.zeros(m, dtype=FLOAT_TYPE)
+    # tp = np.zeros(m, dtype=FLOAT_TYPE)
+    # fp = np.zeros(m, dtype=FLOAT_TYPE)
+    # fn = np.zeros(m, dtype=FLOAT_TYPE)
+    # tn = np.zeros(m, dtype=FLOAT_TYPE)
+    tp = np.zeros(m, dtype=np.float64)
+    fp = np.zeros(m, dtype=np.float64)
+    fn = np.zeros(m, dtype=np.float64)
+    tn = np.zeros(m, dtype=np.float64)
     C = ConfusionMatrix(tp, fp, fn, tn)
 
     print(f"  Starting online experiment")
@@ -663,6 +727,7 @@ def online_experiment(
                 utility = utility_func(C.tp / c, C.fp / c, C.fn / c, C.tn / c)
                 meta["pred_utility_history"].append((i, float(utility)))
                 print(f"      {i + 1} / {n} utility so far: {utility:.5f}")
+                # print(f"C: {C.tp / c}, {C.fp / c}, {C.fn / c}, {C.tn / c}")
 
             # if method.has_pu_solution() and (
             #     i % evaluate_every == evaluate_every - 1 or i == n - 1
@@ -788,13 +853,15 @@ def online_default_macro_gmean(
     )
 
 
-def online_default_multi_class_gmean(
+def online_default_multiclass_gmean(
     y_proba, k: int = 5, seed: int = 0, y_true=None, epochs=1, **kwargs
 ):
+    if k != 1:
+        raise ValueError("k must be 1")
     return online_experiment(
         OnlineDefault,
         {},
-        multi_class_gmean_on_conf_matrix,
+        multiclass_gmean_on_conf_matrix,
         y_proba,
         y_true,
         k=k,
@@ -804,13 +871,33 @@ def online_default_multi_class_gmean(
     )
 
 
-def online_default_multi_class_hmean(
+def online_default_multiclass_hmean(
     y_proba, k: int = 5, seed: int = 0, y_true=None, epochs=1, **kwargs
 ):
+    if k != 1:
+        raise ValueError("k must be 1")
     return online_experiment(
         OnlineDefault,
         {},
-        multi_class_hmean_on_conf_matrix,
+        multiclass_hmean_on_conf_matrix,
+        y_proba,
+        y_true,
+        k=k,
+        seed=seed,
+        epochs=epochs,
+        **kwargs,
+    )
+
+
+def online_default_multiclass_qmean(
+    y_proba, k: int = 5, seed: int = 0, y_true=None, epochs=1, **kwargs
+):
+    if k != 1:
+        raise ValueError("k must be 1")
+    return online_experiment(
+        OnlineDefault,
+        {},
+        multiclass_qmean_on_conf_matrix,
         y_proba,
         y_true,
         k=k,
@@ -1076,6 +1163,8 @@ def online_frank_wolfe_macro_precision(
 def online_frank_wolfe_macro_min_tp_tn(
     y_proba, k: int = 5, seed: int = 0, y_true=None, epochs=1, **kwargs
 ):
+    if k != 1:
+        raise ValueError("k must be 1")
     return online_experiment(
         OnlineFrankWolfe,
         {
@@ -1130,16 +1219,18 @@ def online_frank_wolfe_macro_gmean(
     )
 
 
-def online_frank_wolfe_multi_class_hmean(
+def online_frank_wolfe_multiclass_hmean(
     y_proba, k: int = 5, seed: int = 0, y_true=None, epochs=1, **kwargs
 ):
+    if k != 1:
+        raise ValueError("k must be 1")
     return online_experiment(
         OnlineFrankWolfe,
         {
-            "utility_func": multi_class_hmean_on_conf_matrix,
+            "utility_func": multiclass_hmean_on_conf_matrix,
             "etu_variant": kwargs.get("etu_variant", False),
         },
-        multi_class_gmean_on_conf_matrix,
+        multiclass_gmean_on_conf_matrix,
         y_proba,
         y_true,
         k=k,
@@ -1149,16 +1240,39 @@ def online_frank_wolfe_multi_class_hmean(
     )
 
 
-def online_frank_wolfe_multi_class_gmean(
+def online_frank_wolfe_multiclass_gmean(
     y_proba, k: int = 5, seed: int = 0, y_true=None, epochs=1, **kwargs
 ):
+    if k != 1:
+        raise ValueError("k must be 1")
     return online_experiment(
         OnlineFrankWolfe,
         {
-            "utility_func": multi_class_gmean_on_conf_matrix,
+            "utility_func": log_multiclass_gmean_on_conf_matrix,
             "etu_variant": kwargs.get("etu_variant", False),
         },
-        multi_class_gmean_on_conf_matrix,
+        multiclass_gmean_on_conf_matrix,
+        y_proba,
+        y_true,
+        k=k,
+        seed=seed,
+        epochs=epochs,
+        **kwargs,
+    )
+
+
+def online_frank_wolfe_multiclass_qmean(
+    y_proba, k: int = 5, seed: int = 0, y_true=None, epochs=1, **kwargs
+):
+    if k != 1:
+        raise ValueError("k must be 1")
+    return online_experiment(
+        OnlineFrankWolfe,
+        {
+            "utility_func": multiclass_qmean_on_conf_matrix,
+            "etu_variant": kwargs.get("etu_variant", False),
+        },
+        multiclass_qmean_on_conf_matrix,
         y_proba,
         y_true,
         k=k,
@@ -1395,16 +1509,18 @@ def omma_macro_gmean(
     )
 
 
-def omma_multi_class_gmean(
+def omma_multiclass_gmean(
     y_proba, k: int = 5, seed: int = 0, y_true=None, epochs=1, **kwargs
 ):
+    if k != 1:
+        raise ValueError("k must be 1")
     return online_experiment(
         OMMA,
         {
-            "utility_func": multi_class_gmean_on_conf_matrix,
+            "utility_func": log_multiclass_gmean_on_conf_matrix,
             "etu_variant": kwargs.get("etu_variant", False),
         },
-        multi_class_gmean_on_conf_matrix,
+        multiclass_gmean_on_conf_matrix,
         y_proba,
         y_true,
         k=k,
@@ -1414,16 +1530,39 @@ def omma_multi_class_gmean(
     )
 
 
-def omma_multi_class_hmean(
+def omma_multiclass_hmean(
     y_proba, k: int = 5, seed: int = 0, y_true=None, epochs=1, **kwargs
 ):
+    if k != 1:
+        raise ValueError("k must be 1")
     return online_experiment(
         OMMA,
         {
-            "utility_func": multi_class_hmean_on_conf_matrix,
+            "utility_func": multiclass_hmean_on_conf_matrix,
             "etu_variant": kwargs.get("etu_variant", False),
         },
-        multi_class_hmean_on_conf_matrix,
+        multiclass_hmean_on_conf_matrix,
+        y_proba,
+        y_true,
+        k=k,
+        seed=seed,
+        epochs=epochs,
+        **kwargs,
+    )
+
+
+def omma_multiclass_qmean(
+    y_proba, k: int = 5, seed: int = 0, y_true=None, epochs=1, **kwargs
+):
+    if k != 1:
+        raise ValueError("k must be 1")
+    return online_experiment(
+        OMMA,
+        {
+            "utility_func": multiclass_qmean_on_conf_matrix,
+            "etu_variant": kwargs.get("etu_variant", False),
+        },
+        multiclass_qmean_on_conf_matrix,
         y_proba,
         y_true,
         k=k,

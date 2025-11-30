@@ -1,8 +1,5 @@
 # Overview of xCOLUMNs library
 
-
-
-
 ## What is multi-label classification?
 
 Multi-label classification is a type of classification task, where each instance can be assigned to multiple labels.
@@ -48,3 +45,19 @@ The aim of xCOLUMNs is to provide methods for the optimization of the general fa
 > [Erik Schultheis, Wojciech Kotłowski, Marek Wydmuch, Rohit Babbar, Strom Borman, Krzysztof Dembczyński. Consistent algorithms for multi-label classification with macro-at-k metrics. ICLR 2024.](https://arxiv.org/abs/2401.16594)
 
 The library also implements a set of methods for calculating the metrics based on both the confusion matrix and the true and predicted labels. Implemented in [`xcolumns.confusion_matrix`](../api/confusion_matrix) and [`xcolumns.metrics`](../api/metrics) modules.
+
+
+## Convetions
+
+
+
+
+
+## Logging
+
+The library uses the `logging` module for logging. The default logging level is `INFO`. To change the logging level, use the following code:
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```

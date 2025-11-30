@@ -18,7 +18,11 @@ def call_function_with_supported_kwargs(func, *args, **kwargs):
         params = func.__signature__.parameters
     else:
         params = func.__code__.co_varnames
-    selected_kwargs = {k: v for k, v in kwargs.items() if k in params}
+    if "kwargs" not in params:
+        selected_kwargs = {k: v for k, v in kwargs.items() if k in params}
+    else:
+        selected_kwargs = kwargs
+    # print(f"  Calling {func.__name__} with kwargs: {selected_kwargs=}")
     return func(*args, **selected_kwargs)
 
 
@@ -207,12 +211,14 @@ def load_npy_full_pred(path: str, keep_top_k: int = 0, **kwargs):
     )
 
 
-def load_cache_npz_file(path: Union[str, Path], load_func: callable, **load_func_args):
+def load_cache_npz_file(
+    path: Union[str, Path], load_func: callable, recreate=False, **load_func_args
+):
     """
     Loads a npz file from the given path. If the file does not exist, it is created using the given load_func.
     """
     print(f"Loading {path} ...")
-    if not os.path.exists(path + ".npz"):
+    if not os.path.exists(path + ".npz") or recreate:
         print(f"  Creating cache under {path}.npz for faster loading ...")
         data = load_func(path, **load_func_args)
         save_npz(path + ".npz", data)

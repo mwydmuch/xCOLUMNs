@@ -3,11 +3,11 @@ import sys
 
 import click
 import numpy as np
+from metrics_original import *
 
 from utils import *
 from xcolumns.block_coordinate import *
 from xcolumns.frank_wolfe import *
-from xcolumns.metrics_original import *
 from xcolumns.weighted_prediction import *
 
 
@@ -183,6 +183,7 @@ alphas = [
     0.5,
     0.6,
     0.7,
+    0.7,
     0.8,
     0.9,
     0.95,
@@ -191,7 +192,6 @@ alphas = [
     0.999,
 ]
 for alpha in alphas:
-    pass
     METHODS[f"block-coord-mixed-prec-f1-alpha={alpha}-tol=1e-6"] = (
         predict_optimizing_mixed_instance_precision_and_macro_f1_score_using_bc,
         {"alpha": alpha, "tolerance": 1e-6},

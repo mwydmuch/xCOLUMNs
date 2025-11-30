@@ -28,10 +28,17 @@ pip install -r requirements.txt
 - `predictions/` - the scripts expect to find probability estimes from different models (e.g. LightXML) in this directory,
 - `results/` - the scripts save the results of different inference methods in this directory using json format,
 - `notebooks/` - contains jupyter notebooks used for additional analysis and visualization of the results,
-- `run_neurips_2023_bca_experiment.py` - script for running the experiments using Block Coordinate Ascent (BCA) inference method from the NeurIPS 2023 paper,
+- `run_neurips_2023_bca_experiment.py` - main script for running experiments using Block Coordinate Ascent (BCA) inference method from the NeurIPS 2023 paper,
 - `run_all_neurips_2023_bca_experiments.sh` - script for running all the experiments from the NeurIPS 2023 paper,
-- `run_iclr_2024_bca_experiment.py` - script for running the experiments using Frank Wolfe algorithm (FW) inference method from the ICLR 2024 paper,
-- `run_all_iclr_2024_bca_experiments.sh` - script for running all the experiments from the ICLR 2024 paper,
+- `run_iclr_2024_fw_experiment.py` - script for running the experiments using Frank Wolfe algorithm (FW) inference method from the ICLR 2024 paper,
+- `run_all_iclr_2024_fw_experiments.sh` - script for running all the experiments from the ICLR 2024 paper,
+- `run_icml_2024_omma_experiment.py` - main script for the experiments using OMMA online inference method from the ICML 2024 paper,
+- `run_all_iclr_2024_omma_experiments.sh` - script for running all the experiments from the ICLR 2024 paper,
+- `run_thesis_2024_experiment.py` - main script for running experiments from Marek Wydmuch's PhD thesis,
+- `run_all_thesis_2024_experiments_org.sh` - script for running experiments on original datasets from Marek Wydmuch's PhD thesis,
+- `run_all_thesis_2024_experiments_syn.sh` - script for running synthetic experiments from Marek Wydmuch's PhD thesis,
+- `run_all_thesis_2024_experiments_syn_sample.sh` - script for reevaluating all the synthetic experiments with different true labels resapled,
+- `run_all_thesis_2024_experiments_top_labels.sh` - script for running all the experiments comparing all vs top labels for the 2024 thesis,
 - `summarize_results.py` - script that creates tables data from the results of the experiments.
 
 

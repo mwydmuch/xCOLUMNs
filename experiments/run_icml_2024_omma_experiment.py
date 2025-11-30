@@ -3,16 +3,17 @@ import sys
 import click
 import numpy as np
 from custom_utilities_methods import *
+from metrics_original import *
+from omma_wrappers_frank_wolfe import *
+from omma_wrappers_online_methods import *
+from omma_wrappers_threshold_methods import *
+from scipy.sparse import csr_matrix
 from tqdm import tqdm
-from wrappers_frank_wolfe import *
-from wrappers_online_methods import *
-from wrappers_threshold_methods import *
 
 from utils import *
 from xcolumns.block_coordinate import *
 from xcolumns.frank_wolfe import *
 from xcolumns.metrics import *
-from xcolumns.metrics_original import *
 from xcolumns.types import *
 from xcolumns.utils import *
 from xcolumns.weighted_prediction import *
@@ -36,8 +37,9 @@ METRICS = {
     "iF": instance_f1,
     "mH": macro_hmean,
     "mG": macro_gmean,
-    # "H": multi_class_hmean,
-    # "G": multi_class_gmean
+    "H": multiclass_hmean,
+    "G": multiclass_gmean,
+    "Q": multiclass_qmean,
 }
 
 METHODS = {
@@ -49,22 +51,24 @@ METHODS = {
 }
 
 # for measure in [
-#     "multi_class_hmean",
-#     "multi_class_gmean",
+#     "multiclass_hmean",
+#     "multiclass_gmean",
+#     "multiclass_qmean",
 # ]:
 #     METHODS.update(
 #         {
 #             f"online_default_{measure}": (eval(f"online_default_{measure}"), {}),
 #             f"omma_{measure}": (eval(f"omma_{measure}"), {}),
 #             f"omma_etu_{measure}": (eval(f"omma_{measure}"), {"etu_variant": True}),
-#             f"online_frank_wolfe_exp=1.5_{measure}": (
+#             f"online_frank_wolfe_exp=1.1_{measure}": (
 #                 eval(f"online_frank_wolfe_{measure}"),
 #                 {},
 #             ),
-#             f"online_fra_indicesnk_wolfe_etu_exp=1.5_{measure}": (
+#             f"online_frank_wolfe_etu_exp=1.1_{measure}": (
 #                 eval(f"online_frank_wolfe_{measure}"),
 #                 {"etu_variant": True},
 #             ),
+#             f"frank_wolfe_{measure}": (eval(f"fw_{measure}"), {}),
 #         }
 #     )
 
@@ -112,15 +116,15 @@ for measure in [
             # f"block_coord_{measure}": (eval(f"bc_{measure}"), {}),
             # f"greedy_{measure}": (
             #     eval(f"bc_{measure}"),
-            #     {"init_y_pred": "greedy", "max_iter": 1},
+            #     {"init_y_pred": "greedy", "max_iters": 1},
             # ),
-            f"frank_wolfe_{measure}": (eval(f"fw_{measure}"), {}),
-            f"frank_wolfe_on_test_{measure}": (eval(f"fw_{measure}_on_test"), {}),
-            f"frank_wolfe_etu_{measure}": (eval(f"fw_{measure}_etu"), {}),
-            f"frank_wolfe_on_train_etu_{measure}": (
-                eval(f"fw_{measure}_on_train_etu"),
-                {},
-            ),
+            # f"frank_wolfe_{measure}": (eval(f"fw_{measure}"), {}),
+            # f"frank_wolfe_on_test_{measure}": (eval(f"fw_{measure}_on_test"), {}),
+            # f"frank_wolfe_etu_{measure}": (eval(f"fw_{measure}_etu"), {}),
+            # f"frank_wolfe_on_train_etu_{measure}": (
+            #     eval(f"fw_{measure}_on_train_etu"),
+            #     {},
+            # ),
         }
     )
 
@@ -148,15 +152,15 @@ for measure in ["macro_recall", "macro_precision"]:
             # f"block_coord_{measure}": (eval(f"bc_{measure}"), {}),
             # f"greedy_{measure}": (
             #     eval(f"bc_{measure}"),
-            #     {"init_y_pred": "greedy", "max_iter": 1},
+            #     {"init_y_pred": "greedy", "max_iters": 1},
             # ),
-            f"frank_wolfe_{measure}": (eval(f"fw_{measure}"), {}),
-            f"frank_wolfe_on_test_{measure}": (eval(f"fw_{measure}_on_test"), {}),
-            f"frank_wolfe_etu_{measure}": (eval(f"fw_{measure}_etu"), {}),
-            f"frank_wolfe_on_train_etu_{measure}": (
-                eval(f"fw_{measure}_on_train_etu"),
-                {},
-            ),
+            # f"frank_wolfe_{measure}": (eval(f"fw_{measure}"), {}),
+            # f"frank_wolfe_on_test_{measure}": (eval(f"fw_{measure}_on_test"), {}),
+            # f"frank_wolfe_etu_{measure}": (eval(f"fw_{measure}_etu"), {}),
+            # f"frank_wolfe_on_train_etu_{measure}": (
+            #     eval(f"fw_{measure}_on_train_etu"),
+            #     {},
+            # ),
         }
     )
 
@@ -196,7 +200,7 @@ def calculate_and_report_metrics(y_true, y_preds, k, metrics):
 @click.option("-p", "--probabilities_path", type=str, required=False, default=None)
 @click.option("-l", "--labels_path", type=str, required=False, default=None)
 @click.option(
-    "-r", "--results_dir", type=str, required=False, default="results_online6"
+    "-r", "--results_dir", type=str, required=False, default="results_online/"
 )
 @click.option(
     "--recalculate_predictions", is_flag=True, type=bool, required=False, default=False
@@ -223,6 +227,7 @@ def main(
         methods = METHODS
     else:
         methods = {k: v for k, v in METHODS.items() if method in k}
+        # methods = {k: v for k, v in METHODS.items() if k.startswith(method)}
         print(methods.keys())
         if len(methods) == 0:
             raise ValueError(f"Unknown method: {method}")
@@ -446,11 +451,31 @@ def main(
             "load_func": load_txt_sparse_pred,
         }
 
+    elif "sensorless_hsm" in experiment:
+        # Wiki10 - PLT + XMLC repo data
+        xmlc_data_load_config["header"] = False
+        y_proba_path = {
+            "path": f"predictions/sensorless_top_12_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
+        y_true_path = {
+            "path": "datasets/sensorless/sensorless_test.txt",
+            "load_func": load_txt_labels,
+        }
+        train_y_true_path = {
+            "path": "datasets/sensorless/sensorless_train.txt",
+            "load_func": load_txt_labels,
+        }
+        train_y_proba_path = {
+            "path": f"predictions/sensorless_train_top_12_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
+
     elif "news20_hsm" in experiment:
         # Wiki10 - PLT + XMLC repo data
         xmlc_data_load_config["header"] = False
         y_proba_path = {
-            "path": f"predictions/news202_top_100_{plt_loss}",
+            "path": f"predictions/news20_top_20_{plt_loss}",
             "load_func": load_txt_sparse_pred,
         }
         y_true_path = {
@@ -462,7 +487,7 @@ def main(
             "load_func": load_txt_labels,
         }
         train_y_proba_path = {
-            "path": f"predictions/news202_train_top_100_{plt_loss}",
+            "path": f"predictions/news20_train_top_20_{plt_loss}",
             "load_func": load_txt_sparse_pred,
         }
 
@@ -540,6 +565,83 @@ def main(
         train_y_proba_path = {
             "path": f"predictions/aloi.bin2_train_top_100_{plt_loss}",
             "load_func": load_txt_sparse_pred,
+        }
+
+    elif "ledgar_hsm" in experiment:
+        xmlc_data_load_config["header"] = False
+        y_proba_path = {
+            "path": f"predictions/ledgar_top_100_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
+        y_true_path = {
+            "path": "datasets/ledgar/ledgar_test.svm",
+            "load_func": load_txt_labels,
+        }
+        train_y_true_path = {
+            "path": "datasets/ledgar/ledgar_train.svm",
+            "load_func": load_txt_labels,
+        }
+        train_y_proba_path = {
+            "path": f"predictions/ledgar_train_top_100_{plt_loss}",
+            "load_func": load_txt_sparse_pred,
+        }
+
+    elif "sensorless_lr" in experiment:
+        y_proba_path = {
+            "path": f"datasets/sklearn/sensorless_lr/test_Y_pred.npz",
+            "load_func": load_npz_wrapper,
+        }
+        y_true_path = {
+            "path": f"datasets/sklearn/sensorless_lr/test_Y_true.npz",
+            "load_func": load_npz_wrapper,
+        }
+
+    elif "news20_lr" in experiment:
+        y_proba_path = {
+            "path": f"datasets/sklearn/news20_lr/test_Y_pred.npz",
+            "load_func": load_npz_wrapper,
+        }
+        y_true_path = {
+            "path": f"datasets/sklearn/news20_lr/test_Y_true.npz",
+            "load_func": load_npz_wrapper,
+        }
+
+    elif "ledgar_lr" in experiment:
+        y_proba_path = {
+            "path": f"datasets/sklearn/ledgar_lr/test_Y_pred.npz",
+            "load_func": load_npz_wrapper,
+        }
+        y_true_path = {
+            "path": f"datasets/sklearn/ledgar_lr/test_Y_true.npz",
+            "load_func": load_npz_wrapper,
+        }
+
+    elif "cal101_lr" in experiment:
+        y_proba_path = {
+            "path": f"datasets/sklearn/cal101_lr/test_Y_pred.npz",
+            "load_func": load_npz_wrapper,
+        }
+        y_true_path = {
+            "path": f"datasets/sklearn/cal101_lr/test_Y_true.npz",
+            "load_func": load_npz_wrapper,
+        }
+
+    elif "cal256_lr" in experiment:
+        y_proba_path = {
+            "path": f"datasets/sklearn/cal256_lr/test_Y_pred.npz",
+            "load_func": load_npz_wrapper,
+        }
+        y_true_path = {
+            "path": f"datasets/sklearn/cal256_lr/test_Y_true.npz",
+            "load_func": load_npz_wrapper,
+        }
+        train_y_true_path = {
+            "path": "datasets/sklearn/cal256_lr/train_Y_true.npz",
+            "load_func": load_npz_wrapper,
+        }
+        train_y_proba_path = {
+            "path": f"datasets/sklearn/cal256_lr/train_Y_pred.npz",
+            "load_func": load_npz_wrapper,
         }
 
     elif "eurlex_lightxml" in experiment:
@@ -694,11 +796,54 @@ def main(
 
     # For some sparse format this resize might be necessary
     if y_true.shape != y_proba.shape:
+        print(y_true.shape, type(y_true), type(y_proba))
+        print(y_true, len(y_true.indices), len(y_true.data.astype(np.int32)))
+        new_indices = np.zeros(y_proba.shape[0], dtype=np.int32)
+        new_indices[y_true.indices] = y_true.data.astype(np.int32)
+        if y_true.shape[1] == y_proba.shape[0]:
+            y_true = csr_matrix(
+                (
+                    np.ones(y_proba.shape[0]),
+                    new_indices,
+                    np.arange(y_true.shape[1] + 1),
+                ),
+                shape=(y_proba.shape[0], y_proba.shape[1]),
+                dtype=np.float32,
+            )
+
         if y_true.shape[0] != y_proba.shape[0]:
             raise RuntimeError(
                 f"Number of instances in true and prediction do not match {y_true.shape[0]} != {y_proba.shape[0]}"
             )
         align_dim1(y_true, y_proba)
+
+    if (
+        train_y_true is not None
+        and train_y_proba is not None
+        and train_y_true.shape != train_y_proba.shape
+    ):
+        print(train_y_true.shape, type(train_y_true), type(train_y_proba))
+        print(
+            train_y_true, len(train_y_true.indices), len(y_true.data.astype(np.int32))
+        )
+        new_indices = np.zeros(train_y_proba.shape[0], dtype=np.int32)
+        new_indices[train_y_true.indices] = train_y_true.data.astype(np.int32)
+        if train_y_true.shape[1] == train_y_proba.shape[0]:
+            train_y_true = csr_matrix(
+                (
+                    np.ones(train_y_proba.shape[0]),
+                    new_indices,
+                    np.arange(train_y_true.shape[1] + 1),
+                ),
+                shape=(train_y_proba.shape[0], train_y_proba.shape[1]),
+                dtype=np.float32,
+            )
+
+        if train_y_true.shape[0] != train_y_proba.shape[0]:
+            raise RuntimeError(
+                f"Number of instances in true and prediction do not match {train_y_true.shape[0]} != {train_y_proba.shape[0]}"
+            )
+        align_dim1(train_y_true, train_y_proba)
 
     # Calculate priors and propensities
     priors = None

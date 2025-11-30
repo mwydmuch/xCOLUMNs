@@ -11,9 +11,11 @@ The main function of the module is {func}`find_classifier_using_fw() <xcolumns.f
 ```
 
 
-The function returns the RandomizedWeightedClassifier object that can be used for prediction.
-The RandomizedWeightedClassifier is a set of weighted classifiers as defined in
-The module also provides the function {func}`predict_using_randomized_weighted_classifier() <xcolumns.frank_wolfe.predict_using_randomized_weighted_classifier>` for predicting the labels using the RandomizedWeightedClassifier object.
+The function returns the {class}`RandomizedWeightedClassifier <xcolumns.frank_wolfe.RandomizedWeightedClassifier>` object that can be used for prediction.
+The {class}`RandomizedWeightedClassifier <xcolumns.frank_wolfe.RandomizedWeightedClassifier>`
+is a set of weighted classifiers with paramters `a` (slopes) and `b` (intercepts) for each label similiar to the form used in {func}`xcolumns.weighted_prediction.predict_weighted_per_instance`.
+The module also provides the function {func}`predict_using_randomized_weighted_classifier() <xcolumns.frank_wolfe.predict_using_randomized_weighted_classifier>`
+for predicting the labels using the RandomizedWeightedClassifier object.
 
 
 ```{eval-rst}
