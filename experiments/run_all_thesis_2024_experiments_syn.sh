@@ -2,17 +2,15 @@
 
 set -e
 
-export NUMBA_NUM_THREADS=8
+export NUMBA_NUM_THREADS=4
 export XCOLUMNS_NUMBA_PARALLEL=1
 
-# Default experiments
+EXPERIMENTS=(rcv1x_100_plt eurlex_100_plt EURLex-4.3K_100_plt amazonCat_100_plt wiki10_100_plt wikiLSHTC_100_plt WikipediaLarge-500K_100_plt amazon_100_plt)
 SEEDS=(13)
 KS=(1 3 5)
-OUTPUT_DIR=results_thesis_syn4
+OUTPUT_DIR=results_thesis_syn
 ARGS="-v 0.0 --shuffle_data --multiply_data 5 --use_proba_as_true -i 20"
 #ARGS="-v 0.0 --shuffle_data --multiply_data 5 --use_proba_as_true"
-EXPERIMENTS=(rcv1x_100_plt eurlex_100_plt EURLex-4.3K_100_plt amazonCat_100_plt wiki10_100_plt wikiLSHTC_100_plt WikipediaLarge-500K_100_plt amazon_100_plt)
-EXPERIMENTS=(wikiLSHTC_100_plt WikipediaLarge-500K_100_plt)
 
 for e in "${EXPERIMENTS[@]}"; do
     for k in "${KS[@]}"; do
@@ -28,9 +26,9 @@ for e in "${EXPERIMENTS[@]}"; do
     done
 done
 
+EXPERIMENTS=(amazonCat-14K_100_plt)
 ARGS="-v 0.0 --shuffle_data --multiply_data 2 --use_proba_as_true -i 20"
 #ARGS="-v 0.0 --shuffle_data --multiply_data 5 --use_proba_as_true"
-EXPERIMENTS=(amazonCat-14K_100_plt)
 
 for e in "${EXPERIMENTS[@]}"; do
     for k in "${KS[@]}"; do

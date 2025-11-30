@@ -13,7 +13,7 @@ for e in "${EXPERIMENTS[@]}"; do
     for k in "${KS[@]}"; do
         for seed in "${SEEDS[@]}"; do
             echo "Running python3 run_icml_2024_omma_experiment.py $e -k $k -s $seed"
-            python3 run_icml_2024_omma_experiment.py $e -k $k -s $seed -r results_online_replicate_new_reg_0 &
+            python3 run_icml_2024_omma_experiment.py $e -k $k -s $seed -r results_omma &
         done
     done
     wait

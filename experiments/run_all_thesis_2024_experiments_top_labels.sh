@@ -2,9 +2,7 @@
 
 set -e
 
-# Default experiments
 EXPERIMENTS=(rcv1x_100_plt eurlex_100_plt EURLex-4.3K_100_plt amazonCat_100_plt amazonCat-14K_100_plt wiki10_100_plt wikiLSHTC_100_plt WikipediaLarge-500K_100_plt amazon_100_plt)
-
 SEEDS=(13)
 KS=(1 3 5)
 OUTPUT_DIR=results_thesis_all_vs_top
