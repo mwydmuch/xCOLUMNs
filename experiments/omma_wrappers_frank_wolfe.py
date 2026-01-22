@@ -1,5 +1,5 @@
 import numpy as np
-from custom_utilities_methods import *
+from omma_custom_utilities_methods import *
 
 from utils import *
 from xcolumns.block_coordinate import *

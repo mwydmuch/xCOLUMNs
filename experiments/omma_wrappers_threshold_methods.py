@@ -1,7 +1,7 @@
 from time import time
 
 import numpy as np
-from custom_utilities_methods import *
+from omma_custom_utilities_methods import *
 from scipy.sparse import csc_matrix, csr_matrix
 
 from xcolumns.block_coordinate import *
@@ -21,7 +21,7 @@ def find_binary_threshold(
 ):
     n = sorted_true.shape[0]
 
-    pred = np.zeros(n, dtype=FLOAT_TYPE)
+    pred = np.zeros(n, dtype=DefaultDataDType)
     best_utility = -np.inf
     best_threshold = 0
 
@@ -51,8 +51,8 @@ def find_binary_threshold(
 
 def find_thresholds_np(y_true, y_proba, binary_utility_func, **kwargs):
     n, m = y_true.shape
-    thresholds = np.zeros(m, dtype=FLOAT_TYPE)
-    utilities = np.zeros(m, dtype=FLOAT_TYPE)
+    thresholds = np.zeros(m, dtype=DefaultDataDType)
+    utilities = np.zeros(m, dtype=DefaultDataDType)
     for j in trange(m):
         sorted_order = np.argsort(-y_proba[:, j])
         sorted_proba = y_proba[sorted_order, j]
@@ -72,11 +72,11 @@ def find_thresholds_sparse(y_true, y_proba, binary_utility_func, **kwargs):
         y_proba = csc_matrix(y_proba)
 
     n, m = y_true.shape
-    thresholds = np.zeros(m, dtype=FLOAT_TYPE)
-    utilities = np.zeros(m, dtype=FLOAT_TYPE)
+    thresholds = np.zeros(m, dtype=DefaultDataDType)
+    utilities = np.zeros(m, dtype=DefaultDataDType)
     for j in trange(m):
-        proba = np.zeros(n, dtype=FLOAT_TYPE)
-        true = np.zeros(n, dtype=FLOAT_TYPE)
+        proba = np.zeros(n, dtype=DefaultDataDType)
+        true = np.zeros(n, dtype=DefaultDataDType)
 
         thresholds[j], utilities[j] = find_binary_threshold(
             sorted_true, sorted_proba, binary_utility_func
@@ -122,7 +122,7 @@ def find_thresholds_wrapper(
         y_true_valid, y_proba_valid, binary_utility_func, **kwargs
     )
     if k > 0:
-        y_pred = np.zeros(y_proba.shape, dtype=FLOAT_TYPE)
+        y_pred = np.zeros(y_proba.shape, dtype=DefaultDataDType)
         for i in range(y_proba.shape[0]):
             gains = y_proba[i] - thresholds
             top_k = np.argpartition(-gains, k)[:k]

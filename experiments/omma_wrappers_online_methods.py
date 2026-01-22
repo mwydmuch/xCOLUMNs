@@ -1,10 +1,10 @@
 from math import floor
 
 import numpy as np
-from custom_utilities_methods import *
+from omma_custom_utilities_methods import *
+from omma_wrappers_threshold_methods import *
 from scipy.sparse import csr_matrix
 from tqdm import tqdm
-from wrappers_threshold_methods import *
 
 from xcolumns.block_coordinate import (
     _bc_with_0approx_step_csr,
@@ -52,7 +52,7 @@ class OnlineThresholds(OnlineMethod):
         super().__init__(m, k)
         self.binary_utility_func = binary_utility_func
 
-        self.thresholds = np.full(m, 0.5, dtype=FLOAT_TYPE)
+        self.thresholds = np.full(m, 0.5, dtype=DefaultDataDType)
         self.seen_so_far = []
         self.update_base = update_base
         self.update_exp = update_exp
@@ -99,12 +99,12 @@ class OnlineFrankWolfe(OnlineMethod):
         self.skip_tn = skip_tn
         self.etu_variant = etu_variant
 
-        self.classifiers_a = np.zeros((1, m), dtype=FLOAT_TYPE)
-        self.classifiers_b = np.zeros((1, m), dtype=FLOAT_TYPE)
-        self.classifiers_proba = np.ones(1, dtype=FLOAT_TYPE)
+        self.classifiers_a = np.zeros((1, m), dtype=DefaultDataDType)
+        self.classifiers_b = np.zeros((1, m), dtype=DefaultDataDType)
+        self.classifiers_proba = np.ones(1, dtype=DefaultDataDType)
 
-        self.classifiers_a[0] = np.ones(m, dtype=FLOAT_TYPE)
-        self.classifiers_b[0] = np.full(m, -0.5, dtype=FLOAT_TYPE)
+        self.classifiers_a[0] = np.ones(m, dtype=DefaultDataDType)
+        self.classifiers_b[0] = np.full(m, -0.5, dtype=DefaultDataDType)
 
         self.seen_so_far = []
         self.update_base = update_base
@@ -205,14 +205,14 @@ class OnlineGreedy(OnlineMethod):
         self.binary_utility_func = binary_utility_func
         self.skip_tn = skip_tn
 
-        # self.tp = np.zeros(m, dtype=FLOAT_TYPE)
-        # self.fp = np.zeros(m, dtype=FLOAT_TYPE)
-        # self.fn = np.zeros(m, dtype=FLOAT_TYPE)
-        # self.tn = np.zeros(m, dtype=FLOAT_TYPE)
-        tp = np.full(m, initial_confusion_matrix[0], dtype=FLOAT_TYPE)
-        fp = np.full(m, initial_confusion_matrix[1], dtype=FLOAT_TYPE)
-        fn = np.full(m, initial_confusion_matrix[2], dtype=FLOAT_TYPE)
-        tn = np.full(m, initial_confusion_matrix[3], dtype=FLOAT_TYPE)
+        # self.tp = np.zeros(m, dtype=DefaultAccDataDType)
+        # self.fp = np.zeros(m, dtype=DefaultAccDataDType)
+        # self.fn = np.zeros(m, dtype=DefaultAccDataDType)
+        # self.tn = np.zeros(m, dtype=DefaultAccDataDType)
+        tp = np.full(m, initial_confusion_matrix[0], dtype=DefaultAccDataDType)
+        fp = np.full(m, initial_confusion_matrix[1], dtype=DefaultAccDataDType)
+        fn = np.full(m, initial_confusion_matrix[2], dtype=DefaultAccDataDType)
+        tn = np.full(m, initial_confusion_matrix[3], dtype=DefaultAccDataDType)
         self.C = ConfusionMatrix(tp, fp, fn, tn)
         self.n = sum(initial_confusion_matrix)
 
@@ -290,21 +290,21 @@ class OMMA(OnlineMethod):
         super().__init__(m, k)
         self.utility_func = utility_func
 
-        self.classifier_a = np.ones(m, dtype=FLOAT_TYPE)
-        self.classifier_b = np.full(m, -0.5, dtype=FLOAT_TYPE)
+        self.classifier_a = np.ones(m, dtype=DefaultDataDType)
+        self.classifier_b = np.full(m, -0.5, dtype=DefaultDataDType)
         self.skip_tn = skip_tn
         self.etu_variant = etu_variant
         self.lazy_update = lazy_update
         self.first_update_n = first_update_n
 
-        # tp = np.zeros(m, dtype=FLOAT_TYPE)
-        # fp = np.zeros(m, dtype=FLOAT_TYPE)
-        # fn = np.zeros(m, dtype=FLOAT_TYPE)
-        # tn = np.zeros(m, dtype=FLOAT_TYPE)
-        tp = np.full(m, initial_confusion_matrix[0], dtype=FLOAT_TYPE)
-        fp = np.full(m, initial_confusion_matrix[1], dtype=FLOAT_TYPE)
-        fn = np.full(m, initial_confusion_matrix[2], dtype=FLOAT_TYPE)
-        tn = np.full(m, initial_confusion_matrix[3], dtype=FLOAT_TYPE)
+        # tp = np.zeros(m, dtype=DefaultAccDataDType)
+        # fp = np.zeros(m, dtype=DefaultAccDataDType)
+        # fn = np.zeros(m, dtype=DefaultAccDataDType)
+        # tn = np.zeros(m, dtype=DefaultAccDataDType)
+        tp = np.full(m, initial_confusion_matrix[0], dtype=DefaultAccDataDType)
+        fp = np.full(m, initial_confusion_matrix[1], dtype=DefaultAccDataDType)
+        fn = np.full(m, initial_confusion_matrix[2], dtype=DefaultAccDataDType)
+        tn = np.full(m, initial_confusion_matrix[3], dtype=DefaultAccDataDType)
         self.C = ConfusionMatrix(tp, fp, fn, tn)
         self.n = sum(initial_confusion_matrix)
 
@@ -493,10 +493,10 @@ class OnlineFMeasureOptimization(OnlineMethod):
         initial_b=DEFAULT_REG,
     ):
         super().__init__(m, k)
-        # self.a = np.zeros(m, dtype=FLOAT_TYPE)
-        # self.b = np.full(m, 1e-6, dtype=FLOAT_TYPE)
-        self.a = np.full(m, initial_a, dtype=FLOAT_TYPE)
-        self.b = np.full(m, initial_b, dtype=FLOAT_TYPE)
+        # self.a = np.zeros(m, dtype=DefaultAccDataDType)
+        # self.b = np.full(m, 1e-6, dtype=DefaultAccDataDType)
+        self.a = np.full(m, initial_a, dtype=DefaultDataDType)
+        self.b = np.full(m, initial_b, dtype=DefaultDataDType)
         self.etu_variant = etu_variant
         self.micro = micro
 
@@ -640,12 +640,12 @@ def init_y_pred(y_true, k):
     n, m = y_true.shape
     if isinstance(y_true, csr_matrix):
         per_row = k if k > 0 else 10
-        data = np.ones(n * per_row, dtype=FLOAT_TYPE)
+        data = np.ones(n * per_row, dtype=DefaultDataDType)
         indices = np.ones(n * per_row, dtype=DefaultIndDType)
         indptr = np.arange(n + 1, dtype=DefaultIndDType) * per_row
         y_pred = csr_matrix((data, indices, indptr), shape=(n, m))
     else:
-        y_pred = np.zeros((n, m), dtype=FLOAT_TYPE)
+        y_pred = np.zeros((n, m), dtype=DefaultDataDType)
 
     return y_pred
 
@@ -694,10 +694,10 @@ def online_experiment(
     method = online_method_class(**online_method_args)
     skip_tn = online_method_args.get("skip_tn", False)
 
-    # tp = np.zeros(m, dtype=FLOAT_TYPE)
-    # fp = np.zeros(m, dtype=FLOAT_TYPE)
-    # fn = np.zeros(m, dtype=FLOAT_TYPE)
-    # tn = np.zeros(m, dtype=FLOAT_TYPE)
+    # tp = np.zeros(m, dtype=DefaultAccDataDType)
+    # fp = np.zeros(m, dtype=DefaultAccDataDType)
+    # fn = np.zeros(m, dtype=DefaultAccDataDType)
+    # tn = np.zeros(m, dtype=DefaultAccDataDType)
     tp = np.zeros(m, dtype=np.float64)
     fp = np.zeros(m, dtype=np.float64)
     fn = np.zeros(m, dtype=np.float64)

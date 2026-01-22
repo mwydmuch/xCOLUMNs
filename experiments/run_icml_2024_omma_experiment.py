@@ -2,8 +2,8 @@ import sys
 
 import click
 import numpy as np
-from custom_utilities_methods import *
 from metrics_original import *
+from omma_custom_utilities_methods import *
 from omma_wrappers_frank_wolfe import *
 from omma_wrappers_online_methods import *
 from omma_wrappers_threshold_methods import *
@@ -32,9 +32,9 @@ METRICS = {
     "iP": instance_precision,
     "mR": macro_recall,
     "iR": instance_recall,
-    "mF": macro_f1,
+    "mF": macro_f1_score,
     "miF": micro_f1_score,
-    "iF": instance_f1,
+    "iF": instance_f1_score,
     "mH": macro_hmean,
     "mG": macro_gmean,
     "H": multiclass_hmean,
@@ -44,10 +44,10 @@ METRICS = {
 
 METHODS = {
     "default_prediction": (default_prediction, {}),
-    "ofo_macro_f1": (ofo_macro, {}),
-    "ofo_micro_f1": (ofo_micro, {}),
-    "ofo_etu_macro_f1": (ofo_macro, {"etu_variant": True}),
-    "ofo_etu_micro_f1": (ofo_micro, {"etu_variant": True}),
+    "ofo_macro_f1_score": (ofo_macro, {}),
+    "ofo_micro_f1_score": (ofo_micro, {}),
+    "ofo_etu_macro_f1_score": (ofo_macro, {"etu_variant": True}),
+    "ofo_etu_micro_f1_score": (ofo_micro, {"etu_variant": True}),
 }
 
 # for measure in [
