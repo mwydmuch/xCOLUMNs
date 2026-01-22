@@ -2,7 +2,7 @@ from math import log
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, issparse
 
 from .confusion_matrix import calculate_confusion_matrix
 from .types import DenseMatrix, Matrix, Number
@@ -170,6 +170,110 @@ def make_instance_metric_on_y_true_and_y_pred(
     """
 
     return add_kwargs_to_signature(instance_metric_on_y_true_and_y_pred, binary_metric)
+
+
+def make_tail_instance_metric_on_y_true_and_y_pred(
+    binary_metric: Callable, metric_name: str, skip_tn: bool = False
+) -> Callable:
+    """
+    This is a factory function to create
+    a tail instance-wise metric calculated on true and predicted labels: metric(y_true, y_pred, **kwargs)
+    from a binary metric defined on confusion matrix: binary_metric(tp, fp, fn, tn, **kwargs).
+
+    Args:
+        binary_metric: binary metric defined on confusion matrix
+        metric_name: name of the metric to be used in the docstring
+        skip_tn: whether to skip true negatives
+
+    Returns:
+        Function calculating the tail instance-wise metric on true and predicted labels
+    """
+
+    def tail_instance_metric_on_y_true_and_y_pred(
+        y_true: Matrix,
+        y_pred: Matrix,
+        priors: DenseMatrix,
+        percentile: float = 0.5,
+        **kwargs,
+    ) -> DenseMatrix:
+        w = np.array(priors, copy=True)
+        p = np.percentile(w, percentile * 100)
+        w[w <= p] = 1.0
+        w[w > p] = 0.0
+
+        if issparse(y_true):
+            y_true = y_true.multiply(w)
+            y_true = y_true.tocsr()
+        else:
+            y_true = y_true * w
+
+        instance_C = calculate_confusion_matrix(
+            y_true, y_pred, normalize=False, skip_tn=skip_tn, axis=1
+        )
+        return binary_metric(*instance_C, **kwargs).mean()
+
+    tail_instance_metric_on_y_true_and_y_pred.__doc__ = f"""
+    Calculates tail instance-averaged {metric_name} metric from the given true and predicted labels.
+    Labels above provied frequancy percentile are ignored when calculating the metric.
+
+    See :func:`{binary_metric.__name__}` for definition.
+    """
+
+    return add_kwargs_to_signature(
+        tail_instance_metric_on_y_true_and_y_pred, binary_metric
+    )
+
+
+########################################################################################
+# Tail instance-wise metrics
+########################################################################################
+
+
+def instance_tail_metric(
+    y_true: Matrix,
+    y_pred: Matrix,
+    metric_on_conf_matrix_func: Callable,
+    k: int,
+    w: DenseMatrix,
+    percentile: float = 0.5,
+    epsilon: float = 1e-9,
+):
+    w = np.array(w, copy=True)
+    p = np.percentile(w, percentile * 100)
+    w[w < p] = 0.0
+    w[w >= p] = 1.0
+
+    y_true = y_true.multiply(w)
+    y_true = y_true.tocsr()
+    instance_C = calculate_confusion_matrix(
+        y_true, y_pred, normalize=False, skip_tn=True, axis=1
+    )
+
+    return metric_on_conf_matrix_func(*instance_C, epsilon=epsilon).mean()
+
+
+def instance_tail_recall_at_k(
+    y_true: Matrix,
+    y_pred: Matrix,
+    k: int,
+    w: DenseMatrix,
+    percentile: float = 0.5,
+    epsilon: float = 1e-9,
+):
+    print("Calculating tail recall at k...")
+    w = np.array(w, copy=True)
+    p = np.percentile(w, percentile * 100)
+    w[w < p] = 0.0
+    w[w >= p] = 1.0
+    print(f"Using percentile: {percentile}, {sum(w)}/{len(w)}")
+
+    y_true = y_true.multiply(w)
+    y_true = y_true.tocsr()
+    instance_C = calculate_confusion_matrix(
+        y_true, y_pred, normalize=False, skip_tn=True, axis=1
+    )
+
+    return binary_recall_on_conf_matrix(*instance_C, epsilon=epsilon).mean()
 
 
 ########################################################################################
@@ -566,6 +670,9 @@ micro_recall = make_metric_on_y_true_and_y_pred(
 instance_recall = make_instance_metric_on_y_true_and_y_pred(
     binary_recall_on_conf_matrix, "recall", skip_tn=True
 )
+tail_recall = make_tail_instance_metric_on_y_true_and_y_pred(
+    binary_recall_on_conf_matrix, "tail recall", skip_tn=True
+)
 
 
 ########################################################################################
@@ -889,4 +996,8 @@ coverage = make_metric_on_y_true_and_y_pred(
 
 abandonment = make_instance_metric_on_y_true_and_y_pred(
     coverage_on_conf_matrix, "abandonment", skip_tn=True
+)
+
+tail_abandonment = make_tail_instance_metric_on_y_true_and_y_pred(
+    coverage_on_conf_matrix, "tail abandonment", skip_tn=True
 )
