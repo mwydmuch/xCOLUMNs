@@ -33,7 +33,7 @@ METRICS_ON_Y = {
     # "iR": instance_recall_v0,
     # "mF": macro_f1_v0,
     # "iF": instance_f1_v0,
-    # "iBA": instance_balanced_accuracy_v0,
+    # "iBA": instance_balanced_accuracy_v0
     # "mBA": macro_balanced_accuracy_v0,
     "instance-recall": instance_recall,
     "instance-precision": instance_precision,
@@ -41,6 +41,21 @@ METRICS_ON_Y = {
     "instance-balanced-accuracy": instance_balanced_accuracy,
     "abandonment": abandonment,
     "mean_positive_labels": mean_positive_labels,
+    "tail-recall-90": lambda y_true, y_pred, k, w: instance_tail_recall_at_k(
+        y_true, y_pred, k, w, percentile=0.90
+    ),
+    "tail-recall-70": lambda y_true, y_pred, k, w: instance_tail_recall_at_k(
+        y_true, y_pred, k, w, percentile=0.70
+    ),
+    "tail-recall-50": lambda y_true, y_pred, k, w: instance_tail_recall_at_k(
+        y_true, y_pred, k, w, percentile=0.50
+    ),
+    "tail-recall-30": lambda y_true, y_pred, k, w: instance_tail_recall_at_k(
+        y_true, y_pred, k, w, percentile=0.30
+    ),
+    "tail-recall-10": lambda y_true, y_pred, k, w: instance_tail_recall_at_k(
+        y_true, y_pred, k, w, percentile=0.10
+    ),
 }
 
 METRICS_ON_C_MAT = {
@@ -57,11 +72,22 @@ METRICS_ON_C_MAT = {
 }
 
 
-def calculate_and_report_metrics(y_true, y_pred, k=5, inverse_propensities=None):
+def calculate_and_report_metrics(
+    y_true, y_pred, k=5, inverse_propensities=None, priors=None
+):
     results = {}
 
     for metric, func in METRICS_ON_Y.items():
-        value = func(y_true, y_pred)
+        value = call_function_with_supported_kwargs(
+            func,
+            y_true,
+            y_pred,
+            k=k,
+            w=inverse_propensities,
+            priors=priors,
+            epsilon=1e-9,
+        )
+        # value = func(y_true, y_pred)
         results[f"{metric}@{k}"] = value
         print(f"    {metric}@{k}: {100 * value:>5.3f}")
 
@@ -193,7 +219,6 @@ for eps in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]:
         }
     )
 
-# Greedy variants
 for eps in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 5e-3, 1e-3, 5e-2, 1e-2]:
     bc_args = {"max_iters": 100, "tolerance": TOL, "metric_kwargs": {"epsilon": eps}}
     greedy_args = {
@@ -244,8 +269,6 @@ alphas = [
     0.95,
     # 0.99,
 ]
-# alphas = [0.95,]
-alphas = [0.95, 0.96, 0.99]
 for alpha in alphas:
     # METHODS[f"power-law-with-beta={alpha}"] = (
     #     predict_power_law_weighted_per_instance,
@@ -831,7 +854,7 @@ def main(
             results["pred_shape"] = y_pred.shape
             results.update(
                 calculate_and_report_metrics(
-                    y_true, y_pred, k=k, inverse_propensities=inv_ps
+                    y_true, y_pred, k=k, inverse_propensities=inv_ps, priors=priors
                 )
             )
 

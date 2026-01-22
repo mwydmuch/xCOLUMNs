@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Callable, Tuple, Union
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -19,8 +19,8 @@ try:
     import torch
 
     DType = Union[DType, torch.dtype]
-    DenseMatrix = Union[DenseMatrix, torch.Tensor]
-    Matrix = Union[Matrix, torch.Tensor]
+    DenseMatrix = Union[np.ndarray, torch.Tensor]
+    Matrix = Union[np.ndarray, csr_matrix, torch.Tensor]
     DefaultTorchDataDType = torch.float32
     TORCH_AVAILABLE = True
 except ImportError:
